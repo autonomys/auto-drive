@@ -28,7 +28,7 @@ import {
   invalidEnvironmentVariables,
   urlEnv,
 } from '../../src/config.js'
-import { getAddress } from 'viem'
+import { getAddress, HttpRequestError } from 'viem'
 import { ObjectNotFoundError } from '../../src/errors/index.js'
 
 // The real AI3 chain definition with a recognisable contract address, so the
@@ -1196,6 +1196,97 @@ describe('PaymentManager', () => {
       await jest.advanceTimersByTimeAsync(60_000)
 
       expect(blockNumberSpy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('payment event poll alerting', () => {
+    const failPolls = (error: Error = new Error('RPC unavailable')) => {
+      stubEventPoll(ai3PaymentWatcher)
+      return (
+        ai3PaymentWatcher._viemClient.getBlockNumber as jest.Mock<any>
+      ).mockRejectedValue(error)
+    }
+
+    it('alerts once when polls keep failing for five minutes', async () => {
+      failPolls()
+      const send = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      ai3PaymentWatcher.start()
+      await jest.advanceTimersByTimeAsync(4 * 60_000)
+      expect(send).not.toHaveBeenCalled()
+
+      await jest.advanceTimersByTimeAsync(2 * 60_000)
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(send.mock.calls[0][0].title).toContain(
+        'ai3 payment watcher cannot read payment events',
+      )
+
+      await jest.advanceTimersByTimeAsync(10 * 60_000)
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    it('retries the alert until Slack accepts it', async () => {
+      failPolls()
+      const send = jest
+        .spyOn(slackNotifier, 'send')
+        .mockResolvedValueOnce(false)
+        .mockResolvedValue(true)
+
+      ai3PaymentWatcher.start()
+      await jest.advanceTimersByTimeAsync(5 * 60_000 + 1_000)
+      expect(send).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(4_000)
+      expect(send).toHaveBeenCalledTimes(2)
+
+      await jest.advanceTimersByTimeAsync(60_000)
+      expect(send).toHaveBeenCalledTimes(2)
+    })
+
+    it('posts a recovery once an alerted outage clears', async () => {
+      const blockNumber = failPolls()
+      const send = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      ai3PaymentWatcher.start()
+      await jest.advanceTimersByTimeAsync(6 * 60_000)
+      expect(send).toHaveBeenCalledTimes(1)
+
+      blockNumber.mockResolvedValue(1000n)
+      await jest.advanceTimersByTimeAsync(4_000)
+
+      expect(send).toHaveBeenCalledTimes(2)
+      expect(send.mock.calls[1][0].title).toContain(
+        'ai3 payment watcher is reading payment events again',
+      )
+    })
+
+    it('stays quiet about failures that clear before the threshold', async () => {
+      const blockNumber = failPolls()
+      const send = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      ai3PaymentWatcher.start()
+      await jest.advanceTimersByTimeAsync(60_000)
+      blockNumber.mockResolvedValue(1000n)
+      await jest.advanceTimersByTimeAsync(10 * 60_000)
+
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    it('keeps the RPC URL out of the alert', async () => {
+      failPolls(
+        new HttpRequestError({
+          url: 'https://eth.example.org/v2/secret-api-key',
+          details: 'fetch failed',
+        }),
+      )
+      const send = jest.spyOn(slackNotifier, 'send').mockResolvedValue(true)
+
+      ai3PaymentWatcher.start()
+      await jest.advanceTimersByTimeAsync(6 * 60_000)
+
+      const { details } = send.mock.calls[0][0]
+      expect(details).toContain('HTTP request failed. fetch failed')
+      expect(details).not.toContain('secret-api-key')
     })
   })
 

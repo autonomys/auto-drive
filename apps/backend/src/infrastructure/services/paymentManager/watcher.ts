@@ -1,5 +1,6 @@
 import {
   Abi,
+  BaseError,
   ContractEventName,
   createPublicClient,
   http,
@@ -120,6 +121,19 @@ const EVENT_POLL_INTERVAL_MS = 4_000
 // Bounds one eth_getLogs call during the startup lookback or a catch-up after an
 // RPC outage. Steady-state polls read a block or two.
 const MAX_LOG_RANGE_BLOCKS = 500n
+
+const POLL_FAILURE_ALERT_AFTER_MS = 5 * 60_000
+
+// viem's full message lists the request URL, and an Ethereum endpoint can carry
+// a provider API key in it, so Slack gets only the summary and the node's reason.
+const describePollError = (error: unknown) => {
+  if (error instanceof BaseError) {
+    return [error.shortMessage, error.details].filter(Boolean).join(' ')
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
+const minutes = (ms: number) => Math.round(ms / 60_000)
 
 /**
  * One chain's payment watcher: event poll, receipt confirmation, and
@@ -357,18 +371,60 @@ export const createPaymentWatcher = <
     }
   }
 
+  // Start of the current run of failed polls. `outageAlerted` latches only on a
+  // successful send, so a post Slack rejected is retried on the next failure.
+  let failingSince: number | null = null
+  let outageAlerted = false
+
+  const onPollFailed = async (error: unknown) => {
+    failingSince ??= Date.now()
+    const failingForMs = Date.now() - failingSince
+    if (outageAlerted || failingForMs < POLL_FAILURE_ALERT_AFTER_MS) return
+
+    const resumeFrom =
+      nextBlock === null
+        ? `${chain.eventLookbackBlocks} blocks behind the head`
+        : `block ${nextBlock}`
+    outageAlerted = await slackNotifier.send({
+      title: `:warning: ${chain.name} payment watcher cannot read payment events`,
+      details:
+        `Every poll has failed for ${minutes(failingForMs)} minutes.\n` +
+        `Last error: ${describePollError(error)}\n` +
+        `Once the RPC answers, the watcher reads from ${resumeFrom}, so ` +
+        'nothing is missed while this worker keeps running. A restart only ' +
+        `looks back ${chain.eventLookbackBlocks} blocks.`,
+    })
+  }
+
+  const onPollSucceeded = async () => {
+    if (failingSince === null) return
+    const failedForMs = Date.now() - failingSince
+    failingSince = null
+    if (!outageAlerted) return
+
+    outageAlerted = false
+    await slackNotifier.send({
+      title: `:white_check_mark: ${chain.name} payment watcher is reading payment events again`,
+      details:
+        `Polls failed for ${minutes(failedForMs)} minutes. The blocks mined ` +
+        'in that time have now been read.',
+    })
+  }
+
   // A failed poll leaves the cursor where it was, so the next one re-reads the
   // same blocks. `loop` stops a poll that was in flight during stop() from
   // scheduling another.
   const runPollLoop = async (loop: symbol) => {
     try {
       await watcher._pollPaymentEvents()
+      await onPollSucceeded()
     } catch (error) {
       logger.error('Payment event poll failed', {
         chain: chain.name,
         fromBlock: nextBlock?.toString(),
         error,
       })
+      await onPollFailed(error)
     }
     if (activeLoop === loop) {
       pollTimer = setTimeout(() => runPollLoop(loop), EVENT_POLL_INTERVAL_MS)
@@ -534,6 +590,8 @@ export const createPaymentWatcher = <
     const loop = Symbol(chain.name)
     activeLoop = loop
     nextBlock = null
+    failingSince = null
+    outageAlerted = false
     void runPollLoop(loop)
   }
 
