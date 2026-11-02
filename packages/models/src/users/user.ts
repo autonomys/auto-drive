@@ -7,6 +7,7 @@ export type OAuthUser = {
   email?: string;
   username?: string;
   avatarUrl?: string;
+  apiKeyId?: string;
 };
 
 export enum UserRole {
@@ -43,6 +44,8 @@ export type MaybeUser = User | UnonboardedUser;
 
 export type UserWithOrganization = User & {
   organizationId: Organization["id"] | null;
+  // The API key that authenticated the request. Absent for session logins.
+  apiKeyId?: string;
 };
 
 type UnonboardedUserWithOrganization = UnonboardedUser & {

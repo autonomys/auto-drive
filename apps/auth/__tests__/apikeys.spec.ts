@@ -80,6 +80,7 @@ describe('ApiKeyUseCases', () => {
     expect(authenticatedUser).toMatchObject({
       provider: user.oauthProvider,
       id: user.oauthUserId,
+      apiKeyId: apiKey.id,
     })
   })
 
