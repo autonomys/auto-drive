@@ -84,10 +84,18 @@ export type PaymentChain<
   // transaction that takes two minutes to be mined would time out, retry, and
   // eventually raise a payment-failed alert for a payment that was fine.
   receiptTimeoutMs: number
-  // How many blocks behind the head the event poll starts reading on start(),
-  // so a payment mined while the worker was down is still seen. Replaying one
-  // that already settled is a no-op in markIntentAsConfirmed.
-  eventLookbackBlocks: number
+  // How payment events are read.
+  //
+  // 'filter' is viem's watchContractEvent: one eth_newFilter, polled for changes.
+  // 'getLogs' is eth_getLogs over a block cursor this watcher holds, starting
+  // `lookbackBlocks` behind the head on start() so a payment mined while the
+  // worker was down is still seen. Replaying one that already settled is a
+  // no-op in markIntentAsConfirmed.
+  //
+  // Auto EVM needs 'getLogs': its node drops every filter 100 blocks after
+  // creating it, and viem never rebuilds one after that error. Ethereum stays on
+  // 'filter': Alchemy's free tier rejects eth_getLogs over more than 10 blocks.
+  eventSource: { kind: 'filter' } | { kind: 'getLogs'; lookbackBlocks: number }
   abi: abi
   eventName: eventName
   toPayment: (
@@ -332,23 +340,25 @@ export const createPaymentWatcher = <
     return viemParseEventLogs<parseAbi, strict, parseEventName>(parameters)
   }
 
-  // Payment events are read with eth_getLogs over a block cursor, not viem's
-  // watchContractEvent. That installs one eth_newFilter and only rebuilds it on
-  // a -32000 error, while Auto EVM's node drops every filter 100 blocks after
-  // creating it, polled or not, and reports the loss as -32603.
+  // Set while a 'filter' chain is subscribed. stop() calls it.
+  let unwatchContractEvent: (() => void) | null = null
+
+  // The 'getLogs' cursor. viem's watchContractEvent installs one eth_newFilter
+  // and only rebuilds it on a -32000 error, while Auto EVM's node drops every
+  // filter 100 blocks after creating it, polled or not, and reports the loss as
+  // -32603.
   let nextBlock: bigint | null = null
   let activeLoop: symbol | null = null
   let pollTimer: ReturnType<typeof setTimeout> | null = null
 
-  const pollPaymentEvents = async () => {
+  const pollPaymentEvents = async (lookbackBlocks: number) => {
     const head = await watcher._viemClient.getBlockNumber()
     // Only blocks waitForTransactionReceipt would already accept, so a reorg
     // shallower than `confirmations` cannot swap out a block already read.
     const confirmedHead = head - BigInt(chain.confirmations - 1)
 
     if (nextBlock === null) {
-      const lookbackStart =
-        confirmedHead - BigInt(chain.eventLookbackBlocks) + 1n
+      const lookbackStart = confirmedHead - BigInt(lookbackBlocks) + 1n
       nextBlock = lookbackStart > 0n ? lookbackStart : 0n
     }
 
@@ -376,14 +386,14 @@ export const createPaymentWatcher = <
   let failingSince: number | null = null
   let outageAlerted = false
 
-  const onPollFailed = async (error: unknown) => {
+  const onPollFailed = async (error: unknown, lookbackBlocks: number) => {
     failingSince ??= Date.now()
     const failingForMs = Date.now() - failingSince
     if (outageAlerted || failingForMs < POLL_FAILURE_ALERT_AFTER_MS) return
 
     const resumeFrom =
       nextBlock === null
-        ? `${chain.eventLookbackBlocks} blocks behind the head`
+        ? `${lookbackBlocks} blocks behind the head`
         : `block ${nextBlock}`
     outageAlerted = await slackNotifier.send({
       title: `:warning: ${chain.name} payment watcher cannot read payment events`,
@@ -392,7 +402,7 @@ export const createPaymentWatcher = <
         `Last error: ${describePollError(error)}\n` +
         `Once the RPC answers, the watcher reads from ${resumeFrom}, so ` +
         'nothing is missed while this worker keeps running. A restart only ' +
-        `looks back ${chain.eventLookbackBlocks} blocks.`,
+        `looks back ${lookbackBlocks} blocks.`,
     })
   }
 
@@ -414,9 +424,9 @@ export const createPaymentWatcher = <
   // A failed poll leaves the cursor where it was, so the next one re-reads the
   // same blocks. `loop` stops a poll that was in flight during stop() from
   // scheduling another.
-  const runPollLoop = async (loop: symbol) => {
+  const runPollLoop = async (loop: symbol, lookbackBlocks: number) => {
     try {
-      await watcher._pollPaymentEvents()
+      await watcher._pollPaymentEvents(lookbackBlocks)
       await onPollSucceeded()
     } catch (error) {
       logger.error('Payment event poll failed', {
@@ -424,10 +434,13 @@ export const createPaymentWatcher = <
         fromBlock: nextBlock?.toString(),
         error,
       })
-      await onPollFailed(error)
+      await onPollFailed(error, lookbackBlocks)
     }
     if (activeLoop === loop) {
-      pollTimer = setTimeout(() => runPollLoop(loop), EVENT_POLL_INTERVAL_MS)
+      pollTimer = setTimeout(
+        () => runPollLoop(loop, lookbackBlocks),
+        EVENT_POLL_INTERVAL_MS,
+      )
     }
   }
 
@@ -568,8 +581,8 @@ export const createPaymentWatcher = <
   }
 
   const start = () => {
-    if (activeLoop) {
-      // A second loop would read every block twice.
+    if (activeLoop || unwatchContractEvent) {
+      // A second loop or subscription would process every event twice.
       logger.warn('Payment watcher already running — ignoring start', {
         chain: chain.name,
       })
@@ -587,16 +600,41 @@ export const createPaymentWatcher = <
     safeCallback(watcher._verifyConfiguration)()
     safeCallback(watcher._recoverOrphanedTransactions)()
 
+    if (chain.eventSource.kind === 'filter') {
+      unwatchContractEvent = watcher._viemClient.watchContractEvent({
+        abi: chain.abi,
+        address: chain.contractAddress,
+        eventName: chain.eventName,
+        onLogs: watcher._onLogs,
+        // viem swallows poll failures into this callback, so without one a bad
+        // endpoint, an expired filter or a rate-limited provider yields zero logs
+        // and zero log lines — indefinitely, and indistinguishable from a chain
+        // nobody is paying on. The primary observation channel for real money
+        // must not be able to fail quietly.
+        onError: (error) => {
+          logger.error('Payment event subscription error', {
+            chain: chain.name,
+            error,
+          })
+        },
+      })
+      return
+    }
+
     const loop = Symbol(chain.name)
     activeLoop = loop
     nextBlock = null
     failingSince = null
     outageAlerted = false
-    void runPollLoop(loop)
+    void runPollLoop(loop, chain.eventSource.lookbackBlocks)
   }
 
   const stop = () => {
     logger.info('Stopping payment watcher', { chain: chain.name })
+    if (unwatchContractEvent) {
+      unwatchContractEvent()
+      unwatchContractEvent = null
+    }
     activeLoop = null
     if (pollTimer) {
       clearTimeout(pollTimer)

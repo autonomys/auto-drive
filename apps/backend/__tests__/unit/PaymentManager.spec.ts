@@ -1199,6 +1199,82 @@ describe('PaymentManager', () => {
     })
   })
 
+  describe('usdc event filter', () => {
+    // Alchemy's free tier rejects eth_getLogs over more than 10 blocks, which
+    // the getLogs cursor's startup lookback always exceeds.
+    const RECEIVER = '0x1111111111111111111111111111111111111111'
+    const usdcWatcher = createPaymentWatcher(
+      createUsdcChain(
+        'http://example.org',
+        RECEIVER,
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      ),
+    )
+
+    beforeEach(() => {
+      jest.spyOn(usdcWatcher, '_verifyConfiguration').mockResolvedValue()
+    })
+
+    afterEach(() => {
+      usdcWatcher.stop()
+    })
+
+    it('subscribes through a filter and never calls getLogs', async () => {
+      const watchSpy = jest
+        .spyOn(usdcWatcher._viemClient, 'watchContractEvent')
+        .mockImplementation(() => jest.fn())
+      const getContractEvents = stubEventPoll(usdcWatcher)
+
+      usdcWatcher.start()
+      await jest.advanceTimersByTimeAsync(60_000)
+
+      expect(watchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: RECEIVER,
+          eventName: 'IntentTokenPaymentReceived',
+          onLogs: usdcWatcher._onLogs,
+        }),
+      )
+      expect(getContractEvents).not.toHaveBeenCalled()
+    })
+
+    it('subscribes once, however many times it is started', () => {
+      const unwatch = jest.fn()
+      const watchSpy = jest
+        .spyOn(usdcWatcher._viemClient, 'watchContractEvent')
+        .mockImplementation(() => unwatch)
+
+      usdcWatcher.start()
+      usdcWatcher.start()
+
+      // A second subscription would process every event twice and leak the
+      // first unsubscribe, leaving a watcher stop() cannot turn off.
+      expect(watchSpy).toHaveBeenCalledTimes(1)
+
+      usdcWatcher.stop()
+      expect(unwatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('reports subscription failures instead of going quiet', () => {
+      let raise: ((error: Error) => void) | undefined
+      jest
+        .spyOn(usdcWatcher._viemClient, 'watchContractEvent')
+        .mockImplementation((params: any) => {
+          raise = params.onError
+          return jest.fn()
+        })
+
+      usdcWatcher.start()
+
+      // viem swallows poll failures into onError. Without a handler a bad
+      // endpoint or a rate-limited provider yields zero logs and zero log
+      // lines, indefinitely — the primary observation channel for real money
+      // failing closed and mute.
+      expect(raise).toBeInstanceOf(Function)
+      expect(() => raise?.(new Error('filter not found'))).not.toThrow()
+    })
+  })
+
   describe('payment event poll alerting', () => {
     const failPolls = (error: Error = new Error('RPC unavailable')) => {
       stubEventPoll(ai3PaymentWatcher)
@@ -1291,82 +1367,83 @@ describe('PaymentManager', () => {
   })
 
   describe('payment event polling', () => {
-    const pollingWatcher = (eventLookbackBlocks: number, confirmations = 6) => {
+    const pollingWatcher = (lookbackBlocks: number, confirmations = 6) => {
       const w = createPaymentWatcher({
         ...ai3Chain,
         contractAddress: TEST_CONTRACT_ADDRESS,
         confirmations,
-        eventLookbackBlocks,
+        eventSource: { kind: 'getLogs', lookbackBlocks },
       })
       const getBlockNumber = jest.spyOn(w._viemClient, 'getBlockNumber')
       const getContractEvents = stubEventPoll(w)
+      const poll = () => w._pollPaymentEvents(lookbackBlocks)
       // As strings: a failing bigint diff cannot cross Jest's worker boundary.
       const ranges = () =>
         getContractEvents.mock.calls.map(
           ([params]: any[]) => `${params.fromBlock}-${params.toBlock}`,
         )
-      return { w, getBlockNumber, getContractEvents, ranges }
+      return { w, poll, getBlockNumber, getContractEvents, ranges }
     }
 
     it('starts a lookback behind the head and reads only confirmed blocks', async () => {
-      const { w, getBlockNumber, ranges } = pollingWatcher(10)
+      const { poll, getBlockNumber, ranges } = pollingWatcher(10)
       getBlockNumber.mockResolvedValue(1000n)
 
-      await w._pollPaymentEvents()
+      await poll()
 
       // With 6 confirmations, 995 is the newest block a receipt wait accepts.
       expect(ranges()).toEqual(['986-995'])
     })
 
     it('reads each block once across polls', async () => {
-      const { w, getBlockNumber, ranges } = pollingWatcher(10)
+      const { poll, getBlockNumber, ranges } = pollingWatcher(10)
       getBlockNumber
         .mockResolvedValueOnce(1000n)
         .mockResolvedValueOnce(1000n)
         .mockResolvedValueOnce(1003n)
 
-      await w._pollPaymentEvents()
-      await w._pollPaymentEvents()
-      await w._pollPaymentEvents()
+      await poll()
+      await poll()
+      await poll()
 
       expect(ranges()).toEqual(['986-995', '996-998'])
     })
 
     it('re-reads the same blocks after a failed read', async () => {
-      const { w, getBlockNumber, getContractEvents, ranges } =
+      const { poll, getBlockNumber, getContractEvents, ranges } =
         pollingWatcher(10)
       getBlockNumber.mockResolvedValueOnce(1000n).mockResolvedValue(1003n)
       getContractEvents
         .mockResolvedValueOnce([] as any)
         .mockRejectedValueOnce(new Error('RPC unavailable'))
 
-      await w._pollPaymentEvents()
-      await expect(w._pollPaymentEvents()).rejects.toThrow('RPC unavailable')
-      await w._pollPaymentEvents()
+      await poll()
+      await expect(poll()).rejects.toThrow('RPC unavailable')
+      await poll()
 
       expect(ranges()).toEqual(['986-995', '996-998', '996-998'])
     })
 
     it('splits a long catch-up into bounded reads', async () => {
-      const { w, getBlockNumber, ranges } = pollingWatcher(1200, 1)
+      const { poll, getBlockNumber, ranges } = pollingWatcher(1200, 1)
       getBlockNumber.mockResolvedValue(2000n)
 
-      await w._pollPaymentEvents()
+      await poll()
 
       expect(ranges()).toEqual(['801-1300', '1301-1800', '1801-2000'])
     })
 
     it('starts at genesis when the chain is shorter than the lookback', async () => {
-      const { w, getBlockNumber, ranges } = pollingWatcher(600, 1)
+      const { poll, getBlockNumber, ranges } = pollingWatcher(600, 1)
       getBlockNumber.mockResolvedValue(100n)
 
-      await w._pollPaymentEvents()
+      await poll()
 
       expect(ranges()).toEqual(['0-100'])
     })
 
     it('hands the transactions it finds to watchTransaction', async () => {
-      const { w, getBlockNumber, getContractEvents } = pollingWatcher(10)
+      const { w, poll, getBlockNumber, getContractEvents } = pollingWatcher(10)
       getBlockNumber.mockResolvedValue(1000n)
       getContractEvents.mockResolvedValueOnce([
         { transactionHash: '0xpaid' },
@@ -1375,7 +1452,7 @@ describe('PaymentManager', () => {
         .spyOn(w, 'watchTransaction')
         .mockResolvedValue(undefined)
 
-      await w._pollPaymentEvents()
+      await poll()
 
       expect(watchSpy).toHaveBeenCalledWith('0xpaid')
     })
