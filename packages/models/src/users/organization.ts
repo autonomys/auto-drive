@@ -1,4 +1,3 @@
-import { PublicId } from "./user";
 
 export type Organization = {
   id: string;
@@ -15,7 +14,7 @@ export enum OrganizationRole {
 }
 
 export type OrganizationMember = {
-  publicId: PublicId;
+  publicId: string;
   role: OrganizationRole;
 };
 
@@ -40,7 +39,7 @@ export type PartnerOrganization = OrganizationSummary & {
  */
 export type OrganizationMembershipChange = {
   id: string;
-  publicId: PublicId;
+  publicId: string;
   fromOrganizationId: string | null;
   toOrganizationId: string | null;
   role: OrganizationRole | null;
