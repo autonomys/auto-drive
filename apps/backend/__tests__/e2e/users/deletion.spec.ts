@@ -115,7 +115,9 @@ describe('Deletion in shared organizations', () => {
   }
 
   it('expires the account credits when the user is its only member', async () => {
-    jest.spyOn(AuthManager, 'getOrganizationMembers').mockResolvedValue([])
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockResolvedValue([user.publicId])
 
     await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
 
@@ -131,24 +133,80 @@ describe('Deletion in shared organizations', () => {
     })
   })
 
-  it('counts the members after auth has removed the membership', async () => {
-    // Another member was deleted at the same time and removed first.
-    let removed = false
+  it('forfeits the credits when two members are deleted at once', async () => {
+    const otherMember = {
+      ...createMockUser(),
+      organizationId: user.organizationId,
+    }
+    const members = new Set([user.publicId, otherMember.publicId])
+    const owners = new Map<string, string>()
+    const requests = [user, otherMember].map((member) => {
+      const request = deletionRequestFor(member)
+      owners.set(request.id, member.publicId)
+      return request
+    })
     jest
-      .spyOn(AuthManager, 'executeAuthAnonymisation')
-      .mockImplementation(async () => {
-        removed = true
-      })
+      .spyOn(AuthManager, 'getUserFromPublicId')
+      .mockImplementation(async (publicId) =>
+        publicId === user.publicId ? user : otherMember,
+      )
+    jest
+      .spyOn(AuthManager, 'markDeletionAsProcessing')
+      .mockImplementation(
+        async (id) => requests.find((r) => r.id === id) ?? null,
+      )
+    // Each deletion reads the members once both have got this far. Unless the
+    // deletions take turns, neither has removed itself by then.
+    const arrived: Array<() => void> = []
     jest
       .spyOn(AuthManager, 'getOrganizationMembers')
-      .mockImplementation(async () => (removed ? [] : [user.publicId]))
+      .mockImplementation(async () => {
+        await new Promise<void>((resolve) => {
+          arrived.push(resolve)
+          if (arrived.length === 2) arrived.forEach((release) => release())
+          else setTimeout(resolve, 300)
+        })
+        return [...members]
+      })
+    jest
+      .spyOn(AuthManager, 'executeAuthAnonymisation')
+      .mockImplementation(async (id) => {
+        members.delete(owners.get(id)!)
+      })
+
+    await Promise.all(
+      requests.map((request) => DeletionUseCases.processAnonymisation(request)),
+    )
+
+    const { uploadBytesRemaining } =
+      await purchasedCreditsRepository.getRemainingCredits(accountId)
+    expect(uploadBytesRemaining).toBe(0n)
+  })
+
+  it('keeps the membership when the cleanup fails, so a retry still forfeits', async () => {
+    const members = new Set([user.publicId])
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockImplementation(async () => [...members])
+    jest
+      .spyOn(AuthManager, 'markDeletionAsFailed')
+      .mockResolvedValue(deletionRequestFor(user))
+    jest
+      .spyOn(AuthManager, 'executeAuthAnonymisation')
+      .mockRejectedValueOnce(new Error('auth unavailable'))
+      .mockImplementation(async () => {
+        members.delete(user.publicId)
+      })
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
+    expect(members.has(user.publicId)).toBe(true)
 
     await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
 
     expect((await lastCompletion())?.details).toMatchObject({
       organizationCase: 'sole_member',
-      creditsExpired: 1,
     })
+    expect(await getIntentStatus(confirmedIntentId)).toBe(IntentStatus.EXPIRED)
   })
 
   it('keeps the account credits when other members remain', async () => {
@@ -162,7 +220,7 @@ describe('Deletion in shared organizations', () => {
     )
     jest
       .spyOn(AuthManager, 'getOrganizationMembers')
-      .mockResolvedValue([otherMember.publicId])
+      .mockResolvedValue([user.publicId, otherMember.publicId])
 
     await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
 

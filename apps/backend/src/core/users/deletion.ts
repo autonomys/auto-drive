@@ -16,6 +16,33 @@ import { getDatabase } from '../../infrastructure/drivers/pg.js'
 
 const logger = createLogger('core:deletion')
 
+// Runs fn while holding a lock on the organization, so that its members'
+// deletions run one at a time. Without an organization there is nothing to
+// share and fn runs unlocked.
+const withOrganizationLock = async <T>(
+  organizationId: string | null | undefined,
+  fn: () => Promise<T>,
+): Promise<T> => {
+  if (!organizationId) return fn()
+
+  const pool = await getDatabase()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      organizationId,
+    ])
+    const result = await fn()
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
   const db = await getDatabase()
   const publicId = request.userPublicId
@@ -36,69 +63,76 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
   )
   const ownershipCount = parseInt(ownershipResult.rows[0].count)
 
-  await deletionAuditRepository.createEntry(publicId, 'object_ownership_anonymised', {
-    recordsUpdated: ownershipCount,
-  })
+  await deletionAuditRepository.createEntry(
+    publicId,
+    'object_ownership_anonymised',
+    {
+      recordsUpdated: ownershipCount,
+    },
+  )
 
   // Look up the user's account via their organization, before auth removes
   // the membership
   const user = await AuthManager.getUserFromPublicId(publicId)
   const organizationId = user.organizationId
 
-  const account = organizationId
-    ? await accountsRepository.getByOrganizationId(organizationId)
-    : null
+  // A shared account's credits belong to every member, so only the last
+  // member's deletion forfeits them. Deleting two members at once would let
+  // both see the other, so one organization's deletions take turns: the later
+  // one runs after the earlier one's membership is gone. Auth removes the
+  // membership only at the end, so a request that failed can be run again.
+  return withOrganizationLock(organizationId, async () => {
+    const account = organizationId
+      ? await accountsRepository.getByOrganizationId(organizationId)
+      : null
+    const members = organizationId
+      ? await AuthManager.getOrganizationMembers(organizationId)
+      : []
+    const organizationCase = members.some((member) => member !== publicId)
+      ? 'shared_organization'
+      : 'sole_member'
+    const forfeitedAccountId =
+      organizationCase === 'sole_member' ? (account?.id ?? null) : null
 
-  // Anonymise auth data, which removes the membership. A shared account's
-  // credits belong to every member, so only the last member's deletion
-  // forfeits them. Counting after the removal means that of two members
-  // deleted at once, the later one always finds nobody left.
-  await AuthManager.executeAuthAnonymisation(request.id)
-  const remainingMembers = organizationId
-    ? await AuthManager.getOrganizationMembers(organizationId)
-    : []
-  const organizationCase =
-    remainingMembers.length > 0 ? 'shared_organization' : 'sole_member'
-  const forfeitedAccountId =
-    organizationCase === 'sole_member' ? (account?.id ?? null) : null
+    let creditsExpired = 0
+    let uploadBytesForfeited = 0n
+    let downloadBytesForfeited = 0n
 
-  let creditsExpired = 0
-  let uploadBytesForfeited = 0n
-  let downloadBytesForfeited = 0n
+    if (forfeitedAccountId) {
+      const activeCredits =
+        await purchasedCreditsRepository.getActiveByAccountId(
+          forfeitedAccountId,
+        )
 
-  if (forfeitedAccountId) {
-    const activeCredits =
-      await purchasedCreditsRepository.getActiveByAccountId(forfeitedAccountId)
-
-    for (const credit of activeCredits) {
-      if (!credit.expired) {
-        creditsExpired++
-        uploadBytesForfeited += credit.uploadBytesRemaining
-        downloadBytesForfeited += credit.downloadBytesRemaining
+      for (const credit of activeCredits) {
+        if (!credit.expired) {
+          creditsExpired++
+          uploadBytesForfeited += credit.uploadBytesRemaining
+          downloadBytesForfeited += credit.downloadBytesRemaining
+        }
       }
-    }
 
-    if (creditsExpired > 0) {
-      await db.query(
-        `UPDATE purchased_credits
+      if (creditsExpired > 0) {
+        await db.query(
+          `UPDATE purchased_credits
         SET expired = TRUE, updated_at = NOW()
         WHERE account_id = $1 AND expired = FALSE`,
-        [forfeitedAccountId],
-      )
+          [forfeitedAccountId],
+        )
+      }
+
+      await deletionAuditRepository.createEntry(publicId, 'credits_expired', {
+        creditsExpired,
+        uploadBytesForfeited: uploadBytesForfeited.toString(),
+        downloadBytesForfeited: downloadBytesForfeited.toString(),
+      })
     }
 
-    await deletionAuditRepository.createEntry(publicId, 'credits_expired', {
-      creditsExpired,
-      uploadBytesForfeited: uploadBytesForfeited.toString(),
-      downloadBytesForfeited: downloadBytesForfeited.toString(),
-    })
-  }
-
-  // Expire the user's own pending intents, whether or not they have an
-  // account. When the account is forfeited, its intents and the user's are
-  // expired while confirmed too: they would otherwise be credited afterwards.
-  const intentsResult = await db.query<{ count: string }>(
-    `WITH updated AS (
+    // Expire the user's own pending intents, whether or not they have an
+    // account. When the account is forfeited, its intents and the user's are
+    // expired while confirmed too: they would otherwise be credited afterwards.
+    const intentsResult = await db.query<{ count: string }>(
+      `WITH updated AS (
       UPDATE intents
       SET status = 'expired'
       WHERE (user_public_id = $1 OR account_id = $2)
@@ -106,34 +140,41 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
       RETURNING 1
     )
     SELECT COUNT(*) AS count FROM updated`,
-    [
+      [
+        publicId,
+        forfeitedAccountId,
+        forfeitedAccountId
+          ? [IntentStatus.PENDING, IntentStatus.CONFIRMED]
+          : [IntentStatus.PENDING],
+      ],
+    )
+    const intentsExpired = parseInt(intentsResult.rows[0].count)
+
+    await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
+      intentsExpired,
+    })
+
+    await AuthManager.executeAuthAnonymisation(request.id)
+
+    await deletionAuditRepository.createEntry(
       publicId,
-      forfeitedAccountId,
-      forfeitedAccountId
-        ? [IntentStatus.PENDING, IntentStatus.CONFIRMED]
-        : [IntentStatus.PENDING],
-    ],
-  )
-  const intentsExpired = parseInt(intentsResult.rows[0].count)
+      'anonymisation_completed',
+      {
+        organizationCase,
+        ownershipRecordsUpdated: ownershipCount,
+        creditsExpired,
+        uploadBytesForfeited: uploadBytesForfeited.toString(),
+        downloadBytesForfeited: downloadBytesForfeited.toString(),
+      },
+    )
 
-  await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
-    intentsExpired,
+    logger.info(
+      'Backend anonymisation complete for user %s: %d ownership records, %d credits expired',
+      publicId,
+      ownershipCount,
+      creditsExpired,
+    )
   })
-
-  await deletionAuditRepository.createEntry(publicId, 'anonymisation_completed', {
-    organizationCase,
-    ownershipRecordsUpdated: ownershipCount,
-    creditsExpired,
-    uploadBytesForfeited: uploadBytesForfeited.toString(),
-    downloadBytesForfeited: downloadBytesForfeited.toString(),
-  })
-
-  logger.info(
-    'Backend anonymisation complete for user %s: %d ownership records, %d credits expired',
-    publicId,
-    ownershipCount,
-    creditsExpired,
-  )
 }
 
 const processAnonymisation = async (
