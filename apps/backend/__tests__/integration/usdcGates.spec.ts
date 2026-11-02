@@ -8,6 +8,7 @@ import {
   beforeEach,
 } from '@jest/globals'
 import {
+  AccountModel,
   IntentStatus,
   PaymentMethod,
   UserRole,
@@ -24,6 +25,7 @@ import { usdcGatesJob } from '../../src/infrastructure/services/usdcGatesJob.js'
 import { usdcPaymentStateRepository } from '../../src/infrastructure/repositories/usdcPaymentState.js'
 import { intentsRepository } from '../../src/infrastructure/repositories/users/intents.js'
 import { AccountsUseCases } from '../../src/core/users/accounts.js'
+import { accountsRepository } from '../../src/infrastructure/repositories/users/accounts.js'
 import { purchasedCreditsRepository } from '../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { priceOracle } from '../../src/infrastructure/services/priceOracle/index.js'
 import { slackNotifier } from '../../src/infrastructure/services/slack/index.js'
@@ -72,6 +74,14 @@ describe('USDC gates (integration)', () => {
 
   beforeAll(async () => {
     await dbMigration.up()
+    // Intents record the account they credit, so it has to exist.
+    await accountsRepository.createAccount(
+      'acc-int-1',
+      'org-1',
+      AccountModel.Monthly,
+      0,
+      0,
+    )
   })
 
   afterAll(async () => {
@@ -325,8 +335,9 @@ describe('USDC gates (integration)', () => {
     expect(credited.isOk()).toBe(true)
 
     expect(addCredits).toHaveBeenCalledTimes(1)
-    const [publicId, creditBytes] = addCredits.mock.calls[0]
-    expect(publicId).toBe(buyer.publicId)
+    const [creditedIntent, creditBytes] = addCredits.mock.calls[0]
+    expect(creditedIntent.userPublicId).toBe(buyer.publicId)
+    expect(creditedIntent.accountId).toBe('acc-int-1')
     expect(creditBytes).toBeGreaterThan(0n)
 
     const settled = await intentsRepository.getById(intent.id)

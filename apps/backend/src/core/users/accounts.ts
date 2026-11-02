@@ -11,6 +11,7 @@ import {
   AccountInfoWithUser,
   AccountWithTotalSize,
   AdminAccountDetails,
+  Intent,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -31,14 +32,14 @@ const logger = createLogger('AccountsUseCases')
 
 const updateAccount = async (
   executor: User,
-  userPublicId: string,
+  accountId: string,
   model: AccountModel,
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
   if (executor.role !== UserRole.Admin) {
     logger.warn('User does not have admin privileges', {
-      userPublicId,
+      accountId,
       model,
       uploadLimit,
       downloadLimit,
@@ -46,17 +47,10 @@ const updateAccount = async (
     return err(new ForbiddenError('User does not have admin privileges'))
   }
 
-  const user = await AuthManager.getUserFromPublicId(userPublicId)
-  if (!user.organizationId) {
-    return err(new ObjectNotFoundError('User has no organization ID'))
-  }
-
-  const account = await accountsRepository.getByOrganizationId(
-    user.organizationId,
-  )
+  const account = await accountsRepository.getById(accountId)
   if (!account) {
     logger.warn('Account not found', {
-      userPublicId,
+      accountId,
       model,
       uploadLimit,
       downloadLimit,
@@ -65,7 +59,7 @@ const updateAccount = async (
   }
 
   logger.debug('Updating account', {
-    userPublicId,
+    accountId,
     model,
     uploadLimit,
     downloadLimit,
@@ -221,6 +215,28 @@ const getAccountInfo = async (
   }
 }
 
+// One lookup per organisation: getAccountInfo may create the account, and
+// concurrent creates for members of the same organisation would collide.
+const getAccountInfosByOrganization = async (
+  users: UserWithOrganization[],
+): Promise<Map<string, AccountInfo>> => {
+  const byOrganization = new Map<string, UserWithOrganization>()
+  for (const user of users) {
+    if (user.organizationId && !byOrganization.has(user.organizationId)) {
+      byOrganization.set(user.organizationId, user)
+    }
+  }
+
+  return new Map(
+    await Promise.all(
+      [...byOrganization].map(
+        async ([organizationId, user]) =>
+          [organizationId, await getAccountInfo(user)] as const,
+      ),
+    ),
+  )
+}
+
 const getUserListAccount = async (
   executor: User,
   userPublicIds: string[],
@@ -232,15 +248,16 @@ const getUserListAccount = async (
   if (userPublicIds.length === 0) return ok({})
 
   const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
-  const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
+  const accountInfos = await getAccountInfosByOrganization(users)
 
-  const entries = await Promise.all(
-    userPublicIds
-      .filter((id) => usersByPublicId.has(id))
-      .map(async (id) => [id, await getAccountInfo(usersByPublicId.get(id)!)]),
+  return ok(
+    Object.fromEntries(
+      users.flatMap((u) => {
+        const info = u.organizationId && accountInfos.get(u.organizationId)
+        return info ? [[u.publicId, info]] : []
+      }),
+    ),
   )
-
-  return ok(Object.fromEntries(entries))
 }
 
 const getPendingCreditsByUserAndType = async (
@@ -384,49 +401,55 @@ const registerInteraction = async (
 }
 
 const addCreditsToAccount = async (
-  publicId: string,
+  intent: Pick<Intent, 'id' | 'userPublicId' | 'accountId'>,
   credits: bigint,
-  intentId: string,
 ): Promise<Result<void, ForbiddenError>> => {
-  const user = await AuthManager.getUserFromPublicId(publicId)
-  const account = await AccountsUseCases.getOrCreateAccount(user)
+  // Intents created before account_id was recorded go to the buyer's current
+  // account.
+  const accountId =
+    intent.accountId ??
+    (
+      await AccountsUseCases.getOrCreateAccount(
+        await AuthManager.getUserFromPublicId(intent.userPublicId),
+      )
+    ).id
 
   const expiresAt = new Date(
     Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
   )
 
-  // Atomically check the per-user cap and insert inside a single transaction
+  // Atomically check the per-account cap and insert inside a single transaction
   // protected by a per-account advisory lock. This prevents two concurrent
   // onConfirmedIntent calls for different intents from both passing the cap
   // check and both inserting, which would push the account over the cap.
   const result =
     await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
       {
-        accountId: account.id,
-        intentId,
+        accountId,
+        intentId: intent.id,
         uploadBytesOriginal: credits,
         // Download credits are not allocated on purchase — infrastructure is
         // kept for future use but download limits are not enforced right now.
         downloadBytesOriginal: 0n,
         expiresAt,
       },
-      config.credits.maxBytesPerUser,
+      config.credits.maxBytesPerAccount,
     )
 
   if (result.isErr()) {
     logger.warn(
-      'Purchase would exceed per-user cap (accountId=%s, adding=%d, cap=%d)',
-      account.id,
+      'Purchase would exceed per-account cap (accountId=%s, adding=%d, cap=%d)',
+      accountId,
       credits,
-      config.credits.maxBytesPerUser,
+      config.credits.maxBytesPerAccount,
     )
-    return err(new ForbiddenError('Purchase would exceed per-user credit cap'))
+    return err(new ForbiddenError('Purchase would exceed per-account credit cap'))
   }
 
   logger.info(
     'Purchased credits created (accountId=%s, intentId=%s, bytes=%d, expiresAt=%s)',
-    account.id,
-    intentId,
+    accountId,
+    intent.id,
     credits,
     expiresAt.toISOString(),
   )
@@ -487,23 +510,7 @@ const adminSearchAccounts = async (
 
   type MemberUser = UserWithOrganization & { organizationId: string }
   const onboarded = users.filter((u): u is MemberUser => !!u.organizationId)
-
-  // One lookup per organisation: getAccountInfo may create the account, and
-  // concurrent creates for members of the same organisation would collide.
-  const byOrganization = new Map<string, MemberUser>()
-  for (const user of onboarded) {
-    if (!byOrganization.has(user.organizationId)) {
-      byOrganization.set(user.organizationId, user)
-    }
-  }
-  const accountInfos = new Map(
-    await Promise.all(
-      [...byOrganization].map(
-        async ([organizationId, user]) =>
-          [organizationId, await getAccountInfo(user)] as const,
-      ),
-    ),
-  )
+  const accountInfos = await getAccountInfosByOrganization(onboarded)
 
   return ok(
     onboarded.map((user) => ({
@@ -514,13 +521,13 @@ const adminSearchAccounts = async (
 }
 
 /**
- * Admin account page: the account for an account ID or an organization ID,
- * with its members. Members can be empty, e.g. once the only member has
- * deleted their user: the account and its credits stay.
+ * Admin account page: an account with its members. Members can be empty, e.g.
+ * once the only member has deleted their user: the account and its credits
+ * stay.
  */
 const adminGetAccount = async (
   executor: User,
-  id: string,
+  accountId: string,
 ): Promise<
   Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
 > => {
@@ -528,13 +535,36 @@ const adminGetAccount = async (
     return err(new ForbiddenError('User does not have admin privileges'))
   }
 
-  const account =
-    (await accountsRepository.getById(id)) ??
-    (await accountsRepository.getByOrganizationId(id))
+  const account = await accountsRepository.getById(accountId)
   if (!account) {
     return err(new ObjectNotFoundError('Account not found'))
   }
 
+  return ok(await getAdminAccountDetails(account))
+}
+
+/** Admin: the account of an organization, as on the account page. */
+const adminGetAccountByOrganization = async (
+  executor: User,
+  organizationId: string,
+): Promise<
+  Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account = await accountsRepository.getByOrganizationId(organizationId)
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  return ok(await getAdminAccountDetails(account))
+}
+
+const getAdminAccountDetails = async (
+  account: Account,
+): Promise<AdminAccountDetails> => {
   const [pendingUploadCredits, pendingDownloadCredits, users] =
     await Promise.all([
       getPendingCreditsByAccountAndType(account, InteractionType.Upload),
@@ -542,14 +572,14 @@ const adminGetAccount = async (
       AuthManager.adminSearchUsers('', account.organizationId),
     ])
 
-  return ok({
+  return {
     ...account,
     pendingUploadCredits,
     pendingDownloadCredits,
     // Auth returns only this organization's members; `organizationId` is
-    // their first membership, so it is only used to skip unonboarded users.
+    // null for unonboarded users, who are skipped.
     members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
-  })
+  }
 }
 
 /**
@@ -580,6 +610,7 @@ const adminGetAccountIdsByUsers = async (
 export const AccountsUseCases = {
   adminSearchAccounts,
   adminGetAccount,
+  adminGetAccountByOrganization,
   adminGetAccountIdsByUsers,
   updateAccount,
   getOrCreateAccount,

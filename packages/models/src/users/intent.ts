@@ -7,7 +7,7 @@ export enum IntentStatus {
   FAILED = "failed",
   EXPIRED = "expired",
   // Payment was confirmed on-chain but the user's purchased credit balance
-  // is at or above the per-user cap, so credits could not be granted.
+  // is at or above the per-account cap, so credits could not be granted.
   // This is a terminal state — the polling loop will not retry it.
   // An admin must review and either adjust the cap + reprocess, or arrange
   // an out-of-band refund.
@@ -40,7 +40,11 @@ export const USD_RATE_SCALE = 10n ** 18n;
 
 export const IntentSchema = z.object({
   id: z.string(),
+  // The buyer.
   userPublicId: z.string(),
+  // The account the credits are granted to: the buyer's account when the
+  // intent was created. Missing on intents created before it was recorded.
+  accountId: z.string().optional(),
   status: z.nativeEnum(IntentStatus),
   // Payment asset for this intent. NOT NULL in the DB with a default of
   // AI3_NATIVE, but optional here (like expiresAt/fromAddress) so the type stays

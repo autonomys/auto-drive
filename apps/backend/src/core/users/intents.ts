@@ -161,7 +161,7 @@ const DECIMAL_DIGITS = /^\d+$/
  *
  * A decimal string is the canonical form. Every other size on an intent
  * (shannonsPerByte, paymentAmount) already crosses the wire as a string, and a
- * string keeps working unchanged if the per-user cap ever moves past 2^53. A
+ * string keeps working unchanged if the per-account cap ever moves past 2^53. A
  * JSON number is also accepted, since callers reach for one naturally, but only
  * while it is a safe integer — so no lossy float can enter the byte path, and a
  * caller who needs a bigger value is told to send a string instead of silently
@@ -231,7 +231,7 @@ const parsePaymentMethod = (
   )
 }
 
-// Reject a purchase that cannot fit under the per-user credit cap, before the
+// Reject a purchase that cannot fit under the per-account credit cap, before the
 // user has been asked to pay anything.
 //
 // THIS IS A FAST-FAIL, NOT A RESERVATION. Nothing is held: two concurrent
@@ -266,7 +266,7 @@ const checkCapHeadroom = async (
   executor: UserWithOrganization,
   requestedBytes: bigint,
 ): Promise<Result<void, CreditCapExceededError>> => {
-  const cap = config.credits.maxBytesPerUser
+  const cap = config.credits.maxBytesPerAccount
   const account = await AccountsUseCases.getOrCreateAccount(executor)
   const { uploadBytesRemaining } =
     await purchasedCreditsRepository.getRemainingCredits(account.id)
@@ -281,7 +281,7 @@ const checkCapHeadroom = async (
     const headroom =
       uploadBytesRemaining >= cap ? 0n : cap - uploadBytesRemaining
     logger.info(
-      'Rejecting intent creation — would exceed per-user credit cap',
+      'Rejecting intent creation — would exceed per-account credit cap',
       {
         accountId: account.id,
         requestedBytes: requestedBytes.toString(),
@@ -291,7 +291,7 @@ const checkCapHeadroom = async (
     )
     return err(
       new CreditCapExceededError(
-        `Purchase of ${requestedBytes} bytes would exceed the per-user credit ` +
+        `Purchase of ${requestedBytes} bytes would exceed the per-account credit ` +
           `cap of ${cap} bytes: the account already holds ` +
           `${uploadBytesRemaining} bytes, leaving ${headroom} available`,
       ),
@@ -542,11 +542,11 @@ const createIntent = async (
     // the account balance is. Failing it as a malformed request is both clearer
     // than a headroom message and cheaper — it skips the account and balance
     // reads below.
-    if (requestedBytes > config.credits.maxBytesPerUser) {
+    if (requestedBytes > config.credits.maxBytesPerAccount) {
       return err(
         new BadRequestError(
           `Invalid requestedBytes: ${requestedBytes} exceeds the maximum ` +
-            `${config.credits.maxBytesPerUser} bytes purchasable per account`,
+            `${config.credits.maxBytesPerAccount} bytes purchasable per account`,
         ),
       )
     }
@@ -592,6 +592,9 @@ const createIntent = async (
   const expiresAt = new Date(
     Date.now() + config.credits.intentExpiryMinutes * 60 * 1000,
   )
+  // Credits go to the account the purchase was made for, even if the buyer
+  // moves to another organisation before the payment confirms.
+  const { id: accountId } = await AccountsUseCases.getOrCreateAccount(executor)
 
   // AI3 path: requestedBytes is deliberately not persisted. It exists to gate
   // creation against the cap, and nothing downstream reads it — credits are
@@ -601,6 +604,7 @@ const createIntent = async (
     const intent = await intentsRepository.createIntent({
       id: randomBytes32(),
       userPublicId: executor.publicId,
+      accountId,
       status: IntentStatus.PENDING,
       paymentAmount: undefined,
       shannonsPerByte,
@@ -664,6 +668,7 @@ const createIntent = async (
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
+    accountId,
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte,
@@ -1485,18 +1490,17 @@ const onConfirmedIntent = async (intentId: string) => {
   }
 
   const addResult = await AccountsUseCases.addCreditsToAccount(
-    intent.userPublicId,
+    intent,
     creditBytes,
-    intentId,
   )
 
   if (addResult.isErr()) {
     if (addResult.error instanceof ForbiddenError) {
-      // The user's purchased credit balance is at or above the per-user cap.
+      // The user's purchased credit balance is at or above the per-account cap.
       // Mark the intent OVER_CAP (terminal) so the polling loop stops retrying
       // and an admin can review.  The payment is on-chain; resolution requires
       // a manual decision (adjust cap + reprocess, or arrange a refund).
-      logger.warn('Intent blocked by per-user cap — marking OVER_CAP', {
+      logger.warn('Intent blocked by per-account cap — marking OVER_CAP', {
         intentId,
         userPublicId: intent.userPublicId,
         paymentMethod: intent.paymentMethod,

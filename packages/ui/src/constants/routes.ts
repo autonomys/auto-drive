@@ -64,8 +64,8 @@ export const ROUTES = {
     `/${networkId}/drive/admin/deletions`,
   adminReported: (networkId: NetworkId) =>
     `/${networkId}/drive/admin/reported`,
-  adminOrganization: (networkId: NetworkId, organizationId: string) =>
-    `/${networkId}/drive/admin/organization/${organizationId}`,
+  adminOrganization: (networkId: NetworkId, accountId: string) =>
+    `/${networkId}/drive/admin/organization/${accountId}`,
   adminCredits: (networkId: NetworkId) => `/${networkId}/drive/admin/credits`,
   adminUserCredits: (networkId: NetworkId, userPublicId: string) =>
     `/${networkId}/drive/admin/credits/${encodeURIComponent(userPublicId)}`,

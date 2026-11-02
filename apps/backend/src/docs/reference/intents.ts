@@ -126,7 +126,7 @@ export const intents = {
                   requestedBytes: {
                     type: 'string',
                     description:
-                      'How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). Checked against the per-user credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. Optional when `paymentMethod` is `ai3_native`, where the intent locks a per-byte rate, any payment settles it, and the size is used only for that pre-check and then discarded. REQUIRED when `paymentMethod` is `usdc_eth`, where the amount charged is the AI3/USD rate applied to this size, returned as `quotedTokenAmount`.',
+                      'How many bytes the purchase is for, as a decimal string (a JSON number is also accepted while it is a safe integer). Checked against the per-account credit cap before the intent is created, so a purchase with no headroom fails here rather than after an irreversible on-chain payment. Optional when `paymentMethod` is `ai3_native`, where the intent locks a per-byte rate, any payment settles it, and the size is used only for that pre-check and then discarded. REQUIRED when `paymentMethod` is `usdc_eth`, where the amount charged is the AI3/USD rate applied to this size, returned as `quotedTokenAmount`.',
                     example: '1073741824',
                   },
                   paymentMethod: {
@@ -162,7 +162,7 @@ export const intents = {
           },
           '403': {
             description:
-              'The purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
+              'The purchase would exceed the per-account credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
           },
           '404': {
             description:

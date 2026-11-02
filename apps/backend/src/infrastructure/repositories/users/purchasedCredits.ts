@@ -376,7 +376,7 @@ const getByAccountId = async (
 
 // ---------------------------------------------------------------------------
 // createPurchasedCreditWithCapCheck
-// Atomically checks the per-user cap and inserts a new credit row in a
+// Atomically checks the per-account cap and inserts a new credit row in a
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
 // would push upload remaining over the cap.
@@ -387,7 +387,7 @@ const getByAccountId = async (
 
 const createPurchasedCreditWithCapCheck = async (
   params: CreatePurchasedCreditParams,
-  maxBytesPerUser: bigint,
+  maxBytesPerAccount: bigint,
 ): Promise<Result<PurchasedCredit, 'cap_exceeded'>> => {
   const db = await getDatabase()
   const client = await db.connect()
@@ -421,7 +421,7 @@ const createPurchasedCreditWithCapCheck = async (
     const currentRow = currentResult.rows[0]
     const currentUpload = BigInt(currentRow.upload_bytes_remaining)
 
-    if (currentUpload + params.uploadBytesOriginal > maxBytesPerUser) {
+    if (currentUpload + params.uploadBytesOriginal > maxBytesPerAccount) {
       await client.query('ROLLBACK')
       return err('cap_exceeded' as const)
     }

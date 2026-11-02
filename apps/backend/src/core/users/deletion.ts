@@ -48,12 +48,19 @@ const anonymiseBackendData = async (
   const account = organizationId
     ? await accountsRepository.getByOrganizationId(organizationId)
     : null
+  // A shared account's credits belong to every member, so only the last
+  // member's deletion forfeits them. Auth removes the membership afterwards.
+  const members = organizationId
+    ? await AuthManager.adminSearchUsers('', organizationId)
+    : []
+  const organizationCase =
+    members.length > 1 ? 'shared_organization' : 'sole_member'
 
   let creditsExpired = 0
   let uploadBytesForfeited = 0n
   let downloadBytesForfeited = 0n
 
-  if (account) {
+  if (account && organizationCase === 'sole_member') {
     const activeCredits = await purchasedCreditsRepository.getActiveByAccountId(
       account.id,
     )
@@ -80,26 +87,28 @@ const anonymiseBackendData = async (
       uploadBytesForfeited: uploadBytesForfeited.toString(),
       downloadBytesForfeited: downloadBytesForfeited.toString(),
     })
-
-    // Expire all pending intents
-    const pendingIntentsResult = await db.query<{ count: string }>(
-      `WITH updated AS (
-        UPDATE intents
-        SET status = 'expired'
-        WHERE user_public_id = $1 AND status = 'pending'
-        RETURNING 1
-      )
-      SELECT COUNT(*) AS count FROM updated`,
-      [publicId],
-    )
-    const intentsExpired = parseInt(pendingIntentsResult.rows[0].count)
-
-    await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
-      intentsExpired,
-    })
   }
 
+  // Expire the user's own pending intents, whether or not they have an
+  // account.
+  const pendingIntentsResult = await db.query<{ count: string }>(
+    `WITH updated AS (
+      UPDATE intents
+      SET status = 'expired'
+      WHERE user_public_id = $1 AND status = 'pending'
+      RETURNING 1
+    )
+    SELECT COUNT(*) AS count FROM updated`,
+    [publicId],
+  )
+  const intentsExpired = parseInt(pendingIntentsResult.rows[0].count)
+
+  await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
+    intentsExpired,
+  })
+
   await deletionAuditRepository.createEntry(publicId, 'anonymisation_completed', {
+    organizationCase,
     ownershipRecordsUpdated: ownershipCount,
     creditsExpired,
     uploadBytesForfeited: uploadBytesForfeited.toString(),

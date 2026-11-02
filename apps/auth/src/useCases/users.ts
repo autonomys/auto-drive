@@ -309,13 +309,13 @@ const getUsersWithOrganizations = async (
       })),
     )
 
-  const orgByUser = new Map<string, string>()
-  for (const m of memberships) {
-    const key = `${m.oauth_provider}:${m.oauth_user_id}`
-    if (!orgByUser.has(key)) {
-      orgByUser.set(key, m.organization_id)
-    }
-  }
+  // At most one membership per user (users_organizations_user_key).
+  const orgByUser = new Map(
+    memberships.map((m) => [
+      `${m.oauth_provider}:${m.oauth_user_id}`,
+      m.organization_id,
+    ]),
+  )
 
   return users.map((user) => {
     if (!user.onboarded) {

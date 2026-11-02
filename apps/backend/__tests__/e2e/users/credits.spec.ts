@@ -100,9 +100,8 @@ describe('CreditsUseCases', () => {
     const intentId = await createTestIntent(mockUser.publicId)
 
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -134,9 +133,8 @@ describe('CreditsUseCases', () => {
     )
 
     await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     const after = await AccountsUseCases.getPendingCreditsByUserAndType(
@@ -167,9 +165,8 @@ describe('CreditsUseCases', () => {
 
     const intentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       BigInt(50),
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -179,7 +176,7 @@ describe('CreditsUseCases', () => {
     expect(rows[0].uploadBytesOriginal).toBe(BigInt(50))
   })
 
-  it('should reject a purchase that would exceed the per-user cap', async () => {
+  it('should reject a purchase that would exceed the per-account cap', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
 
     // Manually insert a row that consumes most of the cap (100 GiB).
@@ -201,9 +198,8 @@ describe('CreditsUseCases', () => {
     // Trying to add even 1 more byte should be rejected.
     const overCapIntentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: overCapIntentId, userPublicId: mockUser.publicId },
       BigInt(1),
-      overCapIntentId,
     )
 
     expect(result.isErr()).toBe(true)

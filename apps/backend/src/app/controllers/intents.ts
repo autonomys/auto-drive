@@ -111,7 +111,7 @@ intentsController.post(
 // ---------------------------------------------------------------------------
 // GET /intents/over-cap  (admin only)
 // Lists all intents that were confirmed on-chain but could not be converted
-// to credits because the user was already at the per-user cap.
+// to credits because the user was already at the per-account cap.
 // These are terminal — the polling loop skips them.  An admin must review
 // and either raise the cap + reprocess, or arrange a refund out-of-band.
 //

@@ -556,7 +556,7 @@ export const AdminCredits = () => {
         </div>
         <p className='mb-3 text-xs text-muted-foreground'>
           Payments confirmed on-chain that could not be converted to credits
-          because the user hit the per-user cap. Raise the cap via the account
+          because the user hit the per-account cap. Raise the cap via the account
           editor, then click Reprocess to retry.
         </p>
         <OverCapPanel

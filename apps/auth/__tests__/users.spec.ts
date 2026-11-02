@@ -3,6 +3,7 @@ import { UnonboardedUser, UserRole } from '@auto-drive/models'
 import { OrganizationsUseCases } from '../src/useCases/organizations.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { dbMigration } from './utils/dbMigrate.js'
+import { organizationMembersRepository } from '../src/repositories/organizationMembers.js'
 import { createUnonboardedUser, MOCK_UNONBOARDED_USER } from './utils/mocks.js'
 
 describe('UsersUseCases', () => {
@@ -105,6 +106,73 @@ describe('UsersUseCases', () => {
     expect(organization).toEqual({
       id: expect.any(String),
       name: expect.any(String),
+    })
+  })
+
+  describe('organization membership', () => {
+    const onboard = async () => {
+      const user = await UsersUseCases.onboardUser(createUnonboardedUser())
+      if (!user) throw new Error('Failed to onboard user')
+      return user
+    }
+
+    it('names the personal organization without the public ID', async () => {
+      const user = await onboard()
+
+      const organization =
+        await OrganizationsUseCases.getOrganizationByUser(user)
+
+      expect(organization.name).toBe('Personal')
+    })
+
+    it('rejects a second membership for the same user', async () => {
+      const user = await onboard()
+      const other = await onboard()
+      const otherOrganization =
+        await OrganizationsUseCases.getOrganizationByUser(other)
+
+      await expect(
+        organizationMembersRepository.addMemberToOrganization(
+          otherOrganization.id,
+          user.oauthProvider,
+          user.oauthUserId,
+        ),
+      ).rejects.toThrow(/users_organizations_user_key/)
+    })
+
+    it('ignores memberships of archived organizations', async () => {
+      const user = await onboard()
+      const organization =
+        await OrganizationsUseCases.getOrganizationByUser(user)
+      const db = await getDatabase()
+      await db.query(
+        'UPDATE users.organizations SET archived_at = NOW() WHERE id = $1',
+        [organization.id],
+      )
+
+      await expect(
+        OrganizationsUseCases.getOrganizationByUser(user),
+      ).rejects.toThrow('User is not a member of any organization')
+      const [listed] = await UsersUseCases.getUsersWithOrganizations([
+        user.publicId,
+      ])
+      expect(listed.organizationId).toBeNull()
+    })
+
+    it('resolves the same organization one by one and in a batch', async () => {
+      const users = await Promise.all([onboard(), onboard()])
+
+      const batch = await UsersUseCases.getUsersWithOrganizations(
+        users.map((u) => u.publicId),
+      )
+
+      for (const user of users) {
+        const organization =
+          await OrganizationsUseCases.getOrganizationByUser(user)
+        expect(
+          batch.find((u) => u.publicId === user.publicId)?.organizationId,
+        ).toBe(organization.id)
+      }
     })
   })
 

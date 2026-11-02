@@ -82,7 +82,7 @@ describe('IntentsUseCases', () => {
   // pre-check; handleAuth already hands the controller this shape.
   const orgUser = user as unknown as UserWithOrganization
 
-  const cap = config.credits.maxBytesPerUser
+  const cap = config.credits.maxBytesPerAccount
 
   // Point the cap pre-check at a given already-purchased balance.
   const mockPurchasedBalance = (uploadBytesRemaining: bigint) => {
@@ -113,6 +113,10 @@ describe('IntentsUseCases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // createIntent records the account the credits will go to.
+    jest
+      .spyOn(AccountsUseCases, 'getOrCreateAccount')
+      .mockResolvedValue({ id: 'acc-1' } as unknown as Account)
     jest
       .spyOn(IntentsUseCases, 'getPrice')
       .mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
@@ -158,6 +162,8 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
     const intent = result._unsafeUnwrap()
     expect(intent.userPublicId).toBe(user.publicId)
+    // The credits go to this account, wherever the buyer is when it confirms.
+    expect(intent.accountId).toBe('acc-1')
     expect(intent.status).toBe(IntentStatus.PENDING)
     expect(intent.shannonsPerByte).toBe(1n)
   })
@@ -194,7 +200,6 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
-    const accountSpy = jest.spyOn(AccountsUseCases, 'getOrCreateAccount')
     const balanceSpy = jest.spyOn(
       purchasedCreditsRepository,
       'getRemainingCredits',
@@ -204,7 +209,6 @@ describe('IntentsUseCases', () => {
 
     expect(result.isOk()).toBe(true)
     // No size given means nothing to check — the balance must not even be read.
-    expect(accountSpy).not.toHaveBeenCalled()
     expect(balanceSpy).not.toHaveBeenCalled()
   })
 
@@ -247,6 +251,7 @@ describe('IntentsUseCases', () => {
     expect(created).toStrictEqual({
       id: expect.any(String),
       userPublicId: user.publicId,
+      accountId: 'acc-1',
       status: IntentStatus.PENDING,
       paymentMethod: PaymentMethod.AI3_NATIVE,
       paymentAmount: undefined,
@@ -280,7 +285,7 @@ describe('IntentsUseCases', () => {
     },
   )
 
-  it('createIntent rejects a requestedBytes above the per-user cap as a bad request', async () => {
+  it('createIntent rejects a requestedBytes above the per-account cap as a bad request', async () => {
     const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
     const balanceSpy = jest.spyOn(
       purchasedCreditsRepository,
@@ -1038,7 +1043,10 @@ describe('IntentsUseCases', () => {
     expect(res.isOk()).toBe(true)
     // The old guard read paymentAmount unconditionally and would have refused
     // this intent as having no deposit.
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, 500n, intent.id)
+    expect(addCreditsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
+      500n,
+    )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ status: IntentStatus.COMPLETED }),
     )
@@ -2609,9 +2617,8 @@ describe('IntentsUseCases', () => {
 
     expect(res.isOk()).toBe(true)
     expect(addCreditsSpy).toHaveBeenCalledWith(
-      user.publicId,
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
       credits,
-      intent.id,
     )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2646,9 +2653,8 @@ describe('IntentsUseCases', () => {
     // getIntentCredits now returns bigint; intentId is forwarded as third arg.
     const credits = paymentAmount / intent.shannonsPerByte
     expect(addCreditsSpy).toHaveBeenCalledWith(
-      user.publicId,
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
       credits,
-      intent.id,
     )
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2809,7 +2815,7 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(
-        err(new ForbiddenError('Purchase would exceed per-user credit cap')),
+        err(new ForbiddenError('Purchase would exceed per-account credit cap')),
       )
     const updateSpy = jest
       .spyOn(intentsRepository, 'updateIntent')

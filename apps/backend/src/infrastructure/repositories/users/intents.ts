@@ -4,6 +4,7 @@ import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 type DBIntent = {
   id: string
   user_public_id: string
+  account_id: string | null
   status: IntentStatus
   // Both NULLABLE in the DB (see 20250915125036-payments-up.sql), and typed that
   // way so the compiler keeps the coalescing below load-bearing. Declared as
@@ -31,6 +32,7 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
   return rows.map((row) => ({
     id: row.id,
     userPublicId: row.user_public_id,
+    accountId: row.account_id ?? undefined,
     status: row.status,
     // `?? undefined`, like fromAddress and expiresAt below, and not merely for
     // consistency: the idempotency guard in markIntentAsConfirmed exempts rows
@@ -76,8 +78,8 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
     `INSERT INTO intents
        (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
         expires_at, payment_method, token_amount, quoted_token_amount,
-        quoted_ai3_shannons, usd_rate_at_creation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        quoted_ai3_shannons, usd_rate_at_creation, account_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       intent.id,
@@ -94,6 +96,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.quotedTokenAmount?.toString() ?? null,
       intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
+      intent.accountId ?? null,
     ],
   )
   return mapRows(result.rows)[0]
@@ -311,7 +314,7 @@ const getPendingWithTxHash = async (
   return mapRows(result.rows)
 }
 
-// Returns all intents that were blocked by the per-user cap.
+// Returns all intents that were blocked by the per-account cap.
 // These are terminal — the polling loop skips them — and require admin review.
 const getOverCapIntents = async (): Promise<Intent[]> => {
   const db = await getDatabase()

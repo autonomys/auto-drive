@@ -129,7 +129,32 @@ accountController.post(
   }),
 )
 
-// Admin-only: one account by account ID or organization ID, with its members.
+// Admin-only: the account of an organization, with its members.
+accountController.get(
+  '/admin/by-organization/:organizationId',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetAccountByOrganization(
+        user,
+        req.params.organizationId,
+      ),
+      'Failed to get account',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// Admin-only: one account by account ID, with its members.
 accountController.get(
   '/admin/:id',
   asyncSafeHandler(async (req: Request, res: Response) => {
@@ -200,11 +225,11 @@ accountController.post(
       return
     }
 
-    const { publicId, uploadLimit, downloadLimit, model } = req.body
+    const { accountId, uploadLimit, downloadLimit, model } = req.body
 
-    if (typeof publicId !== 'string') {
+    if (typeof accountId !== 'string') {
       res.status(400).json({
-        error: 'Missing or invalid attribute `publicId` in body',
+        error: 'Missing or invalid attribute `accountId` in body',
       })
       return
     }
@@ -234,7 +259,7 @@ accountController.post(
     const updateResult = await handleInternalErrorResult(
       AccountsUseCases.updateAccount(
         executor,
-        publicId,
+        accountId,
         safeModel.data,
         uploadLimit,
         downloadLimit,

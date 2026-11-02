@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../drivers/pg.js'
 import { createLogger } from '../drivers/logger.js'
 
@@ -22,12 +23,13 @@ const getOrganizationById = async (
 const createOrganization = async (
   id: string,
   name: string,
+  db?: pg.Client,
 ): Promise<DBOrganization> => {
-  const db = await getDatabase()
+  const client = db ?? (await getDatabase())
 
   logger.debug('Creating organization %s', id)
 
-  const result = await db.query<DBOrganization>(
+  const result = await client.query<DBOrganization>(
     'INSERT INTO users.organizations (id, name) VALUES ($1, $2) RETURNING *',
     [id, name],
   )

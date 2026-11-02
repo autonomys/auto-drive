@@ -14,10 +14,10 @@ import { useNetwork } from 'contexts/network';
 import { AccountModel } from '@auto-drive/models';
 
 export const CreditsUpdateModal = ({
-  userHandle,
+  accountId,
   onClose,
 }: {
-  userHandle: string | null;
+  accountId: string | null;
   onClose: () => void;
 }) => {
   const [downloadCredits, setDownloadCredits] = useState<string>('');
@@ -36,14 +36,14 @@ export const CreditsUpdateModal = ({
     setDownloadCreditsUnit(1024 ** 2);
     setUploadCreditsUnit(1024 ** 2);
     setModel(AccountModel.Monthly);
-  }, [userHandle]);
+  }, [accountId]);
 
   const updateCredits = useCallback(async () => {
-    if (userHandle && downloadCredits && uploadCredits) {
+    if (accountId && downloadCredits && uploadCredits) {
       const downloadBytes = Number(downloadCredits) * downloadCreditsUnit;
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
       await network.api.updateAccount(
-        userHandle,
+        accountId,
         model,
         uploadBytes,
         downloadBytes,
@@ -53,7 +53,7 @@ export const CreditsUpdateModal = ({
     }
   }, [
     network.api,
-    userHandle,
+    accountId,
     downloadCredits,
     downloadCreditsUnit,
     uploadCredits,
@@ -72,7 +72,7 @@ export const CreditsUpdateModal = ({
   }, [downloadCredits, uploadCredits]);
 
   return (
-    <Transition appear show={!!userHandle} as={Fragment}>
+    <Transition appear show={!!accountId} as={Fragment}>
       <Dialog as='div' className='relative z-10' onClose={onClose}>
         <TransitionChild
           as={Fragment}

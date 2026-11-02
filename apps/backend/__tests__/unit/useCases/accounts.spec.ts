@@ -28,16 +28,12 @@ describe('AccountsUseCases', () => {
   })
 
   describe('updateAccount', () => {
-    it('should error when executor is not admin', async () => {
-      const executor = {
-        id: 'user1',
-        role: UserRole.User,
-        publicId: 'pub1',
-      }
+    const admin = { role: UserRole.Admin, publicId: 'pub1' } as any
 
+    it('should error when executor is not admin', async () => {
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        'acc123',
         AccountModel.OneOff,
         1000,
         1000,
@@ -47,47 +43,12 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
 
-    it('should error when user has no organization', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: null,
-      } as any)
-
-      const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
-        AccountModel.OneOff,
-        1000,
-        1000,
-      )
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-    })
-
     it('should error when account not found', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: 'org123',
-      } as any)
-
-      jest
-        .spyOn(accountsRepository, 'getByOrganizationId')
-        .mockResolvedValue(null)
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
 
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        admin,
+        'acc123',
         AccountModel.OneOff,
         1000,
         1000,
@@ -97,17 +58,9 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
 
-    it('should update account successfully', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: 'org123',
-      } as any)
-
+    // By account ID: the account can be shared by several users, so no
+    // single user identifies it.
+    it('should update the account by its ID', async () => {
       const account = {
         id: 'acc123',
         organizationId: 'org123',
@@ -115,24 +68,25 @@ describe('AccountsUseCases', () => {
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
-
-      jest
-        .spyOn(accountsRepository, 'getByOrganizationId')
+      const lookup = jest
+        .spyOn(accountsRepository, 'getById')
         .mockResolvedValue(account)
-
+      const userLookup = jest.spyOn(AuthManager, 'getUserFromPublicId')
       const updateSpy = jest
         .spyOn(accountsRepository, 'updateAccount')
         .mockResolvedValue(account)
 
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        admin,
+        'acc123',
         AccountModel.Monthly,
         5000,
         5000,
       )
 
       expect(result.isOk()).toBe(true)
+      expect(lookup).toHaveBeenCalledWith('acc123')
+      expect(userLookup).not.toHaveBeenCalled()
       expect(updateSpy).toHaveBeenCalledWith(
         'acc123',
         AccountModel.Monthly,
@@ -263,9 +217,8 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(undefined as any)
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-xyz', userPublicId: 'pub1' },
         BigInt(500),
-        'intent-xyz',
       )
 
       expect(result.isOk()).toBe(true)
@@ -283,7 +236,7 @@ describe('AccountsUseCases', () => {
       expect(updateSpy).not.toHaveBeenCalled()
     })
 
-    it('should reject when purchase would exceed per-user cap', async () => {
+    it('should reject when purchase would exceed per-account cap', async () => {
       const { err: neverthrowErr } = await import('neverthrow')
 
       jest
@@ -291,9 +244,8 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(neverthrowErr('cap_exceeded' as const))
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-over-cap', userPublicId: 'pub1' },
         BigInt(1),
-        'intent-over-cap',
       )
 
       expect(result.isErr()).toBe(true)
@@ -311,12 +263,33 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(neverthrowOk({} as any))
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-monthly', userPublicId: 'pub1' },
         BigInt(100),
-        'intent-monthly',
       )
 
       expect(result.isOk()).toBe(true)
+    })
+
+    // The buyer may have moved to another organization since creating the
+    // intent; the credits still go to the account it was created for.
+    it('should credit the account of the intent, not the current one of the buyer', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+      const createSpy = jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-1', userPublicId: 'pub1', accountId: 'acc-at-creation' },
+        BigInt(100),
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 'acc-at-creation' }),
+        expect.anything(),
+      )
+      expect(AuthManager.getUserFromPublicId).not.toHaveBeenCalled()
+      expect(AccountsUseCases.getOrCreateAccount).not.toHaveBeenCalled()
     })
   })
 
@@ -498,8 +471,52 @@ describe('AccountsUseCases', () => {
       })
     })
 
-    it('should fall back to an organization ID and list its members', async () => {
+    it('should not treat an organization ID as an account ID', async () => {
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+      const byOrganization = jest.spyOn(
+        accountsRepository,
+        'getByOrganizationId',
+      )
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'org1')
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      expect(byOrganization).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('adminGetAccountByOrganization', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+    const account = {
+      id: 'acc1',
+      organizationId: 'org1',
+      uploadLimit: 10,
+      downloadLimit: 10,
+      model: AccountModel.OneOff,
+    }
+
+    beforeEach(() => {
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+    })
+
+    it('should reject non-admin executors', async () => {
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        'org1',
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('should return the account of the organization and list its members', async () => {
       const lookup = jest
         .spyOn(accountsRepository, 'getByOrganizationId')
         .mockResolvedValue(account)
@@ -510,7 +527,10 @@ describe('AccountsUseCases', () => {
           { publicId: 'pending', organizationId: null },
         ] as any)
 
-      const result = await AccountsUseCases.adminGetAccount(admin, 'org1')
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        admin,
+        'org1',
+      )
 
       expect(lookup).toHaveBeenCalledWith('org1')
       expect(search).toHaveBeenCalledWith('', 'org1')
@@ -519,13 +539,15 @@ describe('AccountsUseCases', () => {
       ])
     })
 
-    it('should return not found for an unknown ID', async () => {
-      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+    it('should return not found for an unknown organization', async () => {
       jest
         .spyOn(accountsRepository, 'getByOrganizationId')
         .mockResolvedValue(null)
 
-      const result = await AccountsUseCases.adminGetAccount(admin, 'nope')
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        admin,
+        'nope',
+      )
 
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
@@ -631,6 +653,45 @@ describe('AccountsUseCases', () => {
           pendingDownloadCredits: 50,
         },
       })
+    })
+
+    it('should look up a shared account once for all its members', async () => {
+      const account = {
+        id: 'acc1',
+        organizationId: 'org1',
+        uploadLimit: 100,
+        downloadLimit: 50,
+        model: AccountModel.OneOff,
+      }
+      jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+        { publicId: 'pub1', organizationId: 'org1' },
+        { publicId: 'pub2', organizationId: 'org1' },
+        { publicId: 'pending', organizationId: null },
+      ] as any)
+      const lookup = jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockResolvedValue(account)
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub1',
+        'pub2',
+        'pending',
+      ])
+
+      const accounts = result._unsafeUnwrap()
+      expect(lookup).toHaveBeenCalledTimes(1)
+      expect(Object.keys(accounts)).toEqual(['pub1', 'pub2'])
+      expect(accounts.pub1.id).toBe('acc1')
+      expect(accounts.pub2.id).toBe('acc1')
     })
   })
 })

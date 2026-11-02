@@ -46,7 +46,8 @@ const getByOrganizationId = async (
 ): Promise<Account | null> => {
   const db = await getDatabase()
   const result = await db.query<DBAccount>(
-    'SELECT * FROM accounts WHERE organization_id = $1',
+    // organization_id is not unique: pick the oldest account, deterministically.
+    'SELECT * FROM accounts WHERE organization_id = $1 ORDER BY created_at, id LIMIT 1',
     [organizationId],
   )
   return mapRows(result.rows)[0] || null
