@@ -132,8 +132,8 @@ const MAX_LOG_RANGE_BLOCKS = 500n
 
 const POLL_FAILURE_ALERT_AFTER_MS = 5 * 60_000
 
-// viem's full message lists the request URL, and an Ethereum endpoint can carry
-// a provider API key in it, so Slack gets only the summary and the node's reason.
+// viem's full message lists the request URL, which can carry credentials, so
+// Slack gets only the summary and the node's reason.
 const describePollError = (error: unknown) => {
   if (error instanceof BaseError) {
     return [error.shortMessage, error.details].filter(Boolean).join(' ')
