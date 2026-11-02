@@ -231,7 +231,7 @@ intentsController.post(
     // this string byte for byte and nothing else normalises it.
     //
     // A transaction hash carries no checksum encoding, so wallets emit lowercase
-    // and viem hands the event subscription lowercase — but a hand-rolled API
+    // and viem hands the event poll lowercase — but a hand-rolled API
     // client is free to post `0xAB12…` for the very same transaction. That value
     // is then stored in `intents.tx_hash` and travels on the watch task, and the
     // three consequences are all silent:

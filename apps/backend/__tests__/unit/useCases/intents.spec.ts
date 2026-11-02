@@ -1151,9 +1151,9 @@ describe('IntentsUseCases', () => {
   it('markIntentAsConfirmed files nothing when one log is delivered twice at once', async () => {
     // The routine case, not an exotic one. Every log is delivered by several
     // callers — paymentManager.start() runs in the frontend API and the frontend
-    // worker, each with its own watchContractEvent, and the queued watch-intent-tx
-    // task calls watchTransaction again — with the same intent id, hash, index and
-    // amount, unserialised across processes. One wins the transition and the rest
+    // worker, each with its own payment event poll, and the queued
+    // watch-intent-tx task calls watchTransaction again — with the same intent
+    // id, hash, index and amount, unserialised across processes. One wins the transition and the rest
     // lose it.
     //
     // Losing it is not evidence of a second payment. Filing the losers would put
