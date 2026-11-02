@@ -121,7 +121,7 @@ export const downloadService = {
           'Memory cache stream error for cid %s',
           cid,
         )
-        memoryDownloadCache.set(cid, memoryCacheStream).catch((error) => {
+        memoryDownloadCache.set(cid, memoryCacheStream, size).catch((error) => {
           logger.warn('Error setting memory cache for cid %s', cid, error)
         })
         fsCache.set(cid, { data: fsCacheStream, size }).catch((error) => {

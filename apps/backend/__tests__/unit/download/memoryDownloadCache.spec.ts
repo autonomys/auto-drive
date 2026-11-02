@@ -81,6 +81,38 @@ describe('memory download cache', () => {
     expect(memoryDownloadCache.has('cid')).toBe(false)
   })
 
+  it('skips collecting an object whose known size is over the limit', async () => {
+    let ended = false
+
+    await memoryDownloadCache.set(
+      'cid',
+      streamOf(chunksOf(32), () => {
+        ended = true
+      }),
+      BigInt(LIMIT + 1),
+    )
+
+    expect(ended).toBe(true)
+    expect(memoryDownloadCache.has('cid')).toBe(false)
+  })
+
+  it('still counts when the known size understates the object', async () => {
+    const concat = jest.spyOn(Buffer, 'concat')
+    let ended = false
+
+    await memoryDownloadCache.set(
+      'cid',
+      streamOf(chunksOf(128), () => {
+        ended = true
+      }),
+      0n,
+    )
+
+    expect(ended).toBe(true)
+    expect(concat).not.toHaveBeenCalled()
+    expect(memoryDownloadCache.has('cid')).toBe(false)
+  })
+
   it('stores an object exactly at the limit but not one byte over', async () => {
     const exact = Buffer.alloc(LIMIT, 7)
 

@@ -34,7 +34,11 @@ const get = (cid: string, options?: DownloadServiceOptions) => {
 const set = async (
   cid: string,
   value: AwaitIterable<Buffer>,
+  knownSize?: bigint,
 ): Promise<void> => {
+  // The known size only lets an oversized object skip collecting. The running
+  // count still decides, so a missing or wrong size costs a cache miss at worst.
+  let tooLarge = knownSize !== undefined && knownSize > BigInt(maxCacheSize)
   const chunks: Buffer[] = []
   let size = 0
   // Drain to the end even once the object is too large to cache: the download
@@ -43,13 +47,16 @@ const set = async (
   for await (const chunk of value) {
     size += chunk.length
     if (size > maxCacheSize) {
+      tooLarge = true
+    }
+    if (tooLarge) {
       chunks.length = 0
       continue
     }
     chunks.push(chunk)
   }
 
-  if (size > 0 && size <= maxCacheSize) {
+  if (!tooLarge && size > 0) {
     cache.set(cid, Buffer.concat(chunks, size), {
       sizeCalculation: (value) => value.length,
     })
