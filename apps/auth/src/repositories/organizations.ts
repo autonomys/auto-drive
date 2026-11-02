@@ -87,11 +87,12 @@ const getOrganizationSummaries = async (
 
   const db = await getDatabase()
   const result = await db.query<DBOrganizationSummary>(
-    `SELECT o.*, COUNT(m.organization_id) AS member_count
+    `SELECT o.id, o.name, o.archived_at,
+       COUNT(m.organization_id) AS member_count
      FROM users.organizations o
      LEFT JOIN users.users_organizations m ON m.organization_id = o.id
      WHERE o.id = ANY($1::text[])
-     GROUP BY o.id`,
+     GROUP BY o.id, o.name, o.archived_at`,
     [ids],
   )
   return result.rows

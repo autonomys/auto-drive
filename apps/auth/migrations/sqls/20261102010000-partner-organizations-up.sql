@@ -1,10 +1,17 @@
--- Organisation admins manage an organisation; members use its account. Every
--- existing membership is of the user's own personal organisation, which they
--- administer. New memberships always state their role.
+-- Production runs on Aurora DSQL, which takes one DDL statement per
+-- transaction, builds indexes asynchronously (CREATE INDEX ASYNC) and adds
+-- columns with a name and type only. Apply it there statement by statement,
+-- as described in PR #933.
+
+-- Organisation admins manage an organisation; members use its account. The
+-- column is nullable because DSQL can neither add a NOT NULL column to a table
+-- with rows nor backfill one in a single transaction. Memberships from before
+-- this column are all personal organisations, which their user administers,
+-- so NULL reads as 'admin'. New memberships always state their role.
+ALTER TABLE users.users_organizations ADD COLUMN role text;
 ALTER TABLE users.users_organizations
-  ADD COLUMN role text NOT NULL DEFAULT 'admin'
-  CONSTRAINT users_organizations_role_check CHECK (role IN ('admin', 'member'));
-ALTER TABLE users.users_organizations ALTER COLUMN role DROP DEFAULT;
+  ADD CONSTRAINT users_organizations_role_check
+  CHECK (role IN ('admin', 'member')) NOT VALID;
 
 -- Every move into, out of or within an organisation, made by an Auto Drive
 -- admin. Removing a user from an organisation restores the organisation they

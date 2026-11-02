@@ -238,6 +238,24 @@ describe('OrganizationsUseCases membership', () => {
     expect(current).toEqual({ id: organizationId, name: 'Personal' })
   })
 
+  it('reads a membership from before roles as admin', async () => {
+    const user = await onboard()
+    const personal = await OrganizationsUseCases.getOrganizationByUser(user)
+    const db = await getDatabase()
+    await db.query(
+      'UPDATE users.users_organizations SET role = NULL WHERE organization_id = $1',
+      [personal.id],
+    )
+
+    const organization = await OrganizationsUseCases.getOrganization(
+      personal.id,
+    )
+
+    expect(organization.members).toEqual([
+      { publicId: user.publicId, role: OrganizationRole.Admin },
+    ])
+  })
+
   it('counts members per organization', async () => {
     const [first, second] = [await onboard(), await onboard()]
     for (const user of [first, second]) {

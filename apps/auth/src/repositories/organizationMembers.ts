@@ -6,8 +6,15 @@ type DBOrganizationMember = {
   oauth_provider: string
   oauth_user_id: string
   organization_id: string
-  role: OrganizationRole
+  // NULL for memberships from before roles; see organizationRole.
+  role: OrganizationRole | null
 }
+
+// Memberships from before roles are all of the user's own personal
+// organisation, which they administer.
+export const organizationRole = (
+  member: Pick<DBOrganizationMember, 'role'>,
+): OrganizationRole => member.role ?? OrganizationRole.Admin
 
 const getOrganizationMemberships = async (
   organizationId: string,

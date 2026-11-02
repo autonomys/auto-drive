@@ -11,6 +11,7 @@ import {
 import {
   organizationMembersRepository,
   organizationMembershipChangesRepository,
+  organizationRole,
   organizationsRepository,
   usersRepository,
 } from '../repositories/index.js'
@@ -95,7 +96,7 @@ const getOrganization = async (
     archivedAt: organization.archived_at?.toISOString() ?? null,
     members: members.map((member) => ({
       publicId: deriveUserPublicId(member.oauth_provider, member.oauth_user_id),
-      role: member.role,
+      role: organizationRole(member),
     })),
   }
 }
