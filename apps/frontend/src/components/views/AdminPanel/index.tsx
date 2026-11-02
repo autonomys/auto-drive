@@ -89,9 +89,11 @@ export const AdminPanel = () => {
       // its user deleted their account) only matches by its exact account or
       // organization ID.
       if (results.length === 0) {
-        const account =
-          (await network.api.adminGetAccount(query)) ??
-          (await network.api.adminGetAccountByOrganization(query));
+        const [byAccountId, byOrganizationId] = await Promise.all([
+          network.api.adminGetAccount(query),
+          network.api.adminGetAccountByOrganization(query),
+        ]);
+        const account = byAccountId ?? byOrganizationId;
         if (account) {
           router.push(ROUTES.adminOrganization(network.network.id, account.id));
           return;

@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { v4 } from 'uuid'
 import { User, Organization, OrganizationWithMembers } from '@auto-drive/models'
 import {
@@ -5,7 +6,6 @@ import {
   organizationsRepository,
 } from '../repositories/index.js'
 import { deriveUserPublicId } from './users.js'
-import { withTransaction } from '../drivers/pg.js'
 
 const getOrganizationByUser = async (user: User): Promise<Organization> => {
   const membership =
@@ -33,21 +33,19 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
 
 // Every user starts in a personal organisation of their own. Its name is not
 // shown anywhere, so it carries no identifier of the user.
-const initOrganization = async (user: User) => {
-  await withTransaction(async (db) => {
-    const organization = await organizationsRepository.createOrganization(
-      v4(),
-      'Personal',
-      db,
-    )
+const initOrganization = async (user: User, db: pg.Client) => {
+  const organization = await organizationsRepository.createOrganization(
+    v4(),
+    'Personal',
+    db,
+  )
 
-    await organizationMembersRepository.addMemberToOrganization(
-      organization.id,
-      user.oauthProvider,
-      user.oauthUserId,
-      db,
-    )
-  })
+  await organizationMembersRepository.addMemberToOrganization(
+    organization.id,
+    user.oauthProvider,
+    user.oauthUserId,
+    db,
+  )
 }
 
 const getOrganization = async (

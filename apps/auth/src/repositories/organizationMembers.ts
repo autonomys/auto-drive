@@ -19,8 +19,7 @@ const getOrganizationMemberships = async (
     .then((result) => result.rows)
 }
 
-// A user has at most one membership (users_organizations_user_key), and only
-// in an organisation that is not archived.
+// A user has at most one membership (users_organizations_user_key).
 const getOrganizationMembershipByUser = async (
   oauthProvider: string,
   oauthUserId: string,
@@ -28,10 +27,7 @@ const getOrganizationMembershipByUser = async (
   const db = await getDatabase()
   return db
     .query<DBOrganizationMember>(
-      `SELECT m.* FROM users.users_organizations m
-       JOIN users.organizations o ON o.id = m.organization_id
-       WHERE m.oauth_provider = $1 AND m.oauth_user_id = $2
-         AND o.archived_at IS NULL`,
+      'SELECT * FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2',
       [oauthProvider, oauthUserId],
     )
     .then((result) => result.rows[0] ?? null)
@@ -52,21 +48,6 @@ const addMemberToOrganization = async (
     .then((result) => result.rows[0])
 }
 
-const isMemberOfOrganization = async (
-  organizationId: string,
-  oauthProvider: string,
-  oauthUserId: string,
-): Promise<boolean> => {
-  const db = await getDatabase()
-
-  const result = await db.query<DBOrganizationMember>(
-    'SELECT * FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
-    [organizationId, oauthProvider, oauthUserId],
-  )
-
-  return result.rows.length > 0
-}
-
 const getOrganizationMembershipsByUsers = async (
   users: Array<{ oauthProvider: string; oauthUserId: string }>,
 ): Promise<DBOrganizationMember[]> => {
@@ -75,12 +56,15 @@ const getOrganizationMembershipsByUsers = async (
   const db = await getDatabase()
   const keys = users.map((u) => `${u.oauthProvider}:${u.oauthUserId}`)
 
+  // The first two conditions use users_organizations_user_key. They also match
+  // a provider of one user paired with the ID of another; the third keeps
+  // only the exact pairs.
   const result = await db.query<DBOrganizationMember>(
-    `SELECT m.* FROM users.users_organizations m
-     JOIN users.organizations o ON o.id = m.organization_id
-     WHERE (m.oauth_provider || ':' || m.oauth_user_id) = ANY($1::text[])
-       AND o.archived_at IS NULL`,
-    [keys],
+    `SELECT * FROM users.users_organizations
+     WHERE oauth_provider = ANY($1::text[])
+       AND oauth_user_id = ANY($2::text[])
+       AND (oauth_provider || ':' || oauth_user_id) = ANY($3::text[])`,
+    [users.map((u) => u.oauthProvider), users.map((u) => u.oauthUserId), keys],
   )
 
   return result.rows
@@ -116,5 +100,4 @@ export const organizationMembersRepository = {
   addMemberToOrganization,
   removeMemberFromOrganization,
   removeUserMemberships,
-  isMemberOfOrganization,
 }

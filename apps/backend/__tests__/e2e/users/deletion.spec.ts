@@ -22,13 +22,15 @@ import { deletionAuditRepository } from '../../../src/infrastructure/repositorie
 const insertIntent = async (
   userPublicId: string,
   status: IntentStatus,
+  accountId: string | null = null,
 ): Promise<string> => {
   const db = await getDatabase()
   const id = `test-intent-${uuidv4()}`
   await db.query(
-    `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, userPublicId, status, '1', new Date(Date.now() + 60_000)],
+    `INSERT INTO intents
+       (id, user_public_id, status, shannons_per_byte, expires_at, account_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, userPublicId, status, '1', new Date(Date.now() + 60_000), accountId],
   )
   return id
 }
@@ -62,6 +64,7 @@ describe('Deletion in shared organizations', () => {
   let user: UserWithOrganization
   let accountId: string
   let pendingIntentId: string
+  let confirmedIntentId: string
 
   beforeEach(async () => {
     mockRabbitPublish()
@@ -79,6 +82,11 @@ describe('Deletion in shared organizations', () => {
       BigInt(1000),
     )
     pendingIntentId = await insertIntent(user.publicId, IntentStatus.PENDING)
+    confirmedIntentId = await insertIntent(
+      user.publicId,
+      IntentStatus.CONFIRMED,
+      accountId,
+    )
 
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
     jest
@@ -102,14 +110,12 @@ describe('Deletion in shared organizations', () => {
   })
 
   const lastCompletion = async () => {
-    const entries = await deletionAuditRepository.getByUser(
-      user.publicId,
-    )
+    const entries = await deletionAuditRepository.getByUser(user.publicId)
     return entries.find((e) => e.action === 'anonymisation_completed')
   }
 
   it('expires the account credits when the user is its only member', async () => {
-    jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([user])
+    jest.spyOn(AuthManager, 'getOrganizationMembers').mockResolvedValue([])
 
     await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
 
@@ -117,6 +123,28 @@ describe('Deletion in shared organizations', () => {
       await purchasedCreditsRepository.getRemainingCredits(accountId)
     expect(uploadBytesRemaining).toBe(0n)
     expect(await getIntentStatus(pendingIntentId)).toBe(IntentStatus.EXPIRED)
+    // Not yet credited, so it would otherwise reach the account afterwards.
+    expect(await getIntentStatus(confirmedIntentId)).toBe(IntentStatus.EXPIRED)
+    expect((await lastCompletion())?.details).toMatchObject({
+      organizationCase: 'sole_member',
+      creditsExpired: 1,
+    })
+  })
+
+  it('counts the members after auth has removed the membership', async () => {
+    // Another member was deleted at the same time and removed first.
+    let removed = false
+    jest
+      .spyOn(AuthManager, 'executeAuthAnonymisation')
+      .mockImplementation(async () => {
+        removed = true
+      })
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockImplementation(async () => (removed ? [] : [user.publicId]))
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
+
     expect((await lastCompletion())?.details).toMatchObject({
       organizationCase: 'sole_member',
       creditsExpired: 1,
@@ -133,16 +161,20 @@ describe('Deletion in shared organizations', () => {
       IntentStatus.PENDING,
     )
     jest
-      .spyOn(AuthManager, 'adminSearchUsers')
-      .mockResolvedValue([user, otherMember])
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockResolvedValue([otherMember.publicId])
 
     await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
 
     const { uploadBytesRemaining } =
       await purchasedCreditsRepository.getRemainingCredits(accountId)
     expect(uploadBytesRemaining).toBe(1000n)
-    // Only the deleted user's own pending intents are expired.
+    // Only the deleted user's own pending intents are expired. Confirmed ones
+    // are still credited to the shared account.
     expect(await getIntentStatus(pendingIntentId)).toBe(IntentStatus.EXPIRED)
+    expect(await getIntentStatus(confirmedIntentId)).toBe(
+      IntentStatus.CONFIRMED,
+    )
     expect(await getIntentStatus(otherPendingIntentId)).toBe(
       IntentStatus.PENDING,
     )

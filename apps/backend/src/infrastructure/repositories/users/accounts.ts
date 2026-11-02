@@ -46,8 +46,7 @@ const getByOrganizationId = async (
 ): Promise<Account | null> => {
   const db = await getDatabase()
   const result = await db.query<DBAccount>(
-    // organization_id is not unique: pick the oldest account, deterministically.
-    'SELECT * FROM accounts WHERE organization_id = $1 ORDER BY created_at, id LIMIT 1',
+    'SELECT * FROM accounts WHERE organization_id = $1',
     [organizationId],
   )
   return mapRows(result.rows)[0] || null
@@ -70,11 +69,20 @@ const createAccount = async (
   downloadLimit: number,
 ): Promise<Account> => {
   const db = await getDatabase()
+  // An organisation has one account (accounts_organization_id_key). If a
+  // concurrent request created it first, that one is returned.
   const result = await db.query<DBAccount>(
-    'INSERT INTO accounts (id, organization_id, "model", "upload_limit", "download_limit") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    'INSERT INTO accounts (id, organization_id, "model", "upload_limit", "download_limit") VALUES ($1, $2, $3, $4, $5) ON CONFLICT (organization_id) DO NOTHING RETURNING *',
     [id, organizationId, model, uploadLimit, downloadLimit],
   )
-  return mapRows(result.rows)[0]
+  const [created] = mapRows(result.rows)
+  if (created) return created
+
+  const existing = await getByOrganizationId(organizationId)
+  if (!existing) {
+    throw new Error(`Account for organization ${organizationId} not found`)
+  }
+  return existing
 }
 
 const updateAccount = async (

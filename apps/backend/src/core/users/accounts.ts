@@ -114,27 +114,14 @@ const initAccount = async (
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Account> => {
-  const account = await accountsRepository.getByOrganizationId(organizationId)
-  if (account) {
-    throw new Error('Account already exists')
-  }
-
-  const newAccount = {
-    id: v4(),
+  // Returns the existing account if the organisation already has one.
+  return accountsRepository.createAccount(
+    v4(),
     organizationId,
-    model: config.params.defaultAccount.model as AccountModel,
+    config.params.defaultAccount.model as AccountModel,
     uploadLimit,
     downloadLimit,
-  }
-  await accountsRepository.createAccount(
-    newAccount.id,
-    organizationId,
-    newAccount.model,
-    newAccount.uploadLimit,
-    newAccount.downloadLimit,
   )
-
-  return newAccount
 }
 
 const getPendingCreditsByAccountAndType = async (
@@ -215,8 +202,8 @@ const getAccountInfo = async (
   }
 }
 
-// One lookup per organisation: getAccountInfo may create the account, and
-// concurrent creates for members of the same organisation would collide.
+// Members of an organisation share its account, so it is looked up once per
+// organisation.
 const getAccountInfosByOrganization = async (
   users: UserWithOrganization[],
 ): Promise<Map<string, AccountInfo>> => {
@@ -443,7 +430,9 @@ const addCreditsToAccount = async (
       credits,
       config.credits.maxBytesPerAccount,
     )
-    return err(new ForbiddenError('Purchase would exceed per-account credit cap'))
+    return err(
+      new ForbiddenError('Purchase would exceed per-account credit cap'),
+    )
   }
 
   logger.info(
