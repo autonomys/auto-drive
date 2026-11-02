@@ -8,20 +8,36 @@ This service runs on AWS Lambda (`auto-drive-auth-v2`, `us-east-2`, `nodejs24.x`
 
 ### Deploying a new code version
 
+Use the **Auth migrations and deployment** GitHub Actions workflow. It builds and
+tests the artifact, verifies the auth database target, waits for a completed AWS
+Backup recovery point when schema changes are pending, runs Flyway, verifies
+migration history and index validity, then updates Lambda. A failed backup or
+migration prevents the code deployment.
+
+The workflow has `plan`, `adopt`, and `deploy` operations. Production automation
+is enabled by the repository variable `AUTH_DEPLOY_ENABLED=true`, after the AWS
+roles/environments and initial baseline adoption are configured. Deployment runs
+are serialized per environment and cannot cancel an in-progress migration.
+
+See [Auth DSQL migrations](auth-migrations.md) for setup, baseline verification,
+writing migrations, staging validation, and recovery. Production uses DSQL IAM
+authentication; the local `DATABASE_URL` and `db-migrate` command do not configure
+production migrations.
+
+For a local deployment using the same backup and migration checks (Java 17+,
+Maven, AWS CLI, Node.js, and the documented environment variables are required):
+
 ```bash
-# 1. Build the Lambda bundle
+yarn workspace auth migrate:dsql:build
+yarn workspace auth migrate:dsql:plan
+yarn models build
 yarn workspace auth lambda:build
-# Output: apps/auth/build/index.js
-
-# 2. Package it
 zip -j apps/auth/build/index.zip apps/auth/build/index.js
-
-# 3. Deploy to AWS
-aws lambda update-function-code \
-  --function-name auto-drive-auth-v2 \
-  --zip-file fileb://apps/auth/build/index.zip \
-  --region us-east-2
+yarn workspace auth deploy:production
 ```
+
+Do not run a local deployment concurrently with GitHub Actions or another
+operator; the DSQL adapter does not acquire a database advisory lock.
 
 ### Infrastructure changes
 

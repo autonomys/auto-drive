@@ -9,6 +9,10 @@
     "build": "tsc",
     "dev": "nodemon src/index.ts",
     "migrate": "db-migrate -t auth_migrations",
+    "migrate:dsql:build": "mvn -B -ntp -f flyway/pom.xml verify",
+    "migrate:dsql:plan": "node scripts/deploy.mjs plan",
+    "migrate:dsql:adopt": "node scripts/deploy.mjs adopt",
+    "deploy:production": "node scripts/deploy.mjs deploy",
     "test": "NODE_OPTIONS='--max-old-space-size=4096' node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --coverage --forceExit",
     "lint": "eslint .",
     "lambda:build": "yarn build && ../../node_modules/.bin/esbuild src/lambda.ts --bundle --platform=node --target=node24 --outfile=build/index.js"
