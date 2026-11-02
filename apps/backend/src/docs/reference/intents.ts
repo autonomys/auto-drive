@@ -158,19 +158,19 @@ export const intents = {
               '`requestedBytes` was supplied but is not a positive whole number of bytes, or is larger than the per-account maximum; `requestedBytes` was omitted on a `usdc_eth` intent; or `paymentMethod` was not a recognised value',
           },
           '401': {
-            description: 'Unauthorized — missing or invalid credentials',
+            description: 'Unauthorized: invalid credentials',
           },
           '403': {
             description:
-              'Google-verified account required (`GOOGLE_ACCOUNT_REQUIRED`); the purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
+              'The purchase would exceed the per-user credit cap (`CREDIT_CAP_EXCEEDED`, with the cap and current balance in `message`); or `paymentMethod` was `usdc_eth` and paying in USDC is not open to this account (`USDC_PAYMENTS_DISABLED`)',
           },
           '404': {
             description:
-              'Feature not available — the buyCredits feature flag is not active for this user',
+              'Plain-text `Not Found` from the purchase gate: no credentials, or the buyCredits feature flag is not active for this user',
           },
           '503': {
             description:
-              'Storage could not be priced, which is our problem rather than the caller\'s — retry unchanged. On a `usdc_eth` intent: `PRICE_ORACLE_UNAVAILABLE` when the AI3/USD rate could not be read or failed one of its guards, `PRICE_UNSTABLE` when the market has re-priced past the window the rate is averaged over. Note there is no size-related refusal: the rate is a size-independent average, so asking for less never turns a refusal into a quote. On either payment method, also returned when the per-byte AI3 rate resolves to zero, which is a server misconfiguration rather than a market condition.',
+              'A server-side condition, so retry unchanged. On a `usdc_eth` intent: `PRICE_ORACLE_UNAVAILABLE` when the AI3/USD rate could not be read or failed one of its guards, `PRICE_UNSTABLE` when the market has re-priced past the window the rate is averaged over. Note there is no size-related refusal: the rate is a size-independent average, so asking for less never turns a refusal into a quote. On either payment method, also returned when the per-byte AI3 rate resolves to zero, which is a server misconfiguration rather than a market condition.',
           },
         },
       },
@@ -210,7 +210,8 @@ export const intents = {
               'Forbidden — the intent belongs to a different user',
           },
           '404': {
-            description: 'Intent not found',
+            description:
+              'Intent not found, or a plain-text `Not Found` from the purchase gate (see `POST /intents`)',
           },
           '410': {
             description: 'Intent has expired (price-lock window elapsed)',
@@ -310,14 +311,7 @@ export const intents = {
           },
           status: {
             type: 'string',
-            enum: [
-              'pending',
-              'confirmed',
-              'completed',
-              'failed',
-              'expired',
-              'over_cap',
-            ],
+            enum: ['pending', 'confirmed', 'completed', 'failed', 'over_cap'],
             description: 'Current intent status',
           },
           txHash: {
