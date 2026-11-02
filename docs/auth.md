@@ -196,7 +196,21 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information with members
+#### `GET /organizations/:organizationId`: Gets organization information with members and their roles
+
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each write takes the acting admin's public ID as `actor` and is recorded in `users.organization_membership_changes`.
+
+#### `POST /organizations`: Creates an organization (`{ name }`)
+
+#### `POST /organizations/batch`: Gets organizations by ID with their member count and archive date (`{ ids }`, up to 100)
+
+#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
+
+#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`). The user leaves their current organization, which is archived if no members remain
+
+#### `PATCH /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`)
+
+#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one
 
 ## Security Considerations
 

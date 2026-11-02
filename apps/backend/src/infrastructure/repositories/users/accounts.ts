@@ -12,6 +12,7 @@ type DBAccount = {
   model: AccountModel
   upload_limit: number
   download_limit: number
+  is_partner: boolean
 }
 
 type DBAccountWithTotalSize = DBAccount & {
@@ -25,6 +26,7 @@ const mapRows = (rows: DBAccount[]): Account[] => {
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
     model: row.model as AccountModel,
+    isPartner: row.is_partner,
   }))
 }
 
@@ -37,6 +39,7 @@ const mapRowsWithSize = (
     downloadLimit: Number(row.download_limit),
     organizationId: row.organization_id,
     model: row.model as AccountModel,
+    isPartner: row.is_partner,
     totalSize: Number(row.total_size),
   }))
 }
@@ -68,11 +71,12 @@ const createAccount = async (
   model: string,
   uploadLimit: number,
   downloadLimit: number,
+  isPartner = false,
 ): Promise<Account> => {
   const db = await getDatabase()
   const result = await db.query<DBAccount>(
-    'INSERT INTO accounts (id, organization_id, "model", "upload_limit", "download_limit") VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [id, organizationId, model, uploadLimit, downloadLimit],
+    'INSERT INTO accounts (id, organization_id, "model", "upload_limit", "download_limit", is_partner) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [id, organizationId, model, uploadLimit, downloadLimit, isPartner],
   )
   return mapRows(result.rows)[0]
 }
@@ -123,7 +127,16 @@ export const getTopAccountsWithinPeriod = async (
   return mapRowsWithSize(result.rows)
 }
 
+const getPartnerAccounts = async (): Promise<Account[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBAccount>(
+    'SELECT * FROM accounts WHERE is_partner ORDER BY created_at, id',
+  )
+  return mapRows(result.rows)
+}
+
 export const accountsRepository = {
+  getPartnerAccounts,
   getByOrganizationId,
   createAccount,
   updateAccount,

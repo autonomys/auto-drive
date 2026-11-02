@@ -1,10 +1,12 @@
 import pg from 'pg'
+import { OrganizationRole } from '@auto-drive/models'
 import { getDatabase } from '../drivers/pg.js'
 
 type DBOrganizationMember = {
   oauth_provider: string
   oauth_user_id: string
   organization_id: string
+  role: OrganizationRole
 }
 
 const getOrganizationMemberships = async (
@@ -41,15 +43,33 @@ const addMemberToOrganization = async (
   organizationId: string,
   oauthProvider: string,
   oauthUserId: string,
+  role: OrganizationRole,
   db?: pg.Client,
 ): Promise<DBOrganizationMember> => {
   const client = db ?? (await getDatabase())
   return client
     .query<DBOrganizationMember>(
-      'INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id) VALUES ($1, $2, $3) RETURNING *',
-      [oauthProvider, oauthUserId, organizationId],
+      'INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id, role) VALUES ($1, $2, $3, $4) RETURNING *',
+      [oauthProvider, oauthUserId, organizationId, role],
     )
     .then((result) => result.rows[0])
+}
+
+// Returns the updated membership, or null if the user is not a member.
+const updateMemberRole = async (
+  organizationId: string,
+  oauthProvider: string,
+  oauthUserId: string,
+  role: OrganizationRole,
+  db: pg.Client,
+): Promise<DBOrganizationMember | null> => {
+  const result = await db.query<DBOrganizationMember>(
+    `UPDATE users.users_organizations SET role = $4
+     WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3
+     RETURNING *`,
+    [organizationId, oauthProvider, oauthUserId, role],
+  )
+  return result.rows[0] ?? null
 }
 
 const isMemberOfOrganization = async (
@@ -86,27 +106,33 @@ const getOrganizationMembershipsByUsers = async (
   return result.rows
 }
 
+// Returns whether the user was a member.
 const removeMemberFromOrganization = async (
   organizationId: string,
   oauthProvider: string,
   oauthUserId: string,
-): Promise<void> => {
-  const db = await getDatabase()
-  await db.query(
+  db?: pg.Client,
+): Promise<boolean> => {
+  const client = db ?? (await getDatabase())
+  const result = await client.query(
     'DELETE FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
     [organizationId, oauthProvider, oauthUserId],
   )
+  return (result.rowCount ?? 0) > 0
 }
 
+// Returns the organisations the user was removed from.
 const removeUserMemberships = async (
   oauthProvider: string,
   oauthUserId: string,
-): Promise<void> => {
-  const db = await getDatabase()
-  await db.query(
-    'DELETE FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2',
+  db?: pg.Client,
+): Promise<string[]> => {
+  const client = db ?? (await getDatabase())
+  const result = await client.query<{ organization_id: string }>(
+    'DELETE FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2 RETURNING organization_id',
     [oauthProvider, oauthUserId],
   )
+  return result.rows.map((row) => row.organization_id)
 }
 
 export const organizationMembersRepository = {
@@ -114,6 +140,7 @@ export const organizationMembersRepository = {
   getOrganizationMembershipByUser,
   getOrganizationMembershipsByUsers,
   addMemberToOrganization,
+  updateMemberRole,
   removeMemberFromOrganization,
   removeUserMemberships,
   isMemberOfOrganization,

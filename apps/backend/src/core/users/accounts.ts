@@ -125,6 +125,7 @@ const initAccount = async (
     model: config.params.defaultAccount.model as AccountModel,
     uploadLimit,
     downloadLimit,
+    isPartner: false,
   }
   await accountsRepository.createAccount(
     newAccount.id,
@@ -565,11 +566,12 @@ const adminGetAccountByOrganization = async (
 const getAdminAccountDetails = async (
   account: Account,
 ): Promise<AdminAccountDetails> => {
-  const [pendingUploadCredits, pendingDownloadCredits, users] =
+  const [pendingUploadCredits, pendingDownloadCredits, users, organization] =
     await Promise.all([
       getPendingCreditsByAccountAndType(account, InteractionType.Upload),
       getPendingCreditsByAccountAndType(account, InteractionType.Download),
       AuthManager.adminSearchUsers('', account.organizationId),
+      AuthManager.getOrganization(account.organizationId),
     ])
 
   return {
@@ -579,6 +581,7 @@ const getAdminAccountDetails = async (
     // Auth returns only this organization's members; `organizationId` is
     // null for unonboarded users, who are skipped.
     members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
+    organization: organization.unwrapOr(null),
   }
 }
 
