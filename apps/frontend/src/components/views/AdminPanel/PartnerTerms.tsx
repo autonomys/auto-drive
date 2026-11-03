@@ -242,7 +242,13 @@ export const PartnerTerms = ({
   });
 
   const terms = [
-    ['Free upload allowance', 'None, uploads use purchased credits'],
+    [
+      'Free upload allowance',
+      // Partner accounts created before #890 still have one until edited.
+      account.uploadLimit === 0
+        ? 'None, uploads use purchased credits'
+        : `${formatBytes(account.uploadLimit)} (saving the terms sets it to 0)`,
+    ],
     [
       'Download allowance',
       `${formatBytes(account.downloadLimit)} (${account.model === AccountModel.Monthly ? 'resets monthly' : 'one-off'})`,
