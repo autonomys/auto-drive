@@ -36,7 +36,7 @@ import { AccountsUseCases } from './accounts.js'
 import { FeatureFlagsUseCases } from '../featureFlags/index.js'
 import { UsdcPaymentsUseCases } from '../payments/usdc.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
-import { ApiPromise, WsProvider } from '@polkadot/api'
+import { ApiPromise, WsProvider } from '../../shared/utils/polkadot.js'
 import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
 import { OracleUnavailableError } from '../../infrastructure/services/priceOracle/types.js'
 import {
