@@ -48,6 +48,7 @@ import { formatCid } from '@/utils/table';
 import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
+import { PartnerTerms } from './PartnerTerms';
 
 // GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
@@ -401,6 +402,13 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           </div>
         )}
       </div>
+
+      {account?.isPartner && (
+        <PartnerTerms
+          account={account}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
 
       {account?.isPartner && account.organization && (
         <PartnerMembers

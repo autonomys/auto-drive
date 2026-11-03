@@ -326,6 +326,49 @@ describe('IntentsUseCases', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 
+  // A partner account can hold more than the global default.
+  it('createIntent applies an account cap override instead of the global cap', async () => {
+    mockPurchasedBalance(0n)
+    jest.spyOn(AccountsUseCases, 'getOrCreateAccount').mockResolvedValue({
+      id: 'acc-1',
+      maxPurchasedBytes: Number(cap) * 2,
+    } as unknown as Account)
+    jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const within = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: cap + 1n,
+    })
+    const above = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: cap * 2n + 1n,
+    })
+
+    expect(within.isOk()).toBe(true)
+    expect(above._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+  })
+
+  it('createIntent applies an account cap override to the headroom', async () => {
+    mockPurchasedBalance(cap)
+    jest.spyOn(AccountsUseCases, 'getOrCreateAccount').mockResolvedValue({
+      id: 'acc-1',
+      maxPurchasedBytes: Number(cap) + 100,
+    } as unknown as Account)
+    jest
+      .spyOn(intentsRepository, 'createIntent')
+      .mockImplementation(async (intent) => intent)
+
+    const within = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 100n,
+    })
+    const above = await IntentsUseCases.createIntent(orgUser, {
+      requestedBytes: 101n,
+    })
+
+    expect(within.isOk()).toBe(true)
+    expect(above._unsafeUnwrapErr()).toBeInstanceOf(CreditCapExceededError)
+  })
+
   it('createIntent accepts a purchase that lands exactly on the cap', async () => {
     mockPurchasedBalance(cap - 100n)
     jest

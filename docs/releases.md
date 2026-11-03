@@ -17,6 +17,7 @@
 Production doesn't run migrations on deploy. Apply them by hand before the code that needs them, and follow the PR's deploy notes for the order.
 
 - **Backend:** run `yarn backend db-migrate up` against the production backend database. The production services start without `start-server.sh`, so its `db-migrate up` doesn't run.
+- **Partner account terms (#890):** backend migration `20261103000000-partner-account-terms` only (`yarn backend db-migrate up`, before deploying the code). It adds two nullable columns to `accounts` and the `account_terms_changes` table. There is no auth or Hasura change, so no DSQL statements.
 - **Auth:** the production database is Aurora DSQL. The migration files are written for Postgres, which dev, CI and the test image use, so apply the PR's DSQL statements by hand. On DSQL:
   - a transaction can hold only one DDL statement, and DDL can't share a transaction with data changes;
   - indexes are created with `CREATE [UNIQUE] INDEX ASYNC`, and you watch `sys.jobs` until the job completes;

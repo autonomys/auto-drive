@@ -158,9 +158,8 @@ describe('CreditsUseCases', () => {
     // Switch to Monthly model — purchased credits should still work.
     await accountsRepository.updateAccount(
       account.id,
-      AccountModel.Monthly,
-      account.uploadLimit,
-      account.downloadLimit,
+      { ...account, model: AccountModel.Monthly },
+      'admin',
     )
 
     const intentId = await createTestIntent(mockUser.publicId)
@@ -223,9 +222,8 @@ describe('CreditsUseCases', () => {
     })
     await accountsRepository.updateAccount(
       account.id,
-      AccountModel.OneOff,
-      0, // uploadLimit = 0 (no free-tier bytes)
-      0, // downloadLimit = 0
+      { ...account, uploadLimit: 0, downloadLimit: 0 }, // no free-tier bytes
+      'admin',
     )
 
     // Fire two concurrent 90 MB upload interactions simultaneously.
@@ -403,9 +401,8 @@ describe('CreditsUseCases', () => {
       await seedBatch(account.id, MB(10), 30)
       await accountsRepository.updateAccount(
         account.id,
-        AccountModel.OneOff,
-        0,
-        0,
+        { ...account, uploadLimit: 0, downloadLimit: 0 },
+        'admin',
       )
 
       await expect(

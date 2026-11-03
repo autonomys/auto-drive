@@ -267,7 +267,7 @@ const checkCapHeadroom = async (
   account: Account,
   requestedBytes: bigint,
 ): Promise<Result<void, CreditCapExceededError>> => {
-  const cap = config.credits.maxBytesPerAccount
+  const cap = AccountsUseCases.getCreditTerms(account).maxBytes
   const { uploadBytesRemaining } =
     await purchasedCreditsRepository.getRemainingCredits(account.id)
 
@@ -538,18 +538,6 @@ const createIntent = async (
         ),
       )
     }
-    // A single purchase larger than the whole cap can never be granted, whatever
-    // the account balance is. Failing it as a malformed request is both clearer
-    // than a headroom message and cheaper — it skips the account and balance
-    // reads below.
-    if (requestedBytes > config.credits.maxBytesPerAccount) {
-      return err(
-        new BadRequestError(
-          `Invalid requestedBytes: ${requestedBytes} exceeds the maximum ` +
-            `${config.credits.maxBytesPerAccount} bytes purchasable per account`,
-        ),
-      )
-    }
   }
 
   // Credits go to the account the purchase was made for, even if the buyer
@@ -557,6 +545,19 @@ const createIntent = async (
   const account = await AccountsUseCases.getOrCreateAccount(executor)
 
   if (requestedBytes !== undefined) {
+    // A single purchase larger than the whole cap can never be granted, whatever
+    // the account balance is. Failing it as a malformed request is clearer than
+    // a headroom message.
+    const { maxBytes } = AccountsUseCases.getCreditTerms(account)
+    if (requestedBytes > maxBytes) {
+      return err(
+        new BadRequestError(
+          `Invalid requestedBytes: ${requestedBytes} exceeds the maximum ` +
+            `${maxBytes} bytes purchasable per account`,
+        ),
+      )
+    }
+
     const headroom = await checkCapHeadroom(account, requestedBytes)
     if (headroom.isErr()) {
       return err(headroom.error)

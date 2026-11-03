@@ -12,6 +12,7 @@ import {
   AccountWithTotalSize,
   AdminAccountDetails,
   Intent,
+  AccountTermsChange,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
@@ -22,6 +23,7 @@ import { getDatabase } from '../../infrastructure/drivers/pg.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
+  BadRequestError,
   ForbiddenError,
   ObjectNotFoundError,
   PaymentRequiredError,
@@ -30,13 +32,35 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('AccountsUseCases')
 
+/**
+ * The holding cap and expiry period that apply to an account: its overrides,
+ * or the global defaults where it has none.
+ */
+const getCreditTerms = (
+  account: Pick<Account, 'maxPurchasedBytes' | 'creditExpiryDays'>,
+): { maxBytes: bigint; expiryDays: number } => ({
+  maxBytes:
+    typeof account.maxPurchasedBytes === 'number'
+      ? BigInt(account.maxPurchasedBytes)
+      : config.credits.maxBytesPerAccount,
+  expiryDays: account.creditExpiryDays ?? config.credits.expiryDays,
+})
+
+// A credit term left undefined stays as it is; null clears the override.
 const updateAccount = async (
   executor: User,
   accountId: string,
   model: AccountModel,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
+  terms: {
+    maxPurchasedBytes?: number | null
+    creditExpiryDays?: number | null
+    reason?: string
+  } = {},
+): Promise<
+  Result<void, ForbiddenError | ObjectNotFoundError | BadRequestError>
+> => {
   if (executor.role !== UserRole.Admin) {
     logger.warn('User does not have admin privileges', {
       accountId,
@@ -58,6 +82,15 @@ const updateAccount = async (
     return err(new ObjectNotFoundError('Account not found'))
   }
 
+  // A partner account's uploads are paid with purchased credits only.
+  if (account.isPartner && uploadLimit !== 0) {
+    return err(
+      new BadRequestError(
+        'A partner account has no free upload allowance: its upload limit must be 0',
+      ),
+    )
+  }
+
   logger.debug('Updating account', {
     accountId,
     model,
@@ -67,9 +100,21 @@ const updateAccount = async (
 
   await accountsRepository.updateAccount(
     account.id,
-    model,
-    uploadLimit,
-    downloadLimit,
+    {
+      model,
+      uploadLimit,
+      downloadLimit,
+      maxPurchasedBytes:
+        terms.maxPurchasedBytes === undefined
+          ? account.maxPurchasedBytes
+          : terms.maxPurchasedBytes,
+      creditExpiryDays:
+        terms.creditExpiryDays === undefined
+          ? account.creditExpiryDays
+          : terms.creditExpiryDays,
+    },
+    executor.publicId,
+    terms.reason,
   )
 
   return ok()
@@ -393,16 +438,17 @@ const addCreditsToAccount = async (
 ): Promise<Result<void, ForbiddenError>> => {
   // Intents created before account_id was recorded go to the buyer's current
   // account.
-  const accountId =
-    intent.accountId ??
-    (
-      await AccountsUseCases.getOrCreateAccount(
-        await AuthManager.getUserFromPublicId(intent.userPublicId),
-      )
-    ).id
+  const account =
+    (intent.accountId &&
+      (await accountsRepository.getById(intent.accountId))) ||
+    (await AccountsUseCases.getOrCreateAccount(
+      await AuthManager.getUserFromPublicId(intent.userPublicId),
+    ))
+  const accountId = account.id
+  const terms = getCreditTerms(account)
 
   const expiresAt = new Date(
-    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
+    Date.now() + terms.expiryDays * 24 * 60 * 60 * 1000,
   )
 
   // Atomically check the per-account cap and insert inside a single transaction
@@ -420,7 +466,7 @@ const addCreditsToAccount = async (
         downloadBytesOriginal: 0n,
         expiresAt,
       },
-      config.credits.maxBytesPerAccount,
+      terms.maxBytes,
     )
 
   if (result.isErr()) {
@@ -428,7 +474,7 @@ const addCreditsToAccount = async (
       'Purchase would exceed per-account cap (accountId=%s, adding=%d, cap=%d)',
       accountId,
       credits,
-      config.credits.maxBytesPerAccount,
+      terms.maxBytes,
     )
     return err(
       new ForbiddenError('Purchase would exceed per-account credit cap'),
@@ -570,7 +616,29 @@ const getAdminAccountDetails = async (
     // null for unonboarded users, who are skipped.
     members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
     organization: organization.unwrapOr(null),
+    defaultCreditTerms: {
+      maxPurchasedBytes: Number(config.credits.maxBytesPerAccount),
+      creditExpiryDays: config.credits.expiryDays,
+    },
   }
+}
+
+/** Admin: every change to an account's terms, newest first. */
+const adminGetTermsChanges = async (
+  executor: User,
+  accountId: string,
+): Promise<
+  Result<AccountTermsChange[], ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (!(await accountsRepository.getById(accountId))) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  return ok(await accountsRepository.getTermsChanges(accountId))
 }
 
 /**
@@ -603,6 +671,8 @@ export const AccountsUseCases = {
   adminGetAccount,
   adminGetAccountByOrganization,
   adminGetAccountIdsByUsers,
+  adminGetTermsChanges,
+  getCreditTerms,
   updateAccount,
   getOrCreateAccount,
   initAccount,
