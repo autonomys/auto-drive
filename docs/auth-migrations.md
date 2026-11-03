@@ -7,7 +7,7 @@ used only by deployment tooling; it is not added to the Lambda bundle.
 
 The published dependency combination is Flyway **11.9.0**,
 `software.amazon.dsql:aurora-dsql-flyway-support:3.0.0`, and
-`software.amazon.dsql:aurora-dsql-jdbc-connector:1.5.0`. These are pinned in
+`software.amazon.dsql:aurora-dsql-jdbc-connector:1.5.1`. These are pinned in
 [`pom.xml`](../apps/auth/flyway/pom.xml). Do not install the official Flyway DSQL
 artifact alongside the AWS artifact: they contain the same plugin classes.
 When upgrading, check the published POM, since upstream development can target
