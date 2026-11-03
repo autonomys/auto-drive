@@ -1,5 +1,9 @@
 import { describe, it, expect } from '@jest/globals'
-import { optionalTrimmedEnv, rawListEnv } from '../../src/config.js'
+import {
+  extensionListEnv,
+  optionalTrimmedEnv,
+  rawListEnv,
+} from '../../src/config.js'
 import { readFileSync } from 'fs'
 
 // Environment values that arrive blank, which is what every `.env.sample` key
@@ -40,6 +44,13 @@ describe('rawListEnv', () => {
     expect(rawListEnv(' 0xabc , ,0xdef ')).toEqual(['0xabc', '0xdef'])
     expect(rawListEnv('')).toEqual([])
     expect(rawListEnv(undefined)).toEqual([])
+  })
+})
+
+describe('extensionListEnv', () => {
+  it('normalises entries to bare lower-case extensions', () => {
+    expect(extensionListEnv(' .EXE, bin ,,')).toEqual(['exe', 'bin'])
+    expect(extensionListEnv('')).toEqual([])
   })
 })
 

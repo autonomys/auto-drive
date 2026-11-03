@@ -116,7 +116,9 @@ describe('CreditsUseCases', () => {
       expect(summary.nextExpiryDate).toBeNull()
       expect(summary.batchCount).toBe(0)
       expect(summary.canPurchase).toBe(true)
-      expect(summary.maxPurchasableBytes).toBe(config.credits.maxBytesPerAccount)
+      expect(summary.maxPurchasableBytes).toBe(
+        config.credits.maxBytesPerAccount,
+      )
     })
 
     it('returns googleVerified=true for Google-authed user', async () => {

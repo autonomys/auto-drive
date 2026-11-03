@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { UsersUseCases } from '../src/useCases/users.js'
 import {
   OrganizationRole,
@@ -8,6 +9,7 @@ import { OrganizationsUseCases } from '../src/useCases/organizations.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { organizationMembersRepository } from '../src/repositories/organizationMembers.js'
+import { organizationsRepository } from '../src/repositories/organizations.js'
 import { createUnonboardedUser, MOCK_UNONBOARDED_USER } from './utils/mocks.js'
 
 describe('UsersUseCases', () => {
@@ -145,23 +147,22 @@ describe('UsersUseCases', () => {
       ).rejects.toThrow(/users_organizations_user_key/)
     })
 
-    it('ignores memberships of archived organizations', async () => {
-      const user = await onboard()
-      const organization =
-        await OrganizationsUseCases.getOrganizationByUser(user)
-      const db = await getDatabase()
-      await db.query(
-        'UPDATE users.organizations SET archived_at = NOW() WHERE id = $1',
-        [organization.id],
+    it('does not keep a user whose organization could not be created', async () => {
+      const unonboarded = createUnonboardedUser()
+      jest
+        .spyOn(organizationsRepository, 'createOrganization')
+        .mockRejectedValueOnce(new Error('connection lost'))
+
+      await expect(UsersUseCases.onboardUser(unonboarded)).rejects.toThrow(
+        'connection lost',
       )
 
-      await expect(
-        OrganizationsUseCases.getOrganizationByUser(user),
-      ).rejects.toThrow('User is not a member of any organization')
-      const [listed] = await UsersUseCases.getUsersWithOrganizations([
-        user.publicId,
-      ])
-      expect(listed.organizationId).toBeNull()
+      // The user row was rolled back, so the next sign-in onboards them.
+      const user = await UsersUseCases.onboardUser(unonboarded)
+      if (!user) throw new Error('Failed to onboard user')
+      const organization =
+        await OrganizationsUseCases.getOrganizationByUser(user)
+      expect(organization.name).toBe('Personal')
     })
 
     it('resolves the same organization one by one and in a batch', async () => {
