@@ -693,10 +693,13 @@ const tagUpload = async (
       return err(combinedResult.error)
     }
   } else {
-    const fileExtension = metadata?.name?.split('.').pop()
+    const name = metadata?.name ?? ''
+    const dotIndex = name.lastIndexOf('.')
+    const fileExtension =
+      dotIndex === -1 ? '' : name.slice(dotIndex + 1).toLowerCase()
     const isFileInsecure =
-      fileExtension &&
-      config.params.forbiddenExtensions.some((ext) => ext.match(fileExtension))
+      fileExtension !== '' &&
+      config.params.forbiddenExtensions.includes(fileExtension)
     if (isFileInsecure) {
       await ObjectUseCases.addTag(cid, 'insecure')
     }

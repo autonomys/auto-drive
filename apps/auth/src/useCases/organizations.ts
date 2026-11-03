@@ -49,10 +49,8 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
 
 // Every user starts in a personal organisation of their own. Its name is not
 // shown anywhere, so it carries no identifier of the user.
-const initOrganization = async (user: User) => {
-  await withTransaction((db) =>
-    createPersonalOrganization(user.oauthProvider, user.oauthUserId, db),
-  )
+const initOrganization = async (user: User, db: pg.Client) => {
+  await createPersonalOrganization(user.oauthProvider, user.oauthUserId, db)
 }
 
 const createPersonalOrganization = async (

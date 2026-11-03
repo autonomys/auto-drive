@@ -14,6 +14,7 @@ import { usersRepository } from '../repositories/users.js'
 import { organizationMembersRepository } from '../repositories/organizationMembers.js'
 import { OrganizationsUseCases } from './organizations.js'
 import { createLogger } from '../drivers/logger.js'
+import { withTransaction } from '../drivers/pg.js'
 
 const logger = createLogger('useCases:users')
 
@@ -236,29 +237,34 @@ const initUser = async (
   role: UserRole,
 ): Promise<User> => {
   logger.info('Initializing new user %s', publicId)
-  const user = await usersRepository.createUser(
-    oauthProvider,
-    oauthUserId,
-    oauthUsername,
-    oauthAvatarUrl,
-    publicId,
-    role,
-  )
-  if (!user) {
-    throw new Error('User creation failed')
-  }
+  // One transaction: a user committed without an organisation would count as
+  // onboarded and never get one.
+  return withTransaction(async (db) => {
+    const user = await usersRepository.createUser(
+      oauthProvider,
+      oauthUserId,
+      oauthUsername,
+      oauthAvatarUrl,
+      publicId,
+      role,
+      db,
+    )
+    if (!user) {
+      throw new Error('User creation failed')
+    }
 
-  const onboardedUser = userFromTable({
-    oauthProvider: user.oauth_provider,
-    oauthUserId: user.oauth_user_id,
-    oauthUsername: user.oauth_username,
-    oauthAvatarUrl: user.oauth_avatar_url,
-    publicId: user.public_id,
-    role: user.role,
+    const onboardedUser = userFromTable({
+      oauthProvider: user.oauth_provider,
+      oauthUserId: user.oauth_user_id,
+      oauthUsername: user.oauth_username,
+      oauthAvatarUrl: user.oauth_avatar_url,
+      publicId: user.public_id,
+      role: user.role,
+    })
+    await OrganizationsUseCases.initOrganization(onboardedUser, db)
+
+    return onboardedUser
   })
-  await OrganizationsUseCases.initOrganization(onboardedUser)
-
-  return onboardedUser
 }
 
 export const getPaginatedUserList = async (

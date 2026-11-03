@@ -1,4 +1,5 @@
 import {
+  Account,
   Intent,
   IntentMispaymentReason,
   IntentStatus,
@@ -263,11 +264,10 @@ const parsePaymentMethod = (
 // between the two would surface as a pre-check that waves through purchases the
 // real check then rejects, which is the failure mode this exists to prevent.
 const checkCapHeadroom = async (
-  executor: UserWithOrganization,
+  account: Account,
   requestedBytes: bigint,
 ): Promise<Result<void, CreditCapExceededError>> => {
   const cap = config.credits.maxBytesPerAccount
-  const account = await AccountsUseCases.getOrCreateAccount(executor)
   const { uploadBytesRemaining } =
     await purchasedCreditsRepository.getRemainingCredits(account.id)
 
@@ -550,8 +550,14 @@ const createIntent = async (
         ),
       )
     }
+  }
 
-    const headroom = await checkCapHeadroom(executor, requestedBytes)
+  // Credits go to the account the purchase was made for, even if the buyer
+  // moves to another organisation before the payment confirms.
+  const account = await AccountsUseCases.getOrCreateAccount(executor)
+
+  if (requestedBytes !== undefined) {
+    const headroom = await checkCapHeadroom(account, requestedBytes)
     if (headroom.isErr()) {
       return err(headroom.error)
     }
@@ -592,9 +598,6 @@ const createIntent = async (
   const expiresAt = new Date(
     Date.now() + config.credits.intentExpiryMinutes * 60 * 1000,
   )
-  // Credits go to the account the purchase was made for, even if the buyer
-  // moves to another organisation before the payment confirms.
-  const { id: accountId } = await AccountsUseCases.getOrCreateAccount(executor)
 
   // AI3 path: requestedBytes is deliberately not persisted. It exists to gate
   // creation against the cap, and nothing downstream reads it — credits are
@@ -604,7 +607,7 @@ const createIntent = async (
     const intent = await intentsRepository.createIntent({
       id: randomBytes32(),
       userPublicId: executor.publicId,
-      accountId,
+      accountId: account.id,
       status: IntentStatus.PENDING,
       paymentAmount: undefined,
       shannonsPerByte,
@@ -668,7 +671,7 @@ const createIntent = async (
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
-    accountId,
+    accountId: account.id,
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte,
@@ -848,7 +851,7 @@ const amountInIntentAsset = (
  * payment that lost the conditional transition — and both need the same answer,
  * because they are the same event reached at different moments. Every log is
  * delivered several times over: paymentManager.start() runs in the frontend API
- * and the frontend worker, each with its own watchContractEvent over the
+ * and the frontend worker, each with its own payment event poll over the
  * contract, and the queued watch-intent-tx task calls watchTransaction again.
  * Whether a duplicate arrives after the settling write commits (the guard) or
  * races it (the transition) is a matter of scheduling, not of what happened on
@@ -1196,7 +1199,7 @@ const markIntentAsConfirmed = async ({
     // THIS payment settled it, delivered twice. The common case, and the reason
     // the read-back exists. Every log is delivered by several callers —
     // paymentManager.start() runs in both the frontend API and the frontend
-    // worker, each with its own watchContractEvent, and the queued
+    // worker, each with its own payment event poll, and the queued
     // watch-intent-tx task calls watchTransaction again — with the same intent
     // id, hash and amount, unserialised. One wins here and the others land in
     // this branch. Filing them reports a second payment for money that arrived
