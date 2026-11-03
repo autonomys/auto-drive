@@ -50,6 +50,8 @@
     "@types/jest": "^29.5.14",
     "@types/multer": "^1.4.12",
     "@types/uuid": "^9.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.13.0",
+    "@typescript-eslint/parser": "^8.13.0",
     "db-migrate-plugin-typescript": "^2.0.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
