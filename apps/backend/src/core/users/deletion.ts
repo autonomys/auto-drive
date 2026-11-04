@@ -79,8 +79,11 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
   // A shared account's credits belong to every member, so only the last
   // member's deletion forfeits them. Deleting two members at once would let
   // both see the other, so one organization's deletions take turns: the later
-  // one runs after the earlier one's membership is gone. Auth removes the
-  // membership only at the end, so a request that failed can be run again.
+  // one runs after the earlier one's membership is gone. Membership changes
+  // don't take this lock; nothing changes membership after signup yet.
+  // Auth removes the membership only at the end, so a failed request still
+  // forfeits if it is run again. Auth never retries a failed request: it has
+  // to be reset to pending by hand.
   return withOrganizationLock(organizationId, async () => {
     const account = organizationId
       ? await accountsRepository.getByOrganizationId(organizationId)
@@ -93,6 +96,38 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
       : 'sole_member'
     const forfeitedAccountId =
       organizationCase === 'sole_member' ? (account?.id ?? null) : null
+
+    // Expire the user's own pending intents, whether or not they have an
+    // account. When the account is forfeited, its confirmed intents are expired
+    // too, and the user's older ones that have no account and would be
+    // credited to it: they would otherwise be credited afterwards. Intents go
+    // before credits. A confirmation that completes first has inserted its
+    // credits by the time they are expired below; one that comes later finds
+    // its intent expired and inserts nothing.
+    const intentsResult = await db.query<{ count: string }>(
+      `WITH updated AS (
+      UPDATE intents
+      SET status = 'expired'
+      WHERE status = ANY($3::text[])
+        AND (account_id = $2
+             OR (user_public_id = $1
+                 AND (status = 'pending' OR account_id IS NULL)))
+      RETURNING 1
+    )
+    SELECT COUNT(*) AS count FROM updated`,
+      [
+        publicId,
+        forfeitedAccountId,
+        forfeitedAccountId
+          ? [IntentStatus.PENDING, IntentStatus.CONFIRMED]
+          : [IntentStatus.PENDING],
+      ],
+    )
+    const intentsExpired = parseInt(intentsResult.rows[0].count)
+
+    await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
+      intentsExpired,
+    })
 
     let creditsExpired = 0
     let uploadBytesForfeited = 0n
@@ -112,14 +147,12 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
         }
       }
 
-      if (creditsExpired > 0) {
-        await db.query(
-          `UPDATE purchased_credits
-        SET expired = TRUE, updated_at = NOW()
-        WHERE account_id = $1 AND expired = FALSE`,
-          [forfeitedAccountId],
-        )
-      }
+      await db.query(
+        `UPDATE purchased_credits
+      SET expired = TRUE, updated_at = NOW()
+      WHERE account_id = $1 AND expired = FALSE`,
+        [forfeitedAccountId],
+      )
 
       await deletionAuditRepository.createEntry(publicId, 'credits_expired', {
         creditsExpired,
@@ -127,32 +160,6 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
         downloadBytesForfeited: downloadBytesForfeited.toString(),
       })
     }
-
-    // Expire the user's own pending intents, whether or not they have an
-    // account. When the account is forfeited, its intents and the user's are
-    // expired while confirmed too: they would otherwise be credited afterwards.
-    const intentsResult = await db.query<{ count: string }>(
-      `WITH updated AS (
-      UPDATE intents
-      SET status = 'expired'
-      WHERE (user_public_id = $1 OR account_id = $2)
-        AND status = ANY($3::text[])
-      RETURNING 1
-    )
-    SELECT COUNT(*) AS count FROM updated`,
-      [
-        publicId,
-        forfeitedAccountId,
-        forfeitedAccountId
-          ? [IntentStatus.PENDING, IntentStatus.CONFIRMED]
-          : [IntentStatus.PENDING],
-      ],
-    )
-    const intentsExpired = parseInt(intentsResult.rows[0].count)
-
-    await deletionAuditRepository.createEntry(publicId, 'intents_expired', {
-      intentsExpired,
-    })
 
     await AuthManager.executeAuthAnonymisation(request.id)
 

@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 
@@ -284,6 +285,25 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
+// Moves an intent out of CONFIRMED, only if it is still CONFIRMED. Returns
+// false if the status had already changed (e.g. the buyer's deletion expired
+// it), so a confirmation that loses that race writes nothing. Takes the
+// caller's client when the move must commit together with the credit insert.
+const updateStatusIfConfirmed = async (
+  intentId: string,
+  status: IntentStatus,
+  client?: pg.PoolClient,
+): Promise<boolean> => {
+  const db = client ?? (await getDatabase())
+  const result = await db.query(
+    `UPDATE intents
+     SET status = $1
+     WHERE id = $2 AND status = $3`,
+    [status, intentId, IntentStatus.CONFIRMED],
+  )
+  return (result.rowCount ?? 0) > 0
+}
+
 // Returns PENDING intents that already have an on-chain tx_hash, for one
 // payment method.
 // These are intents where the user submitted a transaction but the payment
@@ -334,6 +354,7 @@ export const intentsRepository = {
   getByStatus,
   getExpiredPendingIntents,
   expireIntentIfPending,
+  updateStatusIfConfirmed,
   getOverCapIntents,
   getPendingWithTxHash,
 }

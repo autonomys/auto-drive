@@ -1430,10 +1430,10 @@ const onConfirmedIntent = async (intentId: string) => {
       fromAddress: intent.fromAddress,
       txHash: intent.txHash,
     })
-    await intentsRepository.updateIntent({
-      ...intent,
-      status: IntentStatus.FAILED,
-    })
+    await intentsRepository.updateStatusIfConfirmed(
+      intentId,
+      IntentStatus.FAILED,
+    )
     return ok()
   }
 
@@ -1485,10 +1485,10 @@ const onConfirmedIntent = async (intentId: string) => {
       fromAddress: intent.fromAddress,
       txHash: intent.txHash,
     })
-    await intentsRepository.updateIntent({
-      ...intent,
-      status: IntentStatus.FAILED,
-    })
+    await intentsRepository.updateStatusIfConfirmed(
+      intentId,
+      IntentStatus.FAILED,
+    )
     return ok()
   }
 
@@ -1510,20 +1510,24 @@ const onConfirmedIntent = async (intentId: string) => {
         receivedAmount: receivedAmount.toString(),
         creditBytes: creditBytes.toString(),
       })
-      await intentsRepository.updateIntent({
-        ...intent,
-        status: IntentStatus.OVER_CAP,
+      await intentsRepository.updateStatusIfConfirmed(
+        intentId,
+        IntentStatus.OVER_CAP,
+      )
+      return ok()
+    }
+    if (addResult.error instanceof ConflictError) {
+      // The intent left CONFIRMED after it was read, e.g. the buyer's deletion
+      // expired it. Nothing was credited, and the poller won't pick it up again.
+      logger.warn('onConfirmedIntent: intent is no longer confirmed', {
+        intentId,
       })
       return ok()
     }
     return err(addResult.error)
   }
 
-  await intentsRepository.updateIntent({
-    ...intent,
-    status: IntentStatus.COMPLETED,
-  })
-
+  // addCreditsToAccount moved the intent to COMPLETED with the credit insert.
   return ok()
 }
 
@@ -1568,7 +1572,9 @@ const getMispayments = async (executor: User) => {
 // loop will attempt to grant credits on its next tick.
 //
 // Intended admin workflow:
-//  1. Admin calls POST /accounts/update to raise the user's credit cap.
+//  1. The account gets headroom under the per-account cap: it spends credits,
+//     or the cap itself is raised. The cap is the server-wide
+//     MAX_CREDITS_PER_USER setting; POST /accounts/update does not change it.
 //  2. Admin calls POST /intents/:id/reprocess to re-queue this intent.
 //  3. The polling loop picks it up within 30 seconds and calls onConfirmedIntent.
 //

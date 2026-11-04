@@ -70,18 +70,6 @@ const getOrganizationMembershipsByUsers = async (
   return result.rows
 }
 
-const removeMemberFromOrganization = async (
-  organizationId: string,
-  oauthProvider: string,
-  oauthUserId: string,
-): Promise<void> => {
-  const db = await getDatabase()
-  await db.query(
-    'DELETE FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
-    [organizationId, oauthProvider, oauthUserId],
-  )
-}
-
 const removeUserMemberships = async (
   oauthProvider: string,
   oauthUserId: string,
@@ -98,6 +86,5 @@ export const organizationMembersRepository = {
   getOrganizationMembershipByUser,
   getOrganizationMembershipsByUsers,
   addMemberToOrganization,
-  removeMemberFromOrganization,
   removeUserMemberships,
 }

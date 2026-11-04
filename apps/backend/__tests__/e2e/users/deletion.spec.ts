@@ -75,7 +75,7 @@ describe('Deletion in shared organizations', () => {
     accountId = (await AccountsUseCases.getOrCreateAccount(user)).id
     const purchaseIntentId = await insertIntent(
       user.publicId,
-      IntentStatus.COMPLETED,
+      IntentStatus.CONFIRMED,
     )
     await AccountsUseCases.addCreditsToAccount(
       { id: purchaseIntentId, userPublicId: user.publicId, accountId },
@@ -133,6 +133,52 @@ describe('Deletion in shared organizations', () => {
     })
   })
 
+  it('leaves purchases the user made for other accounts alone', async () => {
+    const otherAccountId = (
+      await AccountsUseCases.getOrCreateAccount(createMockUser())
+    ).id
+    const otherAccountIntentId = await insertIntent(
+      user.publicId,
+      IntentStatus.CONFIRMED,
+      otherAccountId,
+    )
+    // From before intents recorded an account: credited to the buyer's
+    // current account, which is the forfeited one.
+    const legacyIntentId = await insertIntent(
+      user.publicId,
+      IntentStatus.CONFIRMED,
+    )
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockResolvedValue([user.publicId])
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
+
+    expect(await getIntentStatus(otherAccountIntentId)).toBe(
+      IntentStatus.CONFIRMED,
+    )
+    expect(await getIntentStatus(legacyIntentId)).toBe(IntentStatus.EXPIRED)
+  })
+
+  it('credits nothing when the confirmation lands after the deletion', async () => {
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembers')
+      .mockResolvedValue([user.publicId])
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
+    // The poller read the intent while it was still confirmed.
+    const credited = await AccountsUseCases.addCreditsToAccount(
+      { id: confirmedIntentId, userPublicId: user.publicId, accountId },
+      BigInt(500),
+    )
+
+    expect(credited.isErr()).toBe(true)
+    const { uploadBytesRemaining } =
+      await purchasedCreditsRepository.getRemainingCredits(accountId)
+    expect(uploadBytesRemaining).toBe(0n)
+    expect(await getIntentStatus(confirmedIntentId)).toBe(IntentStatus.EXPIRED)
+  })
+
   it('forfeits the credits when two members are deleted at once', async () => {
     const otherMember = {
       ...createMockUser(),
@@ -183,7 +229,10 @@ describe('Deletion in shared organizations', () => {
     expect(uploadBytesRemaining).toBe(0n)
   })
 
-  it('keeps the membership when the cleanup fails, so a retry still forfeits', async () => {
+  // Auth marks a failed request Failed and never picks it up again, so this
+  // is the run after someone reset it to pending by hand. The mocked
+  // markDeletionAsProcessing stands in for that reset.
+  it('keeps the membership when the cleanup fails, so a request reset by hand still forfeits', async () => {
     const members = new Set([user.publicId])
     jest
       .spyOn(AuthManager, 'getOrganizationMembers')
