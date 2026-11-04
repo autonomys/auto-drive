@@ -508,7 +508,8 @@ describe('AccountsUseCases', () => {
         id: 'org1',
         name: 'Partner',
         archivedAt: null,
-        members: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
+        members: ['pub1'],
+        memberships: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
       }
       jest
         .spyOn(AuthManager, 'getOrganization')

@@ -21,7 +21,8 @@ export type OrganizationMember = {
 
 export type OrganizationWithMembers = Organization & {
   archivedAt: string | null;
-  members: OrganizationMember[];
+  members: PublicId[];
+  memberships: OrganizationMember[];
 };
 
 export type OrganizationSummary = Organization & {

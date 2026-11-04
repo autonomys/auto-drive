@@ -139,7 +139,7 @@ organizationController.post(
   },
 )
 
-organizationController.patch(
+organizationController.put(
   '/:organizationId/members/:publicId',
   async (req: Request, res: Response) => {
     if (!handleServiceAuth(req, res)) {

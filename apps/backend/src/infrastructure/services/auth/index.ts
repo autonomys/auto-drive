@@ -382,7 +382,7 @@ const changeOrganizationMemberRole = (
 ) =>
   organizationRequest<void>(
     `/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
-    { method: 'PATCH', body: { role, actor } },
+    { method: 'PUT', body: { role, actor } },
   )
 
 const removeOrganizationMember = (
