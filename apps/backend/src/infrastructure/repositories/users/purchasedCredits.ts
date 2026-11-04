@@ -1,4 +1,5 @@
 import {
+  IntentStatus,
   PaymentMethod,
   PurchasedCredit,
   PurchasedCreditSummary,
@@ -7,6 +8,7 @@ import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { err, ok, Result } from 'neverthrow'
 import { createLogger } from '../../drivers/logger.js'
+import { intentsRepository } from './intents.js'
 
 const logger = createLogger('repositories:purchasedCredits')
 
@@ -380,6 +382,9 @@ const getByAccountId = async (
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
 // would push upload remaining over the cap.
+// The same transaction moves the intent from CONFIRMED to COMPLETED, and
+// returns err('intent_not_confirmed') without inserting if it has left
+// CONFIRMED, e.g. because the buyer's deletion expired it.
 // Download bytes are not capped — they are not allocated on purchase right
 // now (downloadBytesOriginal is expected to be 0n). Infrastructure is kept
 // for future use.
@@ -388,7 +393,9 @@ const getByAccountId = async (
 const createPurchasedCreditWithCapCheck = async (
   params: CreatePurchasedCreditParams,
   maxBytesPerAccount: bigint,
-): Promise<Result<PurchasedCredit, 'cap_exceeded'>> => {
+): Promise<
+  Result<PurchasedCredit, 'cap_exceeded' | 'intent_not_confirmed'>
+> => {
   const db = await getDatabase()
   const client = await db.connect()
 
@@ -424,6 +431,16 @@ const createPurchasedCreditWithCapCheck = async (
     if (currentUpload + params.uploadBytesOriginal > maxBytesPerAccount) {
       await client.query('ROLLBACK')
       return err('cap_exceeded' as const)
+    }
+
+    const completed = await intentsRepository.updateStatusIfConfirmed(
+      params.intentId,
+      IntentStatus.COMPLETED,
+      client,
+    )
+    if (!completed) {
+      await client.query('ROLLBACK')
+      return err('intent_not_confirmed' as const)
     }
 
     const insertResult = await client.query<DBPurchasedCredit>(
