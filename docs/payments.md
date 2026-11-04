@@ -355,7 +355,7 @@ submitted in either spelling is one row.
 | Missing or invalid field: `txHash` | 400         | `POST /intents/:id/watch` body missing `txHash` or not a string            |
 | Invalid field: `txHash` must be a 0x-prefixed 32-byte hex hash | 400 | `txHash` is a string but not a transaction hash |
 | Payment not found (async)          | -           | Tx receipt does not contain the expected `IntentPaymentReceived`           |
-| Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. per-user cap reached — intent is parked in `over_cap` for admin review) |
+| Credits not applied (async)        | -           | Intent confirmed, but credit application failed (e.g. per-account cap reached — intent is parked in `over_cap` for admin review) |
 
 ### On-Chain Errors
 

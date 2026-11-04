@@ -338,33 +338,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autonomys/auto-utils@npm:1.6.16, @autonomys/auto-utils@npm:^1.6.16":
+"@autonomys/auto-utils@npm:1.6.16, @autonomys/auto-utils@npm:^1.4.31, @autonomys/auto-utils@npm:^1.5.14, @autonomys/auto-utils@npm:^1.6.16":
   version: 1.6.16
   resolution: "@autonomys/auto-utils@npm:1.6.16"
   dependencies:
     "@polkadot/api": "npm:^16.5.6"
     "@polkadot/extension-dapp": "npm:^0.63.1"
   checksum: 10c0/ce7c44975631413554ed0f745d11c81e523f7cd10a7f96763fb919378ac11770030367bc627ddaca7041c39cda34eeae28c5b88ba591a5866787419b4bfcc7fb
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-utils@npm:^1.4.31":
-  version: 1.6.12
-  resolution: "@autonomys/auto-utils@npm:1.6.12"
-  dependencies:
-    "@polkadot/api": "npm:^15.8.1"
-    "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/96c1feb98b2f1beba1f796eebb2beb64e4a2b1d2e9bd48ac8e2db529e44a71914ff6f1bdecc78d383c4d9c2c81936cab8aed2b8651cc2c3443ea60a0736d6012
-  languageName: node
-  linkType: hard
-
-"@autonomys/auto-utils@npm:^1.5.14":
-  version: 1.6.5
-  resolution: "@autonomys/auto-utils@npm:1.6.5"
-  dependencies:
-    "@polkadot/api": "npm:^15.8.1"
-    "@polkadot/extension-dapp": "npm:^0.58.6"
-  checksum: 10c0/8c510023caa67d6356bcf71e40b8532396340ae46ae62d57dbf26e1db4cc360d962d45103ce2f9a26f95bfeaf85d5457eb052c268fa64e7a28e8519ea63884ac
   languageName: node
   linkType: hard
 
@@ -5508,7 +5488,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/api@npm:15.10.2, @polkadot/api@npm:^15.0.1, @polkadot/api@npm:^15.10.2, @polkadot/api@npm:^15.8.1":
+"@polkadot/api@npm:15.10.2, @polkadot/api@npm:^15.0.1":
   version: 15.10.2
   resolution: "@polkadot/api@npm:15.10.2"
   dependencies:
@@ -5558,22 +5538,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/extension-dapp@npm:^0.58.6":
-  version: 0.58.10
-  resolution: "@polkadot/extension-dapp@npm:0.58.10"
-  dependencies:
-    "@polkadot/extension-inject": "npm:0.58.10"
-    "@polkadot/util": "npm:^13.4.4"
-    "@polkadot/util-crypto": "npm:^13.4.4"
-    tslib: "npm:^2.8.1"
-  peerDependencies:
-    "@polkadot/api": "*"
-    "@polkadot/util": "*"
-    "@polkadot/util-crypto": "*"
-  checksum: 10c0/b695e263f67f7e0c047abaed8de73cb076958d780ec7f4c256f7a27c3f86defbb1cc7361723fb07630328e77aae22356c29215d90d79a4250cfa308e698ce7a3
-  languageName: node
-  linkType: hard
-
 "@polkadot/extension-dapp@npm:^0.63.1":
   version: 0.63.1
   resolution: "@polkadot/extension-dapp@npm:0.63.1"
@@ -5587,24 +5551,6 @@ __metadata:
     "@polkadot/util": "*"
     "@polkadot/util-crypto": "*"
   checksum: 10c0/65f6c6d5db5d8739925262caffab46af8d83e9b67913ea15ca53b0404bf7683bf4c2624ed5e5a506154094e95ea3b187c35f2cc9bce27ec0a7de36557fab47ac
-  languageName: node
-  linkType: hard
-
-"@polkadot/extension-inject@npm:0.58.10":
-  version: 0.58.10
-  resolution: "@polkadot/extension-inject@npm:0.58.10"
-  dependencies:
-    "@polkadot/api": "npm:^15.10.2"
-    "@polkadot/rpc-provider": "npm:^15.10.2"
-    "@polkadot/types": "npm:^15.10.2"
-    "@polkadot/util": "npm:^13.4.4"
-    "@polkadot/util-crypto": "npm:^13.4.4"
-    "@polkadot/x-global": "npm:^13.4.4"
-    tslib: "npm:^2.8.1"
-  peerDependencies:
-    "@polkadot/api": "*"
-    "@polkadot/util": "*"
-  checksum: 10c0/93a0e07d71f384a33a9b6ffa0012542f04b55ac23761a65ecdf99aaaf63b0055908118cfe5db585cdf8d633555bcf8c6b7a146381294ce2acb6690567acd9ee4
   languageName: node
   linkType: hard
 
@@ -5626,7 +5572,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/keyring@npm:^13.4.4, @polkadot/keyring@npm:^13.5.2":
+"@polkadot/keyring@npm:^13.4.4":
   version: 13.5.6
   resolution: "@polkadot/keyring@npm:13.5.6"
   dependencies:
@@ -5755,7 +5701,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/rpc-provider@npm:15.10.2, @polkadot/rpc-provider@npm:^15.10.2":
+"@polkadot/rpc-provider@npm:15.10.2":
   version: 15.10.2
   resolution: "@polkadot/rpc-provider@npm:15.10.2"
   dependencies:
@@ -5919,7 +5865,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/types@npm:15.10.2, @polkadot/types@npm:^15.10.2, @polkadot/types@npm:^15.8.1":
+"@polkadot/types@npm:15.10.2":
   version: 15.10.2
   resolution: "@polkadot/types@npm:15.10.2"
   dependencies:
@@ -5980,7 +5926,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polkadot/util-crypto@npm:13.5.6, @polkadot/util-crypto@npm:^13.4.3, @polkadot/util-crypto@npm:^13.4.4":
+"@polkadot/util-crypto@npm:13.5.6, @polkadot/util-crypto@npm:^13.4.4":
   version: 13.5.6
   resolution: "@polkadot/util-crypto@npm:13.5.6"
   dependencies:
@@ -11208,12 +11154,11 @@ __metadata:
     "@ipld/dag-pb": "npm:^4.1.7"
     "@keyvhq/sqlite": "npm:^2.1.6"
     "@ninoseki/eslint-plugin-neverthrow": "npm:^0.0.1"
-    "@polkadot/api": "npm:^15.8.1"
-    "@polkadot/keyring": "npm:^13.4.4"
-    "@polkadot/types": "npm:^15.8.1"
-    "@polkadot/util": "npm:^13.4.4"
-    "@polkadot/util-crypto": "npm:^13.4.3"
-    "@polkadot/wasm-crypto": "npm:^7.5.1"
+    "@polkadot/api": "npm:^16.5.6"
+    "@polkadot/keyring": "npm:^14.0.3"
+    "@polkadot/types": "npm:^16.5.6"
+    "@polkadot/util": "npm:^14.0.3"
+    "@polkadot/util-crypto": "npm:^14.0.3"
     "@swc/core": "npm:^1.9.2"
     "@swc/jest": "npm:^0.2.37"
     "@testcontainers/postgresql": "npm:^10.14.0"
@@ -15092,7 +15037,7 @@ __metadata:
     "@ipld/dag-pb": "npm:^4.1.2"
     "@next/eslint-plugin-next": "npm:^15.0.2"
     "@peculiar/webcrypto": "npm:^1.5.0"
-    "@polkadot/keyring": "npm:^13.5.2"
+    "@polkadot/keyring": "npm:^14.0.3"
     "@radix-ui/react-separator": "npm:^1.1.7"
     "@rainbow-me/rainbowkit": "npm:^2.2.3"
     "@tanstack/query-async-storage-persister": "npm:^5.87.4"

@@ -121,7 +121,7 @@ organizationsController.post(
   }),
 )
 
-organizationsController.patch(
+organizationsController.put(
   '/:organizationId/members/:publicId',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)

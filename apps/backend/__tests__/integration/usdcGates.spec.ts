@@ -323,10 +323,9 @@ describe('USDC gates (integration)', () => {
     // intent "the failure that costs real money", and what costs money is
     // credits not being granted. Confirmation only records what arrived; the
     // grant happens when the polling loop reaches the intent, so drive that too
-    // and assert the money side rather than the status.
-    const addCredits = jest
-      .spyOn(AccountsUseCases, 'addCreditsToAccount')
-      .mockResolvedValue(ok(undefined) as never)
+    // and assert the money side rather than the status. Not mocked: the credit
+    // insert is what moves the intent to COMPLETED.
+    const addCredits = jest.spyOn(AccountsUseCases, 'addCreditsToAccount')
 
     const pending = await IntentsUseCases.getConfirmedIntents()
     expect(pending.map((row) => row.id)).toContain(intent.id)

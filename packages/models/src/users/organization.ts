@@ -20,7 +20,8 @@ export type OrganizationMember = {
 
 export type OrganizationWithMembers = Organization & {
   archivedAt: string | null;
-  members: OrganizationMember[];
+  members: string[];
+  memberships: OrganizationMember[];
 };
 
 export type OrganizationSummary = Organization & {

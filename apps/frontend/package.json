@@ -29,7 +29,7 @@
     "@heroicons/react": "^2.1.5",
     "@ipld/dag-pb": "^4.1.2",
     "@peculiar/webcrypto": "^1.5.0",
-    "@polkadot/keyring": "^13.5.2",
+    "@polkadot/keyring": "^14.0.3",
     "@radix-ui/react-separator": "^1.1.7",
     "@rainbow-me/rainbowkit": "^2.2.3",
     "@tanstack/query-async-storage-persister": "^5.87.4",

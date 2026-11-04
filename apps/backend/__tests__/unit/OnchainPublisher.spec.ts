@@ -2,7 +2,7 @@ import {
   Node,
   nodesRepository,
 } from '../../src/infrastructure/repositories/objects/nodes.js'
-import { compactAddLength } from '@polkadot/util'
+import { compactAddLength } from '../../src/shared/utils/polkadot.js'
 import {
   OnchainPublisher,
   transactionManager,
