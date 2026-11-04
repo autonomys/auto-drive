@@ -7,7 +7,6 @@ import {
   OrganizationRole,
   OrganizationSummary,
   OrganizationWithMembers,
-  PublicId,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { err, ok, Result } from 'neverthrow'
@@ -195,27 +194,6 @@ const adminSearchUsers = async (
   }
 
   return response.json()
-}
-
-/** The public IDs of an organization's members, from its membership rows. */
-const getOrganizationMembers = async (
-  organizationId: string,
-): Promise<PublicId[]> => {
-  const response = await fetch(
-    `${config.authService.url}/organizations/${encodeURIComponent(organizationId)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${config.authService.token}`,
-      },
-    },
-  )
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch organization')
-  }
-
-  const organization: OrganizationWithMembers = await response.json()
-  return organization.members.map((member) => member.publicId)
 }
 
 const getDeletionRequestsDue = async (): Promise<DeletionRequest[]> => {
@@ -429,7 +407,6 @@ export const AuthManager = {
   getUserFromPublicId,
   getUsersFromPublicIds,
   adminSearchUsers,
-  getOrganizationMembers,
   getDeletionRequestsDue,
   markDeletionAsProcessing,
   executeAuthAnonymisation,

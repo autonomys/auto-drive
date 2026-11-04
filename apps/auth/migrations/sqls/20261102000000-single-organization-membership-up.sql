@@ -3,9 +3,9 @@
 -- Apply it there statement by statement, as described in PR #932.
 
 -- Organisations are archived rather than deleted so their history survives a
--- member moving to another organisation. Nothing archives one yet. Only an
--- organisation with no members will be archived, so membership lookups don't
--- check this column.
+-- member moving to another organisation. One is archived when its last
+-- member moves out and restored before anyone rejoins it, so it never has
+-- members and membership lookups don't check this column.
 ALTER TABLE users.organizations ADD COLUMN archived_at timestamp;
 
 -- Older code could write a user's membership twice. Keep each user's first
