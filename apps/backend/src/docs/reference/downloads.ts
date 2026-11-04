@@ -5,6 +5,8 @@ export const downloads = {
     '/downloads/async/{cid}': {
       post: {
         summary: 'Downloads - Create async download for an object by CID',
+        description:
+          'If the caller already has a pending or downloading async download for this CID, that download is returned and no new one is created.',
         tags: ['Auto Drive Download Gateway'],
         servers: downloadServers,
         parameters: [
@@ -19,7 +21,8 @@ export const downloads = {
         ],
         responses: {
           '200': {
-            description: 'Successfully created async download',
+            description:
+              'The new async download, or the one already in progress',
             content: {
               'application/json': {
                 schema: {
