@@ -46,13 +46,19 @@ accountController.post(
       return
     }
 
-    if (!req.body.userPublicIds) {
-      res.status(400).json({ error: 'userPublicIds is required' })
+    const userPublicIds = z
+      .array(z.string())
+      .max(100)
+      .safeParse(req.body.userPublicIds)
+    if (!userPublicIds.success) {
+      res
+        .status(400)
+        .json({ error: 'userPublicIds must be an array of strings' })
       return
     }
 
-    const accountByPublicId = await handleInternalError(
-      AccountsUseCases.getUserListAccount(req.body.userPublicIds),
+    const accountByPublicId = await handleInternalErrorResult(
+      AccountsUseCases.getUserListAccount(user, userPublicIds.data),
       'Failed to get user list accounts',
     )
     if (accountByPublicId.isErr()) {

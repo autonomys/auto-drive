@@ -1,5 +1,5 @@
-import { ApiPromise, WsProvider } from '@polkadot/api'
 import { config } from '../../config.js'
+import { ApiPromise, WsProvider } from '../../shared/utils/polkadot.js'
 import { createLogger } from './logger.js'
 
 const logger = createLogger('drivers:substrate')
