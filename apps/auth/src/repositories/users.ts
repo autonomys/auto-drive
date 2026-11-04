@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../drivers/pg.js'
 import { PaginatedResult, UserRole } from '@auto-drive/models'
 
@@ -54,10 +55,11 @@ const createUser = async (
   oauth_avatar_url: string | undefined,
   publicId: string,
   role: UserRole,
+  db?: pg.Client,
 ): Promise<User | undefined> => {
-  const db = await getDatabase()
+  const client = db ?? (await getDatabase())
 
-  const user = await db.query<User>(
+  const user = await client.query<User>(
     'INSERT INTO users.users (oauth_provider, oauth_user_id, oauth_username, oauth_avatar_url, public_id, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
     [
       oauth_provider,

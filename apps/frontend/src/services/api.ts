@@ -224,6 +224,29 @@ const toApiError = async (
   return new ApiError(response.status, parsed.detail ?? fallback, parsed.code);
 };
 
+const fetchAdminAccount = async (
+  url: string,
+): Promise<AdminAccountDetails | null> => {
+  const session = await getAuthSession();
+  if (!session?.authProvider || !session.accessToken) {
+    throw new Error('No session');
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      'X-Auth-Provider': session.authProvider,
+    },
+  });
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to get account: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
 export type Api = ReturnType<typeof createApiService>;
 
 export const createApiService = ({
@@ -450,30 +473,20 @@ export const createApiService = ({
 
     return response.json();
   },
-  /** Admin: an account by account ID or org ID, or null if there is none. */
-  adminGetAccount: async (id: string): Promise<AdminAccountDetails | null> => {
-    const session = await getAuthSession();
-    if (!session?.authProvider || !session.accessToken) {
-      throw new Error('No session');
-    }
-
-    const response = await fetch(
-      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(id)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          'X-Auth-Provider': session.authProvider,
-        },
-      },
-    );
-
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      throw new Error(`Failed to get account: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
+  /** Admin: an account by account ID, or null if there is none. */
+  adminGetAccount: async (
+    accountId: string,
+  ): Promise<AdminAccountDetails | null> =>
+    fetchAdminAccount(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}`,
+    ),
+  /** Admin: an organization's account, or null if it has none. */
+  adminGetAccountByOrganization: async (
+    organizationId: string,
+  ): Promise<AdminAccountDetails | null> =>
+    fetchAdminAccount(
+      `${apiBaseUrl}/accounts/admin/by-organization/${encodeURIComponent(organizationId)}`,
+    ),
   /** Admin: each user's current account ID, keyed by publicId. */
   adminGetAccountIdsByUsers: async (
     publicIds: string[],
@@ -609,7 +622,7 @@ export const createApiService = ({
     }
   },
   updateAccount: async (
-    publicId: string,
+    accountId: string,
     model: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
@@ -625,7 +638,7 @@ export const createApiService = ({
         model,
         uploadLimit,
         downloadLimit,
-        publicId,
+        accountId,
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,

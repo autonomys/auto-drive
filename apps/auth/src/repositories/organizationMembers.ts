@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../drivers/pg.js'
 
 type DBOrganizationMember = {
@@ -18,46 +19,33 @@ const getOrganizationMemberships = async (
     .then((result) => result.rows)
 }
 
-const getOrganizationMembershipsByUser = async (
+// A user has at most one membership (users_organizations_user_key).
+const getOrganizationMembershipByUser = async (
   oauthProvider: string,
   oauthUserId: string,
-): Promise<DBOrganizationMember[]> => {
+): Promise<DBOrganizationMember | null> => {
   const db = await getDatabase()
   return db
     .query<DBOrganizationMember>(
       'SELECT * FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2',
       [oauthProvider, oauthUserId],
     )
-    .then((result) => result.rows)
+    .then((result) => result.rows[0] ?? null)
 }
 
 const addMemberToOrganization = async (
   organizationId: string,
   oauthProvider: string,
   oauthUserId: string,
+  db?: pg.Client,
 ): Promise<DBOrganizationMember> => {
-  const db = await getDatabase()
-  return db
+  const client = db ?? (await getDatabase())
+  return client
     .query<DBOrganizationMember>(
-      'INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id) VALUES ($1, $2, $3)',
+      'INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id) VALUES ($1, $2, $3) RETURNING *',
       [oauthProvider, oauthUserId, organizationId],
     )
     .then((result) => result.rows[0])
-}
-
-const isMemberOfOrganization = async (
-  organizationId: string,
-  oauthProvider: string,
-  oauthUserId: string,
-): Promise<boolean> => {
-  const db = await getDatabase()
-
-  const result = await db.query<DBOrganizationMember>(
-    'SELECT * FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
-    [organizationId, oauthProvider, oauthUserId],
-  )
-
-  return result.rows.length > 0
 }
 
 const getOrganizationMembershipsByUsers = async (
@@ -68,32 +56,35 @@ const getOrganizationMembershipsByUsers = async (
   const db = await getDatabase()
   const keys = users.map((u) => `${u.oauthProvider}:${u.oauthUserId}`)
 
+  // The first two conditions use users_organizations_user_key. They also match
+  // a provider of one user paired with the ID of another; the third keeps
+  // only the exact pairs.
   const result = await db.query<DBOrganizationMember>(
-    `SELECT * FROM users.users_organizations 
-     WHERE (oauth_provider || ':' || oauth_user_id) = ANY($1::text[])`,
-    [keys],
+    `SELECT * FROM users.users_organizations
+     WHERE oauth_provider = ANY($1::text[])
+       AND oauth_user_id = ANY($2::text[])
+       AND (oauth_provider || ':' || oauth_user_id) = ANY($3::text[])`,
+    [users.map((u) => u.oauthProvider), users.map((u) => u.oauthUserId), keys],
   )
 
   return result.rows
 }
 
-const removeMemberFromOrganization = async (
-  organizationId: string,
+const removeUserMemberships = async (
   oauthProvider: string,
   oauthUserId: string,
 ): Promise<void> => {
   const db = await getDatabase()
   await db.query(
-    'DELETE FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
-    [organizationId, oauthProvider, oauthUserId],
+    'DELETE FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2',
+    [oauthProvider, oauthUserId],
   )
 }
 
 export const organizationMembersRepository = {
   getOrganizationMemberships,
-  getOrganizationMembershipsByUser,
+  getOrganizationMembershipByUser,
   getOrganizationMembershipsByUsers,
   addMemberToOrganization,
-  removeMemberFromOrganization,
-  isMemberOfOrganization,
+  removeUserMemberships,
 }

@@ -649,7 +649,7 @@ export const config = {
     // Maximum total purchased credit balance (in bytes) per account, summed
     // across all active purchased_credits rows.
     // Default: 100 GiB — matches the economic protection design document.
-    maxBytesPerUser: BigInt(
+    maxBytesPerAccount: BigInt(
       env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),
     ),
     // How often (in ms) the credit expiry background job runs.

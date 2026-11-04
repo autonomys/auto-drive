@@ -36,7 +36,7 @@ export type PurchasedCredit = z.infer<typeof PurchasedCreditSchema>;
 /**
  * Aggregate view of an account's remaining purchased credits across all
  * active (non-expired) rows. Returned by getRemainingPurchasedCredits()
- * and used by the per-user cap enforcement check.
+ * and used by the per-account cap enforcement check.
  */
 export type PurchasedCreditSummary = {
   uploadBytesRemaining: bigint;

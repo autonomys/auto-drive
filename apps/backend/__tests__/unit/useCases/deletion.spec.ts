@@ -191,7 +191,7 @@ describe('DeletionUseCases — processAnonymisation', () => {
         makeDeletionRequest({ status: DeletionRequestStatus.Failed }),
       )
 
-    // anonymiseBackendData will hit the test DB which lacks the
+    // anonymiseUserData will hit the test DB which lacks the
     // object_ownership table, causing a real DB error
     await DeletionUseCases.processAnonymisation(request)
 

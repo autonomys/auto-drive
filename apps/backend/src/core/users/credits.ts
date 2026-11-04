@@ -67,7 +67,7 @@ const getSummary = async (
     account.id,
   )
 
-  const cap = config.credits.maxBytesPerUser
+  const cap = config.credits.maxBytesPerAccount
 
   // Cap is enforced on upload bytes only. Download credits are not allocated
   // on purchase right now so there is no download cap to check.

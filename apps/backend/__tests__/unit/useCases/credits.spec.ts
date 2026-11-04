@@ -116,7 +116,9 @@ describe('CreditsUseCases', () => {
       expect(summary.nextExpiryDate).toBeNull()
       expect(summary.batchCount).toBe(0)
       expect(summary.canPurchase).toBe(true)
-      expect(summary.maxPurchasableBytes).toBe(config.credits.maxBytesPerUser)
+      expect(summary.maxPurchasableBytes).toBe(
+        config.credits.maxBytesPerAccount,
+      )
     })
 
     it('returns googleVerified=true for Google-authed user', async () => {
@@ -159,7 +161,7 @@ describe('CreditsUseCases', () => {
       // Binding constraint is upload (80 GiB), so room = cap - 80 GiB
       const uploadRemaining = BigInt(80 * 1024 ** 3)
       const downloadRemaining = BigInt(50 * 1024 ** 3)
-      const cap = config.credits.maxBytesPerUser // 100 GiB
+      const cap = config.credits.maxBytesPerAccount // 100 GiB
 
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
@@ -178,7 +180,7 @@ describe('CreditsUseCases', () => {
     })
 
     it('returns canPurchase=false and maxPurchasableBytes=0n when at or over cap', async () => {
-      const cap = config.credits.maxBytesPerUser
+      const cap = config.credits.maxBytesPerAccount
 
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
@@ -199,7 +201,7 @@ describe('CreditsUseCases', () => {
     it('uses upload bytes only for cap even when download remaining is higher', async () => {
       const uploadRemaining = BigInt(30 * 1024 ** 3)
       const downloadRemaining = BigInt(70 * 1024 ** 3)
-      const cap = config.credits.maxBytesPerUser
+      const cap = config.credits.maxBytesPerAccount
 
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')

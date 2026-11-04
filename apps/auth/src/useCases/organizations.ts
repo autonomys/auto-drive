@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { v4 } from 'uuid'
 import { User, Organization, OrganizationWithMembers } from '@auto-drive/models'
 import {
@@ -7,25 +8,21 @@ import {
 import { deriveUserPublicId } from './users.js'
 
 const getOrganizationByUser = async (user: User): Promise<Organization> => {
-  const organizationMemberships =
-    await organizationMembersRepository.getOrganizationMembershipsByUser(
+  const membership =
+    await organizationMembersRepository.getOrganizationMembershipByUser(
       user.oauthProvider,
       user.oauthUserId,
     )
 
-  const organizationId =
-    organizationMemberships.length > 0
-      ? organizationMemberships[0].organization_id
-      : null
-
-  if (!organizationId) {
+  if (!membership) {
     throw new Error(
       `User is not a member of any organization: (${user.oauthProvider}, ${user.oauthUserId})`,
     )
   }
 
-  const organization =
-    await organizationsRepository.getOrganizationById(organizationId)
+  const organization = await organizationsRepository.getOrganizationById(
+    membership.organization_id,
+  )
 
   if (!organization) {
     throw new Error('Organization not found')
@@ -34,16 +31,20 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
   return { id: organization.id, name: organization.name }
 }
 
-const initOrganization = async (user: User) => {
+// Every user starts in a personal organisation of their own. Its name is not
+// shown anywhere, so it carries no identifier of the user.
+const initOrganization = async (user: User, db: pg.Client) => {
   const organization = await organizationsRepository.createOrganization(
     v4(),
-    user.publicId ?? user.oauthUserId,
+    'Personal',
+    db,
   )
 
   await organizationMembersRepository.addMemberToOrganization(
     organization.id,
     user.oauthProvider,
     user.oauthUserId,
+    db,
   )
 }
 

@@ -1,8 +1,11 @@
+import { jest } from '@jest/globals'
 import { UsersUseCases } from '../src/useCases/users.js'
 import { UnonboardedUser, UserRole } from '@auto-drive/models'
 import { OrganizationsUseCases } from '../src/useCases/organizations.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { dbMigration } from './utils/dbMigrate.js'
+import { organizationMembersRepository } from '../src/repositories/organizationMembers.js'
+import { organizationsRepository } from '../src/repositories/organizations.js'
 import { createUnonboardedUser, MOCK_UNONBOARDED_USER } from './utils/mocks.js'
 
 describe('UsersUseCases', () => {
@@ -105,6 +108,72 @@ describe('UsersUseCases', () => {
     expect(organization).toEqual({
       id: expect.any(String),
       name: expect.any(String),
+    })
+  })
+
+  describe('organization membership', () => {
+    const onboard = async () => {
+      const user = await UsersUseCases.onboardUser(createUnonboardedUser())
+      if (!user) throw new Error('Failed to onboard user')
+      return user
+    }
+
+    it('names the personal organization without the public ID', async () => {
+      const user = await onboard()
+
+      const organization =
+        await OrganizationsUseCases.getOrganizationByUser(user)
+
+      expect(organization.name).toBe('Personal')
+    })
+
+    it('rejects a second membership for the same user', async () => {
+      const user = await onboard()
+      const other = await onboard()
+      const otherOrganization =
+        await OrganizationsUseCases.getOrganizationByUser(other)
+
+      await expect(
+        organizationMembersRepository.addMemberToOrganization(
+          otherOrganization.id,
+          user.oauthProvider,
+          user.oauthUserId,
+        ),
+      ).rejects.toThrow(/users_organizations_user_key/)
+    })
+
+    it('does not keep a user whose organization could not be created', async () => {
+      const unonboarded = createUnonboardedUser()
+      jest
+        .spyOn(organizationsRepository, 'createOrganization')
+        .mockRejectedValueOnce(new Error('connection lost'))
+
+      await expect(UsersUseCases.onboardUser(unonboarded)).rejects.toThrow(
+        'connection lost',
+      )
+
+      // The user row was rolled back, so the next sign-in onboards them.
+      const user = await UsersUseCases.onboardUser(unonboarded)
+      if (!user) throw new Error('Failed to onboard user')
+      const organization =
+        await OrganizationsUseCases.getOrganizationByUser(user)
+      expect(organization.name).toBe('Personal')
+    })
+
+    it('resolves the same organization one by one and in a batch', async () => {
+      const users = await Promise.all([onboard(), onboard()])
+
+      const batch = await UsersUseCases.getUsersWithOrganizations(
+        users.map((u) => u.publicId),
+      )
+
+      for (const user of users) {
+        const organization =
+          await OrganizationsUseCases.getOrganizationByUser(user)
+        expect(
+          batch.find((u) => u.publicId === user.publicId)?.organizationId,
+        ).toBe(organization.id)
+      }
     })
   })
 

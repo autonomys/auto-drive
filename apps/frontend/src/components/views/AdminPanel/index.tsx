@@ -86,11 +86,16 @@ export const AdminPanel = () => {
     try {
       const results = await network.api.adminSearchAccounts(query);
       // Search lists users, so an account with no members left (e.g. after
-      // its user deleted their account) only matches by its exact ID.
+      // its user deleted their account) only matches by its exact account or
+      // organization ID.
       if (results.length === 0) {
-        const account = await network.api.adminGetAccount(query);
+        const [byAccountId, byOrganizationId] = await Promise.all([
+          network.api.adminGetAccount(query),
+          network.api.adminGetAccountByOrganization(query),
+        ]);
+        const account = byAccountId ?? byOrganizationId;
         if (account) {
-          router.push(ROUTES.adminOrganization(network.network.id, query));
+          router.push(ROUTES.adminOrganization(network.network.id, account.id));
           return;
         }
       }

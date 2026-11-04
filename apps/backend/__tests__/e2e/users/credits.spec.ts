@@ -6,6 +6,7 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
+import { ConflictError } from '../../../src/errors/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import {
   createMockUser,
@@ -22,15 +23,28 @@ import { jest } from '@jest/globals'
 import { v4 as uuidv4 } from 'uuid'
 
 // Inserts a minimal intent row so the purchased_credits.intent_id FK is satisfied.
-const createTestIntent = async (userPublicId: string): Promise<string> => {
+// Confirmed by default, since addCreditsToAccount only credits a confirmed intent.
+const createTestIntent = async (
+  userPublicId: string,
+  status: IntentStatus = IntentStatus.CONFIRMED,
+): Promise<string> => {
   const db = await getDatabase()
   const id = `test-intent-${uuidv4()}`
   await db.query(
     `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at)
      VALUES ($1, $2, $3, $4, $5)`,
-    [id, userPublicId, IntentStatus.COMPLETED, '1', new Date()],
+    [id, userPublicId, status, '1', new Date()],
   )
   return id
+}
+
+const getIntentStatus = async (id: string): Promise<string> => {
+  const db = await getDatabase()
+  const result = await db.query<{ status: string }>(
+    'SELECT status FROM intents WHERE id = $1',
+    [id],
+  )
+  return result.rows[0].status
 }
 
 describe('CreditsUseCases', () => {
@@ -100,9 +114,8 @@ describe('CreditsUseCases', () => {
     const intentId = await createTestIntent(mockUser.publicId)
 
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -113,12 +126,34 @@ describe('CreditsUseCases', () => {
     expect(rows[0].uploadBytesOriginal).toBe(creditsToAdd)
     expect(rows[0].uploadBytesRemaining).toBe(creditsToAdd)
     expect(rows[0].intentId).toBe(intentId)
+    expect(await getIntentStatus(intentId)).toBe(IntentStatus.COMPLETED)
 
     // The free/one-off account limits must remain untouched.
     const after = await AccountsUseCases.getAccountById(account.id)
     if (!after) throw new Error('Account not found')
     expect(after.uploadLimit).toBe(account.uploadLimit)
     expect(after.downloadLimit).toBe(account.downloadLimit)
+  })
+
+  // A deletion can expire a confirmed intent while the poller is crediting it.
+  it('should credit nothing for an intent that is no longer confirmed', async () => {
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
+    const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+    const intentId = await createTestIntent(
+      mockUser.publicId,
+      IntentStatus.EXPIRED,
+    )
+
+    const result = await AccountsUseCases.addCreditsToAccount(
+      { id: intentId, userPublicId: mockUser.publicId, accountId: account.id },
+      BigInt(123),
+    )
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+    expect(await purchasedCreditsRepository.getByAccountId(account.id)).toEqual(
+      [],
+    )
+    expect(await getIntentStatus(intentId)).toBe(IntentStatus.EXPIRED)
   })
 
   it('purchased credits should count toward the total available credits', async () => {
@@ -134,9 +169,8 @@ describe('CreditsUseCases', () => {
     )
 
     await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     const after = await AccountsUseCases.getPendingCreditsByUserAndType(
@@ -167,9 +201,8 @@ describe('CreditsUseCases', () => {
 
     const intentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       BigInt(50),
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -179,7 +212,7 @@ describe('CreditsUseCases', () => {
     expect(rows[0].uploadBytesOriginal).toBe(BigInt(50))
   })
 
-  it('should reject a purchase that would exceed the per-user cap', async () => {
+  it('should reject a purchase that would exceed the per-account cap', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
 
     // Manually insert a row that consumes most of the cap (100 GiB).
@@ -201,9 +234,8 @@ describe('CreditsUseCases', () => {
     // Trying to add even 1 more byte should be rejected.
     const overCapIntentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: overCapIntentId, userPublicId: mockUser.publicId },
       BigInt(1),
-      overCapIntentId,
     )
 
     expect(result.isErr()).toBe(true)

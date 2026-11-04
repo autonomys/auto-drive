@@ -2,6 +2,8 @@ import { config } from '../../../config.js'
 import {
   DeletionRequest,
   MaybeUserWithOrganization,
+  OrganizationWithMembers,
+  PublicId,
   UserWithOrganization,
 } from '@auto-drive/models'
 
@@ -185,6 +187,27 @@ const adminSearchUsers = async (
   return response.json()
 }
 
+/** The public IDs of an organization's members, from its membership rows. */
+const getOrganizationMembers = async (
+  organizationId: string,
+): Promise<PublicId[]> => {
+  const response = await fetch(
+    `${config.authService.url}/organizations/${encodeURIComponent(organizationId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${config.authService.token}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch organization')
+  }
+
+  const organization: OrganizationWithMembers = await response.json()
+  return organization.members
+}
+
 const getDeletionRequestsDue = async (): Promise<DeletionRequest[]> => {
   const response = await fetch(
     `${config.authService.url}/users/admin/deletions/due`,
@@ -293,6 +316,7 @@ export const AuthManager = {
   getUserFromPublicId,
   getUsersFromPublicIds,
   adminSearchUsers,
+  getOrganizationMembers,
   getDeletionRequestsDue,
   markDeletionAsProcessing,
   executeAuthAnonymisation,
