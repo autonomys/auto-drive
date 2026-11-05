@@ -557,9 +557,45 @@ export const submitTransaction = (
   })
 }
 
+const CAPACITY_SUMMARY_INTERVAL_MS = 60_000
+
+// Nearest-rank percentile of an ascending array
+const percentile = (sorted: number[], p: number) =>
+  sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)]
+
 export const createTransactionManager = () => {
   let api: ApiPromise
   let accountManager: Awaited<ReturnType<typeof createAccountManager>>
+
+  const pLimitted = pLimit(config.params.maxConcurrentUploads)
+
+  // Publisher capacity at INFO, so throughput can be measured without DEBUG
+  // tracing: how long each transaction held a pLimit slot (submission until it
+  // settled) and how many slots are busy. Silent while the publisher is idle.
+  let holdTimesMs: number[] = []
+  let settledOk = 0
+  let summaryTimer: ReturnType<typeof setInterval> | undefined
+  const logCapacitySummary = () => {
+    const sorted = holdTimesMs.sort((a, b) => a - b)
+    const ok = settledOk
+    holdTimesMs = []
+    settledOk = 0
+    if (sorted.length === 0 && pLimitted.activeCount === 0) return
+
+    const seconds = (ms: number | undefined) =>
+      ms === undefined ? '-' : (ms / 1000).toFixed(1)
+    logger.info(
+      'Publisher capacity: %d tx settled (%d ok) in %ds, slot hold p50=%ss p95=%ss | in-flight %d/%d, queued %d',
+      sorted.length,
+      ok,
+      CAPACITY_SUMMARY_INTERVAL_MS / 1000,
+      seconds(percentile(sorted, 50)),
+      seconds(percentile(sorted, 95)),
+      pLimitted.activeCount,
+      config.params.maxConcurrentUploads,
+      pLimitted.pendingCount,
+    )
+  }
 
   const uniqueExecution = pLimit(1)
   const ensureInitialized = () =>
@@ -567,9 +603,14 @@ export const createTransactionManager = () => {
       await cryptoWaitReady()
       api = api ?? (await createConnection())
       accountManager = accountManager ?? (await createAccountManager(api))
+      if (!summaryTimer) {
+        summaryTimer = setInterval(
+          logCapacitySummary,
+          CAPACITY_SUMMARY_INTERVAL_MS,
+        )
+        summaryTimer.unref()
+      }
     })
-
-  const pLimitted = pLimit(config.params.maxConcurrentUploads)
 
   const submit = async (
     transactions: Transaction[],
@@ -590,8 +631,9 @@ export const createTransactionManager = () => {
           ...transaction.params,
         )
 
-        return pLimitted(() =>
-          submitTransaction(api, account, trx, nonce, signal)
+        return pLimitted(() => {
+          const slotAcquiredAt = Date.now()
+          return submitTransaction(api, account, trx, nonce, signal)
             .catch((error) => {
               logger.error(error as Error, 'Transaction submission failed')
               return {
@@ -601,6 +643,9 @@ export const createTransactionManager = () => {
               }
             })
             .then(async (result) => {
+              holdTimesMs.push(Date.now() - slotAcquiredAt)
+              if (result.success) settledOk++
+
               if (!result.success) {
                 // Only a genuinely Invalid transaction implicates the signing
                 // account itself (unusable key / insufficient balance), so it is
@@ -626,8 +671,8 @@ export const createTransactionManager = () => {
               }
 
               return result
-            }),
-        )
+            })
+        })
       },
     )
 
