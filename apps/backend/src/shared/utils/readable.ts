@@ -32,7 +32,9 @@ export const handleReadableError = (
  * Pass `source` through a stream that fails with `message`, and destroys
  * `source`, once `timeoutMs` go by without a chunk. The clock starts at the
  * first chunk, so a slow start is never cut short. A consumer that stops
- * reading also stops the chunks, so it counts as inactivity too.
+ * reading also stops the chunks, so it counts as inactivity too. The clock
+ * keeps running after `source` ends, until readers have taken the last chunk
+ * and the stream is destroyed.
  */
 export const withInactivityTimeout = (
   source: Readable,
@@ -45,10 +47,6 @@ export const withInactivityTimeout = (
       clearTimeout(timer)
       timer = setTimeout(() => guarded.destroy(new Error(message)), timeoutMs)
       callback(null, chunk)
-    },
-    flush(callback) {
-      clearTimeout(timer)
-      callback()
     },
     destroy(error, callback) {
       clearTimeout(timer)

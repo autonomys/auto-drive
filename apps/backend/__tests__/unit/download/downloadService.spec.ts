@@ -225,4 +225,22 @@ describe('download service single retrieval per CID', () => {
     await expect(readAll(first)).rejects.toThrow('stalled: no data received')
     expect(source.destroyed).toBe(true)
   })
+
+  it('fails waiting requests when the first response stops being read after the source ends', async () => {
+    const cid = `single-flight-unread-${v4()}`
+    const source = new PassThrough()
+    const { settleCacheLookups } = mockSource(cid, source)
+    jest.replaceProperty(config.params, 'downloadInactivityTimeoutMs', 50)
+
+    const unread = await downloadService.download(cid)
+    const later = downloadService.download(cid)
+    await settleCacheLookups()
+    for (let i = 0; i < 3; i++) {
+      source.write(Buffer.alloc(8 * 1024, i))
+    }
+    source.end()
+
+    await expect(later).rejects.toThrow('stalled: no data received')
+    expect(unread.destroyed).toBe(true)
+  })
 })
