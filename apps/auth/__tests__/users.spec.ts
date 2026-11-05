@@ -1,6 +1,10 @@
 import { jest } from '@jest/globals'
 import { UsersUseCases } from '../src/useCases/users.js'
-import { UnonboardedUser, UserRole } from '@auto-drive/models'
+import {
+  OrganizationRole,
+  UnonboardedUser,
+  UserRole,
+} from '@auto-drive/models'
 import { OrganizationsUseCases } from '../src/useCases/organizations.js'
 import { closeDatabase, getDatabase } from '../src/drivers/pg.js'
 import { dbMigration } from './utils/dbMigrate.js'
@@ -138,6 +142,7 @@ describe('UsersUseCases', () => {
           otherOrganization.id,
           user.oauthProvider,
           user.oauthUserId,
+          OrganizationRole.Member,
         ),
       ).rejects.toThrow(/users_organizations_user_key/)
     })

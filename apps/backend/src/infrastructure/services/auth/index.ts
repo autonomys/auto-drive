@@ -2,10 +2,19 @@ import { config } from '../../../config.js'
 import {
   DeletionRequest,
   MaybeUserWithOrganization,
+  Organization,
+  OrganizationMembershipChange,
+  OrganizationRole,
+  OrganizationSummary,
   OrganizationWithMembers,
-  PublicId,
   UserWithOrganization,
 } from '@auto-drive/models'
+import { err, ok, Result } from 'neverthrow'
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} from '../../../errors/index.js'
 
 /**
  * A token lookup against the auth service did not yield a user.
@@ -187,27 +196,6 @@ const adminSearchUsers = async (
   return response.json()
 }
 
-/** The public IDs of an organization's members, from its membership rows. */
-const getOrganizationMembers = async (
-  organizationId: string,
-): Promise<PublicId[]> => {
-  const response = await fetch(
-    `${config.authService.url}/organizations/${encodeURIComponent(organizationId)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${config.authService.token}`,
-      },
-    },
-  )
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch organization')
-  }
-
-  const organization: OrganizationWithMembers = await response.json()
-  return organization.members
-}
-
 const getDeletionRequestsDue = async (): Promise<DeletionRequest[]> => {
   const response = await fetch(
     `${config.authService.url}/users/admin/deletions/due`,
@@ -311,12 +299,114 @@ const markDeletionAsFailed = async (
   return response.json()
 }
 
+export type OrganizationRequestError =
+  | BadRequestError
+  | NotFoundError
+  | ConflictError
+
+/**
+ * A call to the auth service's organization endpoints. Those answer 400, 404
+ * and 409 with a message meant for the admin, which is passed on; any other
+ * failure is the auth service's and throws.
+ */
+const organizationRequest = async <T>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Result<T, OrganizationRequestError>> => {
+  const response = await fetch(`${config.authService.url}/organizations${path}`, {
+    method: init.method ?? 'GET',
+    headers: {
+      Authorization: `Bearer ${config.authService.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  })
+
+  if (response.ok) {
+    return ok(response.status === 204 ? (undefined as T) : await response.json())
+  }
+
+  const message = await response
+    .json()
+    .then((body: { error?: string }) => body.error)
+    .catch(() => undefined)
+  const errorMessage = message ?? response.statusText
+  switch (response.status) {
+    case 400:
+      return err(new BadRequestError(errorMessage))
+    case 404:
+      return err(new NotFoundError(errorMessage))
+    case 409:
+      return err(new ConflictError(errorMessage))
+    default:
+      throw new Error(
+        `Auth organization request failed (${response.status}): ${errorMessage}`,
+      )
+  }
+}
+
+const createOrganization = (name: string) =>
+  organizationRequest<Organization>('/', { method: 'POST', body: { name } })
+
+const getOrganizationSummaries = (ids: string[]) =>
+  organizationRequest<OrganizationSummary[]>('/batch', {
+    method: 'POST',
+    body: { ids },
+  })
+
+const getOrganization = (organizationId: string) =>
+  organizationRequest<OrganizationWithMembers>(
+    `/${encodeURIComponent(organizationId)}`,
+  )
+
+const getOrganizationMembershipChanges = (organizationId: string) =>
+  organizationRequest<OrganizationMembershipChange[]>(
+    `/${encodeURIComponent(organizationId)}/membership-changes`,
+  )
+
+const addOrganizationMember = (
+  organizationId: string,
+  member: { publicId: string; role: OrganizationRole },
+  actor: string,
+) =>
+  organizationRequest<void>(`/${encodeURIComponent(organizationId)}/members`, {
+    method: 'POST',
+    body: { ...member, actor },
+  })
+
+const changeOrganizationMemberRole = (
+  organizationId: string,
+  publicId: string,
+  role: OrganizationRole,
+  actor: string,
+) =>
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
+    { method: 'PUT', body: { role, actor } },
+  )
+
+const removeOrganizationMember = (
+  organizationId: string,
+  publicId: string,
+  actor: string,
+) =>
+  organizationRequest<{ organizationId: string }>(
+    `/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
+    { method: 'DELETE', body: { actor } },
+  )
+
 export const AuthManager = {
+  createOrganization,
+  getOrganizationSummaries,
+  getOrganization,
+  getOrganizationMembershipChanges,
+  addOrganizationMember,
+  changeOrganizationMemberRole,
+  removeOrganizationMember,
   getUserFromAccessToken,
   getUserFromPublicId,
   getUsersFromPublicIds,
   adminSearchUsers,
-  getOrganizationMembers,
   getDeletionRequestsDue,
   markDeletionAsProcessing,
   executeAuthAnonymisation,

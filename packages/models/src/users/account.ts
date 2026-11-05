@@ -1,4 +1,5 @@
 import { User } from "./user";
+import { OrganizationWithMembers } from "./organization";
 
 export type Account = {
   id: string;
@@ -6,6 +7,8 @@ export type Account = {
   uploadLimit: number;
   downloadLimit: number;
   model: AccountModel;
+  // A partner account is shared by the members of a partner organisation.
+  isPartner: boolean;
 };
 
 export type AccountWithTotalSize = Account & {
@@ -29,4 +32,6 @@ export type AccountInfo = Account & {
 /** Admin account page: an account and its members, which may be none. */
 export type AdminAccountDetails = AccountInfo & {
   members: User[];
+  // Null if the auth service has no such organization.
+  organization: OrganizationWithMembers | null;
 };
