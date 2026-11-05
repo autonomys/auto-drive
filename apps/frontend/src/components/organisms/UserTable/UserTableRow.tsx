@@ -46,9 +46,7 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
     <TableBodyRow>
       <CreditsUpdateModal
         onClose={() => setIsCreditsUpdateModalOpen(false)}
-        userHandle={
-          isCreditsUpdateModalOpen ? accountWithUser.user.publicId : null
-        }
+        accountId={isCreditsUpdateModalOpen ? accountWithUser.id : null}
       />
       <UpdateRoleModal
         userHandle={isUpdateRoleOpen ? accountWithUser.user.publicId : null}

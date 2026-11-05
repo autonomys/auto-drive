@@ -121,16 +121,15 @@ type Interaction = {
 };
 
 type Props = {
-  organizationId: string;
+  accountId: string;
 };
 
-export const OrganizationDetails = ({ organizationId }: Props) => {
+export const OrganizationDetails = ({ accountId }: Props) => {
   const { network, api } = useNetwork();
   const router = useRouter();
   const user = useUserStore(({ user }) => user);
   const apolloClient = useApolloClient();
 
-  // `organizationId` is an account ID or an organization ID, as before.
   const [account, setAccount] = useState<AdminAccountDetails | null>(null);
   const [accountError, setAccountError] = useState(false);
   const [batches, setBatches] = useState<AdminUserCreditBatch[] | null>(null);
@@ -156,14 +155,14 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     if (user?.role !== UserRole.Admin) return;
     setIsLoading(true);
     api
-      .adminGetAccount(organizationId)
+      .adminGetAccount(accountId)
       .then(setAccount)
       .catch((error) => {
         console.error('Error fetching account:', error);
         setAccountError(true);
       })
       .finally(() => setIsLoading(false));
-  }, [api, organizationId, user?.role]);
+  }, [api, accountId, user?.role]);
 
   // Selected by the account credited, not by buyer: members can buy for a
   // shared account, and a member's earlier purchases stay on their old one.
@@ -178,10 +177,10 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       });
   }, [api, account]);
 
-  const accountId = account?.id ?? null;
+  const loadedAccountId = account?.id ?? null;
 
   useEffect(() => {
-    if (!accountId) return;
+    if (!loadedAccountId) return;
     let cancelled = false;
     setIsLoadingActivity(true);
 
@@ -189,7 +188,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
       const result = await apolloClient.query({
         query: GET_ACCOUNT_INTERACTIONS,
         variables: {
-          accountId,
+          accountId: loadedAccountId,
           type: activityFilter === 'all' ? {} : { _eq: activityFilter },
           limit: itemsPerPage,
           offset: (currentPage - 1) * itemsPerPage,
@@ -237,7 +236,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [apolloClient, accountId, activityFilter, currentPage]);
+  }, [apolloClient, loadedAccountId, activityFilter, currentPage]);
 
   const purchases = useMemo(
     () => (batches ? summarizePurchases(batches) : null),
@@ -279,12 +278,11 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
         ) : accountError ? (
           <p className='text-sm text-gray-500'>
             Failed to load account{' '}
-            <span className='font-mono'>{organizationId}</span>.
+            <span className='font-mono'>{accountId}</span>.
           </p>
         ) : !account ? (
           <p className='text-sm text-gray-500'>
-            No account found for{' '}
-            <span className='font-mono'>{organizationId}</span>.
+            No account found for <span className='font-mono'>{accountId}</span>.
           </p>
         ) : (
           <div className='space-y-4'>
@@ -590,7 +588,7 @@ export const OrganizationDetails = ({ organizationId }: Props) => {
               </TableHeadRow>
             </TableHead>
             <TableBody>
-              {isLoading || (accountId && isLoadingActivity) ? (
+              {isLoading || (loadedAccountId && isLoadingActivity) ? (
                 <TableBodyRow>
                   <TableBodyCell colSpan={4} className='text-center'>
                     <span className='flex items-center justify-center py-4'>

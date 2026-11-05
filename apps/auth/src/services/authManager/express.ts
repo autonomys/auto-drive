@@ -130,6 +130,20 @@ export const handleAdminAuth = async (
   return isAdmin
 }
 
+/**
+ * Accepts the backend only, by its service secret, and never a user token.
+ * Membership changes have preconditions on backend data (credits, payments),
+ * so admins make them through the backend rather than here.
+ */
+export const handleServiceAuth = (req: Request, res: Response): boolean => {
+  const accessToken = req.headers.authorization?.split(' ')[1]
+  if (!config.apiSecret || accessToken !== config.apiSecret) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return false
+  }
+  return true
+}
+
 export const refreshAccessToken = async (
   refreshToken: string,
 ): Promise<string | null> => {

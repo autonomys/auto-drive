@@ -12,8 +12,8 @@ INSERT INTO users.organizations (id, name)
 VALUES ('00000000-0000-0000-0000-000000000001', 'auto-drive-test')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id)
-SELECT 'test', 'auto-drive-test', '00000000-0000-0000-0000-000000000001'
+INSERT INTO users.users_organizations (oauth_provider, oauth_user_id, organization_id, role)
+SELECT 'test', 'auto-drive-test', '00000000-0000-0000-0000-000000000001', 'admin'
 WHERE NOT EXISTS (
   SELECT 1 FROM users.users_organizations
   WHERE oauth_provider = 'test' AND oauth_user_id = 'auto-drive-test'

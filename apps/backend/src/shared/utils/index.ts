@@ -1,5 +1,5 @@
 export { safeCallback } from './safe.js'
-export { handleReadableError } from './readable.js'
+export { handleReadableError, withInactivityTimeout } from './readable.js'
 export { withTimeout, TimeoutError } from './timeout.js'
 export {
   applyMarginPercent,

@@ -99,8 +99,18 @@ export const runObjectDownloadFlow = async ({
     shouldPrepareAsync = false;
   }
 
+  const hasAsyncDownloadInProgress = !!getAsyncDownloads?.().some(
+    (d) =>
+      d.cid === metadata.dataCid &&
+      (d.status === AsyncDownloadStatus.Pending ||
+        d.status === AsyncDownloadStatus.Downloading),
+  );
+
   if (shouldPrepareAsync) {
     onPhaseChange?.('preparing');
+  }
+
+  if (shouldPrepareAsync && !hasAsyncDownloadInProgress) {
     try {
       await api.createAsyncDownload(metadata.dataCid);
       onAsyncDownloadsRefresh?.();

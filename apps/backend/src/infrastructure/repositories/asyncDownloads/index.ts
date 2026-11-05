@@ -66,6 +66,26 @@ const getDownloadByCid = async (
   return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
 }
 
+const getActiveDownloadByUserAndCid = async (
+  oauth_provider: string,
+  oauth_user_id: string,
+  cid: string,
+): Promise<AsyncDownload | null> => {
+  const db = await getDatabase()
+
+  const download = await db.query<AsyncDownloadDB>(
+    'SELECT * FROM public.async_downloads WHERE oauth_provider = $1 AND oauth_user_id = $2 AND cid = $3 AND status = ANY($4) ORDER BY created_at DESC LIMIT 1',
+    [
+      oauth_provider,
+      oauth_user_id,
+      cid,
+      [AsyncDownloadStatus.Pending, AsyncDownloadStatus.Downloading],
+    ],
+  )
+
+  return download.rows.map(mapAsyncDownloadDBToAsyncDownload).at(0) ?? null
+}
+
 const createDownload = async (
   id: string,
   oauth_provider: string,
@@ -143,6 +163,7 @@ export const asyncDownloadsRepository = {
   getDownloadById,
   getUndismissedDownloadsByUser,
   getDownloadByCid,
+  getActiveDownloadByUserAndCid,
   createDownload,
   updateDownloadStatus,
   updateDownloadProgress,

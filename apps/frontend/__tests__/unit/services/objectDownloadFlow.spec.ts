@@ -4,6 +4,8 @@ jest.mock('utils/auth', () => ({
 
 jest.mock('@auto-drive/models', () => ({
   AsyncDownloadStatus: {
+    Pending: 'pending',
+    Downloading: 'downloading',
     Failed: 'failed',
     Dismissed: 'dismissed',
   },
@@ -96,6 +98,66 @@ describe('runObjectDownloadFlow', () => {
       'downloading',
       'completed',
     ]);
+    expect(downloadService.fetchFile).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([AsyncDownloadStatus.Pending, AsyncDownloadStatus.Downloading])(
+    'waits on the async download already %s for the object instead of creating another',
+    async (status) => {
+      (getAuthSession as jest.Mock).mockResolvedValue({
+        accessToken: 'token',
+        authProvider: 'google',
+      });
+      const { api, downloadService } = createDependencies();
+      api.checkDownloadStatus
+        .mockResolvedValueOnce(DownloadStatus.NotCached)
+        .mockResolvedValueOnce(DownloadStatus.Cached);
+      const onPhaseChange = jest.fn();
+
+      await runObjectDownloadFlow({
+        api: api as never,
+        downloadService,
+        metadata: metadata as never,
+        asyncPollIntervalMs: 0,
+        onPhaseChange,
+        getAsyncDownloads: () => [
+          { cid: 'bafkr6iothercid', status: AsyncDownloadStatus.Failed },
+          { cid: metadata.dataCid, status },
+        ],
+      });
+
+      expect(api.createAsyncDownload).not.toHaveBeenCalled();
+      expect(onPhaseChange.mock.calls.map(([phase]) => phase)).toEqual([
+        'checking',
+        'preparing',
+        'downloading',
+        'completed',
+      ]);
+      expect(downloadService.fetchFile).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('creates a new async download when the previous one for the object failed', async () => {
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      accessToken: 'token',
+      authProvider: 'google',
+    });
+    const { api, downloadService } = createDependencies();
+    api.checkDownloadStatus
+      .mockResolvedValueOnce(DownloadStatus.NotCached)
+      .mockResolvedValueOnce(DownloadStatus.Cached);
+
+    await runObjectDownloadFlow({
+      api: api as never,
+      downloadService,
+      metadata: metadata as never,
+      asyncPollIntervalMs: 0,
+      getAsyncDownloads: () => [
+        { cid: metadata.dataCid, status: AsyncDownloadStatus.Failed },
+      ],
+    });
+
+    expect(api.createAsyncDownload).toHaveBeenCalledWith(metadata.dataCid);
     expect(downloadService.fetchFile).toHaveBeenCalledTimes(1);
   });
 

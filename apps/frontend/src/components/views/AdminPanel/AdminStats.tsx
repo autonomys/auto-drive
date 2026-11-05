@@ -29,7 +29,6 @@ import {
   TableBodyCell,
 } from '@/components/molecules/Table/TableBody';
 import dayjs from 'dayjs';
-import { AccountModel } from '@auto-drive/models';
 import Link from 'next/link';
 import { useNetwork } from 'contexts/network';
 import { ROUTES } from '@auto-drive/ui';
@@ -107,11 +106,7 @@ type Stats = {
 
 type RankingAccount = {
   id: string;
-  organizationId: string;
   totalSize: number;
-  uploadLimit: number;
-  downloadLimit: number;
-  model: AccountModel;
 };
 
 export const AdminStats = () => {
@@ -177,14 +172,7 @@ export const AdminStats = () => {
 
     // Convert to array, sort by totalSize descending, take top 10
     const sorted = Array.from(accountTotals.entries())
-      .map(([accountId, totalSize]) => ({
-        id: accountId,
-        organizationId: accountId, // Using account_id as organizationId for display
-        totalSize,
-        uploadLimit: 0,
-        downloadLimit: 0,
-        model: AccountModel.Monthly,
-      }))
+      .map(([accountId, totalSize]) => ({ id: accountId, totalSize }))
       .sort((a, b) => b.totalSize - a.totalSize)
       .slice(0, 10);
 
@@ -516,7 +504,7 @@ export const AdminStats = () => {
                 <TableHead>
                   <TableHeadRow>
                     <TableHeadCell>Rank</TableHeadCell>
-                    <TableHeadCell>Organization</TableHeadCell>
+                    <TableHeadCell>Account</TableHeadCell>
                     <TableHeadCell>Size</TableHeadCell>
                   </TableHeadRow>
                 </TableHead>
@@ -548,8 +536,8 @@ export const AdminStats = () => {
                             )}
                             className='text-blue-600 hover:underline dark:text-blue-400'
                           >
-                            {account.organizationId.slice(0, 6)}...
-                            {account.organizationId.slice(-4)}
+                            {account.id.slice(0, 6)}...
+                            {account.id.slice(-4)}
                           </Link>
                         </TableBodyCell>
                         <TableBodyCell className='font-semibold'>
@@ -583,7 +571,7 @@ export const AdminStats = () => {
                 <TableHead>
                   <TableHeadRow>
                     <TableHeadCell>Rank</TableHeadCell>
-                    <TableHeadCell>Organization</TableHeadCell>
+                    <TableHeadCell>Account</TableHeadCell>
                     <TableHeadCell>Size</TableHeadCell>
                   </TableHeadRow>
                 </TableHead>
@@ -615,8 +603,8 @@ export const AdminStats = () => {
                             )}
                             className='text-blue-600 hover:underline dark:text-blue-400'
                           >
-                            {account.organizationId.slice(0, 6)}...
-                            {account.organizationId.slice(-4)}
+                            {account.id.slice(0, 6)}...
+                            {account.id.slice(-4)}
                           </Link>
                         </TableBodyCell>
                         <TableBodyCell className='font-semibold'>

@@ -43,7 +43,7 @@ const serializeCredit = (credit: PurchasedCredit) => ({
 // ---------------------------------------------------------------------------
 // GET /credits/summary
 // Returns the authenticated user's credit totals, next expiry, and whether
-// they can still make a purchase without hitting the per-user cap.
+// they can still make a purchase without hitting the per-account cap.
 // ---------------------------------------------------------------------------
 
 creditsController.get(
