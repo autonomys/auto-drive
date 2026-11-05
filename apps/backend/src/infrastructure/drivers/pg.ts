@@ -88,8 +88,9 @@ const createDB = async (): Promise<pg.Pool> => {
     config.postgres.poolMax,
   )
 
-  // Nothing would receive the samples without an endpoint
-  if (config.monitoring.victoriaEndpoint) {
+  // Samples every 10 s whether or not anything happens, so it follows the
+  // VICTORIA_ACTIVE switch, and needs an endpoint to receive them
+  if (config.monitoring.active && config.monitoring.victoriaEndpoint) {
     stopRuntimeMetrics = startRuntimeMetrics(pool)
   }
 
