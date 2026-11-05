@@ -570,24 +570,36 @@ export const createTransactionManager = () => {
   const pLimitted = pLimit(config.params.maxConcurrentUploads)
 
   // Publisher capacity at INFO, so throughput can be measured without DEBUG
-  // tracing: how long each transaction held a pLimit slot (submission until it
-  // settled) and how many slots are busy. Silent while the publisher is idle.
+  // tracing: how long each transaction held a pLimit slot (acquired until
+  // released, including account recovery after a failure) and how many slots
+  // are busy. Aborted transactions were cut short by the task timeout, so they
+  // are counted but kept out of the percentiles. Silent while the publisher is
+  // idle.
   let holdTimesMs: number[] = []
   let settledOk = 0
+  let aborted = 0
   let summaryTimer: ReturnType<typeof setInterval> | undefined
   const logCapacitySummary = () => {
     const sorted = holdTimesMs.sort((a, b) => a - b)
     const ok = settledOk
+    const abortedCount = aborted
     holdTimesMs = []
     settledOk = 0
-    if (sorted.length === 0 && pLimitted.activeCount === 0) return
+    aborted = 0
+    if (
+      sorted.length === 0 &&
+      abortedCount === 0 &&
+      pLimitted.activeCount === 0
+    )
+      return
 
     const seconds = (ms: number | undefined) =>
       ms === undefined ? '-' : (ms / 1000).toFixed(1)
     logger.info(
-      'Publisher capacity: %d tx settled (%d ok) in %ds, slot hold p50=%ss p95=%ss | in-flight %d/%d, queued %d',
+      'Publisher capacity: %d tx settled (%d ok), %d aborted in %ds, slot hold p50=%ss p95=%ss | in-flight %d/%d, queued %d',
       sorted.length,
       ok,
+      abortedCount,
       CAPACITY_SUMMARY_INTERVAL_MS / 1000,
       seconds(percentile(sorted, 50)),
       seconds(percentile(sorted, 95)),
@@ -643,9 +655,6 @@ export const createTransactionManager = () => {
               }
             })
             .then(async (result) => {
-              holdTimesMs.push(Date.now() - slotAcquiredAt)
-              if (result.success) settledOk++
-
               if (!result.success) {
                 // Only a genuinely Invalid transaction implicates the signing
                 // account itself (unusable key / insufficient balance), so it is
@@ -668,6 +677,15 @@ export const createTransactionManager = () => {
                     account.address,
                   )
                 }
+              }
+
+              // The slot is released when this callback returns, so the hold
+              // is measured here, after any recovery above
+              if (result.status === 'Aborted') {
+                aborted++
+              } else {
+                holdTimesMs.push(Date.now() - slotAcquiredAt)
+                if (result.success) settledOk++
               }
 
               return result
