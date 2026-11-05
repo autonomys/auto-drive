@@ -126,6 +126,9 @@ export const extensionListEnv = (raw?: string): string[] =>
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
+    // Per-process pool size. 10 is node-postgres's own default, so leaving it
+    // unset keeps the pool exactly as it was before this became configurable.
+    poolMax: positiveIntEnv('PG_POOL_MAX', 10),
   },
   express: {
     port: Number(env('PORT', '3000')),

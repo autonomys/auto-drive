@@ -21,10 +21,7 @@
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
-      "gql/*": ["../gql/*"],
-      "stream-fork": ["stubs/stream-fork.ts"],
-      "stream-fork/main.js": ["stubs/stream-fork.ts"],
-      "stream-fork/index.js": ["stubs/stream-fork.ts"]
+      "gql/*": ["../gql/*"]
     },
     "target": "ES2017"
   },

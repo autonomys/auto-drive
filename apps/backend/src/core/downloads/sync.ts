@@ -111,12 +111,6 @@ const downloadObjectByUser = async (
           cid,
         )
       } catch (error) {
-        // Drain it, do not destroy it. stream-fork's Fork writes to every branch
-        // on each chunk and does not check whether one has gone away, so
-        // destroying this fork makes the next write throw `Cannot call write
-        // after a stream was destroyed` from inside the Fork, where nothing is
-        // listening. Draining lets the source and the cache branches run to
-        // completion and end normally, which is what actually releases them.
         download.on('error', () => {})
         download.resume()
         throw error
