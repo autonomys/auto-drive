@@ -1,0 +1,36 @@
+name: Hasura
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/hasura/**"
+      - "docker-compose*.yml"
+      - ".github/workflows/hasura.yml"
+  pull_request:
+    paths:
+      - "apps/hasura/**"
+      - "docker-compose*.yml"
+      - ".github/workflows/hasura.yml"
+
+jobs:
+  metadata-only:
+    name: Hasura applies metadata only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for Hasura SQL migrations
+        run: |
+          status=0
+          if [ -e apps/hasura/migrations ]; then
+            echo "::error::apps/hasura/migrations exists. Schema changes, including views and functions Hasura's metadata relies on, go in apps/backend/migrations."
+            status=1
+          fi
+          if grep -n "hasura-migrations" docker-compose*.yml; then
+            echo "::error::A compose file mounts /hasura-migrations, so Hasura would apply SQL when it starts."
+            status=1
+          fi
+          exit $status

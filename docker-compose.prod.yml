@@ -9,7 +9,6 @@ services:
     image: hasura/graphql-engine:v2.40.0.cli-migrations-v3
     volumes:
       - ./apps/hasura/metadata:/hasura-metadata
-      - ./apps/hasura/migrations:/hasura-migrations
     restart: unless-stopped
     environment:
       # Essential Environment Variables
