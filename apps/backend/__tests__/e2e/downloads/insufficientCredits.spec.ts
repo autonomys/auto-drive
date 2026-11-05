@@ -159,8 +159,7 @@ describe('a download the reader cannot pay for', () => {
     )
 
     // Drained to completion rather than left paused: the source and both cache
-    // branches finish, so nothing is leaked. (Destroying it instead would throw
-    // from inside stream-fork, which writes to every branch unconditionally.)
+    // branches finish, so nothing is leaked.
     expect(built).toBeDefined()
     await new Promise<void>((resolve, reject) => {
       if (built!.readableEnded) return resolve()

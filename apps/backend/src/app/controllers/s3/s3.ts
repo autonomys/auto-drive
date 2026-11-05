@@ -665,13 +665,10 @@ export const getObjectHandler = async (req: Request, res: Response) => {
   // served fails here — while a real status code and an S3 error body are still
   // possible.
   //
-  // Once the body has started there is no good signal left, and it is worse than
-  // a reset: downloadService forks the source stream for caching, and
-  // stream-fork's Fork implements _final but not _destroy, so a source error
-  // propagates to neither fork. The response STALLS until an infrastructure
-  // timeout rather than erroring. That is why answering before the first write
-  // matters, and it bounds — but does not close — issue #815's second acceptance
-  // criterion.
+  // Once the body has started, a source error can only reset the stream, with
+  // no status and no S3 error body. That is why answering before the first
+  // write matters. It bounds, but does not close, issue #815's second
+  // acceptance criterion.
   let stream: Readable
   try {
     stream = await startDownload()
