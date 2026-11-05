@@ -8,8 +8,6 @@ import { config } from '../../config.js'
 export const requestTrace: RequestHandler = (req, res) => {
   const path = req.route?.path
 
-  const rawPath = req.path
-
   const method = req.method
   const provider =
     typeof req.headers['x-auth-provider'] === 'string'
@@ -28,10 +26,6 @@ export const requestTrace: RequestHandler = (req, res) => {
     tags,
     fields: {
       status: res.statusCode,
-      method,
-      path,
-      provider,
-      rawPath,
     },
   }
 

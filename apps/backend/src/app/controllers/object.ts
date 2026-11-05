@@ -545,16 +545,13 @@ objectController.post(
     const { cid } = req.params
 
     logger.info('Reporting object', { cid })
-    const tags = {
-      chain: config.monitoring.metricEnvironmentTag,
-      ip: req.ip?.toString() ?? 'unknown',
-    }
     sendMetricToVictoria({
       measurement: 'object_report',
-      tags,
+      tags: {
+        chain: config.monitoring.metricEnvironmentTag,
+      },
       fields: {
-        cid,
-        ip: req.ip?.toString() ?? 'unknown',
+        count: 1,
       },
     })
 
