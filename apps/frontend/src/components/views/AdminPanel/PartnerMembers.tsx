@@ -96,7 +96,11 @@ export const PartnerMembers = ({
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const { mutate: removeMember, variables: removingId } = useMutation({
+  const {
+    mutate: removeMember,
+    isPending: isRemoving,
+    variables: removingId,
+  } = useMutation({
     mutationFn: (memberPublicId: string) =>
       api.removeOrganizationMember(organization.id, memberPublicId),
     onSuccess: () => afterChange('Member removed'),
@@ -197,7 +201,7 @@ export const PartnerMembers = ({
                   <Button
                     variant='lightDanger'
                     size='sm'
-                    disabled={removingId === member.publicId}
+                    disabled={isRemoving && removingId === member.publicId}
                     onClick={() => {
                       if (
                         window.confirm(
