@@ -281,7 +281,13 @@ accountController.post(
     // Overrides of the global credit terms; null clears one.
     const terms = z
       .object({
-        maxPurchasedBytes: z.number().int().positive().nullable().optional(),
+        maxPurchasedBytes: z
+          .number()
+          .int()
+          .positive()
+          .safe()
+          .nullable()
+          .optional(),
         creditExpiryDays: z
           .number()
           .int()
