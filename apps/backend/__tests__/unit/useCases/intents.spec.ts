@@ -82,7 +82,7 @@ describe('IntentsUseCases', () => {
   // pre-check; handleAuth already hands the controller this shape.
   const orgUser = user as unknown as UserWithOrganization
 
-  const cap = config.credits.maxBytesPerUser
+  const cap = config.credits.maxBytesPerAccount
 
   // Point the cap pre-check at a given already-purchased balance.
   const mockPurchasedBalance = (uploadBytesRemaining: bigint) => {
@@ -113,6 +113,10 @@ describe('IntentsUseCases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // createIntent records the account the credits will go to.
+    jest
+      .spyOn(AccountsUseCases, 'getOrCreateAccount')
+      .mockResolvedValue({ id: 'acc-1' } as unknown as Account)
     jest
       .spyOn(IntentsUseCases, 'getPrice')
       .mockResolvedValue({ price: 1, pricePerGB: 1073741824 })
@@ -158,6 +162,8 @@ describe('IntentsUseCases', () => {
     expect(result.isOk()).toBe(true)
     const intent = result._unsafeUnwrap()
     expect(intent.userPublicId).toBe(user.publicId)
+    // The credits go to this account, wherever the buyer is when it confirms.
+    expect(intent.accountId).toBe('acc-1')
     expect(intent.status).toBe(IntentStatus.PENDING)
     expect(intent.shannonsPerByte).toBe(1n)
   })
@@ -194,7 +200,6 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(intentsRepository, 'createIntent')
       .mockImplementation(async (intent) => intent)
-    const accountSpy = jest.spyOn(AccountsUseCases, 'getOrCreateAccount')
     const balanceSpy = jest.spyOn(
       purchasedCreditsRepository,
       'getRemainingCredits',
@@ -204,7 +209,6 @@ describe('IntentsUseCases', () => {
 
     expect(result.isOk()).toBe(true)
     // No size given means nothing to check — the balance must not even be read.
-    expect(accountSpy).not.toHaveBeenCalled()
     expect(balanceSpy).not.toHaveBeenCalled()
   })
 
@@ -247,6 +251,7 @@ describe('IntentsUseCases', () => {
     expect(created).toStrictEqual({
       id: expect.any(String),
       userPublicId: user.publicId,
+      accountId: 'acc-1',
       status: IntentStatus.PENDING,
       paymentMethod: PaymentMethod.AI3_NATIVE,
       paymentAmount: undefined,
@@ -280,7 +285,7 @@ describe('IntentsUseCases', () => {
     },
   )
 
-  it('createIntent rejects a requestedBytes above the per-user cap as a bad request', async () => {
+  it('createIntent rejects a requestedBytes above the per-account cap as a bad request', async () => {
     const priceSpy = jest.spyOn(IntentsUseCases, 'getPrice')
     const balanceSpy = jest.spyOn(
       purchasedCreditsRepository,
@@ -1029,18 +1034,15 @@ describe('IntentsUseCases', () => {
     const addCreditsSpy = jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(ok())
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.COMPLETED })
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
     expect(res.isOk()).toBe(true)
     // The old guard read paymentAmount unconditionally and would have refused
     // this intent as having no deposit.
-    expect(addCreditsSpy).toHaveBeenCalledWith(user.publicId, 500n, intent.id)
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ status: IntentStatus.COMPLETED }),
+    expect(addCreditsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
+      500n,
     )
   })
 
@@ -1151,9 +1153,9 @@ describe('IntentsUseCases', () => {
   it('markIntentAsConfirmed files nothing when one log is delivered twice at once', async () => {
     // The routine case, not an exotic one. Every log is delivered by several
     // callers — paymentManager.start() runs in the frontend API and the frontend
-    // worker, each with its own watchContractEvent, and the queued watch-intent-tx
-    // task calls watchTransaction again — with the same intent id, hash, index and
-    // amount, unserialised across processes. One wins the transition and the rest
+    // worker, each with its own payment event poll, and the queued
+    // watch-intent-tx task calls watchTransaction again — with the same intent
+    // id, hash, index and amount, unserialised across processes. One wins the transition and the rest
     // lose it.
     //
     // Losing it is not evidence of a second payment. Filing the losers would put
@@ -2598,9 +2600,9 @@ describe('IntentsUseCases', () => {
     const addCreditsSpy = jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(ok())
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.COMPLETED })
+    // addCreditsToAccount completes the intent in the credit transaction.
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const statusSpy = jest.spyOn(intentsRepository, 'updateStatusIfConfirmed')
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
@@ -2609,16 +2611,11 @@ describe('IntentsUseCases', () => {
 
     expect(res.isOk()).toBe(true)
     expect(addCreditsSpy).toHaveBeenCalledWith(
-      user.publicId,
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
       credits,
-      intent.id,
     )
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: intent.id,
-        status: IntentStatus.COMPLETED,
-      }),
-    )
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(statusSpy).not.toHaveBeenCalled()
   })
 
   it('onConfirmedIntent should use intent.pricePerMB, not current config', async () => {
@@ -2636,9 +2633,9 @@ describe('IntentsUseCases', () => {
     const addCreditsSpy = jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(ok())
-    const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.COMPLETED })
+    // addCreditsToAccount completes the intent in the credit transaction.
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const statusSpy = jest.spyOn(intentsRepository, 'updateStatusIfConfirmed')
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
@@ -2646,16 +2643,11 @@ describe('IntentsUseCases', () => {
     // getIntentCredits now returns bigint; intentId is forwarded as third arg.
     const credits = paymentAmount / intent.shannonsPerByte
     expect(addCreditsSpy).toHaveBeenCalledWith(
-      user.publicId,
+      expect.objectContaining({ id: intent.id, userPublicId: user.publicId }),
       credits,
-      intent.id,
     )
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: intent.id,
-        status: IntentStatus.COMPLETED,
-      }),
-    )
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(statusSpy).not.toHaveBeenCalled()
   })
 
   it('onConfirmedIntent should error when already completed', async () => {
@@ -2689,8 +2681,8 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.FAILED })
+      .spyOn(intentsRepository, 'updateStatusIfConfirmed')
+      .mockResolvedValue(true)
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
@@ -2699,9 +2691,7 @@ describe('IntentsUseCases', () => {
     // _checkConfirmedIntents re-ran it every 30 seconds forever — payment kept,
     // no credits, nothing in the admin queue.
     expect(res.isOk()).toBe(true)
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: intent.id, status: IntentStatus.FAILED }),
-    )
+    expect(updateSpy).toHaveBeenCalledWith(intent.id, IntentStatus.FAILED)
   })
 
   it('onConfirmedIntent files the amountless failure too', async () => {
@@ -2721,8 +2711,8 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'updateStatusIfConfirmed')
+      .mockResolvedValue(true)
     const recordSpy = jest
       .spyOn(intentMispaymentsRepository, 'record')
       .mockResolvedValue(null)
@@ -2754,8 +2744,8 @@ describe('IntentsUseCases', () => {
     }
     jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
     const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockImplementation(async (i) => i)
+      .spyOn(intentsRepository, 'updateStatusIfConfirmed')
+      .mockResolvedValue(true)
     const recordSpy = jest
       .spyOn(intentMispaymentsRepository, 'record')
       .mockResolvedValue(null)
@@ -2763,9 +2753,7 @@ describe('IntentsUseCases', () => {
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
     expect(res.isOk()).toBe(true)
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ status: IntentStatus.FAILED }),
-    )
+    expect(updateSpy).toHaveBeenCalledWith(intent.id, IntentStatus.FAILED)
     // Once, by exactly one of the two branches.
     expect(recordSpy).toHaveBeenCalledTimes(1)
     expect(recordSpy.mock.calls[0][0].reason).toBe(
@@ -2809,20 +2797,18 @@ describe('IntentsUseCases', () => {
     jest
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(
-        err(new ForbiddenError('Purchase would exceed per-user credit cap')),
+        err(new ForbiddenError('Purchase would exceed per-account credit cap')),
       )
     const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.OVER_CAP })
+      .spyOn(intentsRepository, 'updateStatusIfConfirmed')
+      .mockResolvedValue(true)
 
     const res = await IntentsUseCases.onConfirmedIntent(intent.id)
 
     // Must succeed (not error) so the polling loop stops retrying
     expect(res.isOk()).toBe(true)
     // Intent must be marked OVER_CAP, not COMPLETED or left as CONFIRMED
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ id: intent.id, status: IntentStatus.OVER_CAP }),
-    )
+    expect(updateSpy).toHaveBeenCalledWith(intent.id, IntentStatus.OVER_CAP)
   })
 
   it('onConfirmedIntent should NOT mark COMPLETED when capped — update must use OVER_CAP status', async () => {
@@ -2838,15 +2824,42 @@ describe('IntentsUseCases', () => {
       .spyOn(AccountsUseCases, 'addCreditsToAccount')
       .mockResolvedValue(err(new ForbiddenError('cap')))
     const updateSpy = jest
-      .spyOn(intentsRepository, 'updateIntent')
-      .mockResolvedValue({ ...intent, status: IntentStatus.OVER_CAP })
+      .spyOn(intentsRepository, 'updateStatusIfConfirmed')
+      .mockResolvedValue(true)
 
     await IntentsUseCases.onConfirmedIntent(intent.id)
 
     // Verify status is specifically OVER_CAP, not COMPLETED
     expect(updateSpy).not.toHaveBeenCalledWith(
-      expect.objectContaining({ status: IntentStatus.COMPLETED }),
+      intent.id,
+      IntentStatus.COMPLETED,
     )
+  })
+
+  it('onConfirmedIntent writes nothing when the intent left CONFIRMED meanwhile', async () => {
+    // A deletion can expire the intent between getById and the credit insert.
+    // The insert then rolls back, and no status write may overwrite EXPIRED.
+    const intent: Intent = {
+      id: '0x11e',
+      userPublicId: user.publicId,
+      status: IntentStatus.CONFIRMED,
+      paymentAmount: 500n,
+      shannonsPerByte: 1n,
+    }
+    jest.spyOn(intentsRepository, 'getById').mockResolvedValue(intent)
+    jest
+      .spyOn(AccountsUseCases, 'addCreditsToAccount')
+      .mockResolvedValue(
+        err(new ConflictError('Intent is no longer confirmed')),
+      )
+    const updateSpy = jest.spyOn(intentsRepository, 'updateIntent')
+    const statusSpy = jest.spyOn(intentsRepository, 'updateStatusIfConfirmed')
+
+    const res = await IntentsUseCases.onConfirmedIntent(intent.id)
+
+    expect(res.isOk()).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(statusSpy).not.toHaveBeenCalled()
   })
 
   // ────────────────────────────────────────────────────────────────────────────

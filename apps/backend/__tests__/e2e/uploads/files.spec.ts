@@ -40,7 +40,7 @@ import { Rabbit } from '../../../src/infrastructure/drivers/rabbit.js'
 import { EventRouter } from '../../../src/infrastructure/eventRouter/index.js'
 import { MAX_RETRIES } from '../../../src/infrastructure/eventRouter/tasks.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
-import { downloadService } from '../../../src/infrastructure/services/download/index.js'
+import { memoryDownloadCache } from '../../../src/infrastructure/services/download/memoryDownloadCache/index.js'
 import { ok } from 'neverthrow'
 
 const files = [
@@ -247,12 +247,8 @@ files.map((file, index) => {
     })
 
     describe('Downloading the file', () => {
-      let handleCacheMock: jest.SpiedFunction<
-        typeof downloadService.handleCache
-      >
-
       it('should be able to retrieve the file', async () => {
-        handleCacheMock = jest.spyOn(downloadService, 'handleCache')
+        const memoryCacheSet = jest.spyOn(memoryDownloadCache, 'set')
         jest.spyOn(ObjectUseCases, 'authorizeDownload').mockResolvedValue(ok())
 
         const downloadResult = await DownloadUseCase.downloadObjectByUser(
@@ -268,11 +264,10 @@ files.map((file, index) => {
         const fileBuffer = Buffer.concat(fileArray)
         expect(fileBuffer).toEqual(rndBuffer)
 
-        expect(handleCacheMock).toHaveBeenCalledWith(
+        expect(memoryCacheSet).toHaveBeenCalledWith(
           cid,
-          expect.any(Object),
-          expect.any(Object),
-          expect.any(BigInt),
+          expect.anything(),
+          BigInt(rndBuffer.length),
         )
       })
 

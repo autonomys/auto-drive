@@ -120,9 +120,15 @@ export const rawListEnv = (raw?: string): string[] =>
     .map((value) => value.trim())
     .filter((value) => value)
 
+export const extensionListEnv = (raw?: string): string[] =>
+  rawListEnv(raw).map((ext) => ext.replace(/^\./, '').toLowerCase())
+
 export const config = {
   postgres: {
     url: env('DATABASE_URL'),
+    // Per-process pool size. 10 is node-postgres's own default, so leaving it
+    // unset keeps the pool exactly as it was before this became configurable.
+    poolMax: positiveIntEnv('PG_POOL_MAX', 10),
   },
   express: {
     port: Number(env('PORT', '3000')),
@@ -646,7 +652,7 @@ export const config = {
     // Maximum total purchased credit balance (in bytes) per account, summed
     // across all active purchased_credits rows.
     // Default: 100 GiB — matches the economic protection design document.
-    maxBytesPerUser: BigInt(
+    maxBytesPerAccount: BigInt(
       env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),
     ),
     // How often (in ms) the credit expiry background job runs.
@@ -709,7 +715,7 @@ export const config = {
         env('WEB3_DEFAULT_ACCOUNT_DOWNLOAD_LIMIT', ONE_HUNDRED_MiB.toString()),
       ),
     },
-    forbiddenExtensions: env('FORBIDDEN_EXTENSIONS', '').split(','),
+    forbiddenExtensions: extensionListEnv(env('FORBIDDEN_EXTENSIONS', '')),
     taskManagerMaxRetries: Number(env('TASK_MANAGER_MAX_RETRIES', '3')),
     downloadInactivityTimeoutMs: Number(
       env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),

@@ -26,14 +26,11 @@ export const composeNodesDataAsFileReadable = async ({
   // Resolve the first batch eagerly, BEFORE the Readable is handed back.
   //
   // Callers pipe this straight into the response, which commits 200 + headers on
-  // the first write. After that a failure is not merely hard to report, it is
-  // invisible: downloadService forks this stream for caching, and stream-fork's
-  // Fork implements _final but not _destroy, so an error here reaches neither
-  // fork and the response hangs until an infrastructure timeout — which is what
-  // the client eventually sees as `INTERNAL_ERROR; received from peer`, with no
-  // status and no S3 error body (issue #815). Resolving the first batch here
-  // means an object that cannot be served at all fails while the caller can
-  // still turn it into a real HTTP status.
+  // the first write. After that a failure can only reset the stream, which the
+  // client sees as `INTERNAL_ERROR; received from peer`, with no status and no
+  // S3 error body (issue #815). Resolving the first batch here means an object
+  // that cannot be served at all fails while the caller can still turn it into
+  // a real HTTP status.
   //
   // It bounds the exposure rather than removing it: chunks beyond the first
   // batch are still fetched mid-stream. What made those fail was the read/commit

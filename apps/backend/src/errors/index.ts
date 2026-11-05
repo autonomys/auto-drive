@@ -114,7 +114,7 @@ export class ForbiddenError extends HttpError {
 }
 
 // 403 Forbidden — the requested purchase would push the account past its
-// per-user credit cap.
+// per-account credit cap.
 //
 // A subclass rather than a bare ForbiddenError for two reasons: callers can tell
 // "no credit headroom" apart from every other 403 without string-matching a

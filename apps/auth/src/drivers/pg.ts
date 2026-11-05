@@ -79,6 +79,38 @@ export const getDatabase = async () => {
   return db
 }
 
+/**
+ * Runs `fn` in a transaction on its own connection. The shared client from
+ * `getDatabase` serves concurrent requests, so a `BEGIN` on it would pull
+ * their queries into this transaction.
+ */
+export const withTransaction = async <T>(
+  fn: (db: pg.Client) => Promise<T>,
+): Promise<T> => {
+  const client = await createDB()
+  // Without a listener, a dropped connection would crash the process. The
+  // failed query rejects as well, so the error reaches the caller.
+  client.on('error', (error) => {
+    logger.error('Transaction connection error', error)
+  })
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError) => {
+      logger.error('Failed to roll back transaction', rollbackError)
+    })
+    throw error
+  } finally {
+    // The outcome is already settled; failing to close must not change it.
+    await client.end().catch((endError) => {
+      logger.error('Failed to close transaction connection', endError)
+    })
+  }
+}
+
 export const closeDatabase = async () => {
   if (db) {
     await db.end()

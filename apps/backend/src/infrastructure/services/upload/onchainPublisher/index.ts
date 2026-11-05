@@ -1,8 +1,8 @@
 import { createLogger } from '../../../drivers/logger.js'
 import { NodesUseCases } from '../../../../core/objects/nodes.js'
 import { createTransactionManager } from './transactionManager.js'
-import { compactAddLength } from '@polkadot/util'
 import { nodesRepository } from '../../../repositories/objects/nodes.js'
+import { compactAddLength } from '../../../../shared/utils/polkadot.js'
 
 const logger = createLogger('upload:onchainPublisher')
 

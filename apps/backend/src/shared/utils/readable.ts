@@ -1,4 +1,4 @@
-import { Readable } from 'stream'
+import { Readable, Transform, pipeline } from 'stream'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('utils:readable')
@@ -26,6 +26,36 @@ export const handleReadableError = (
     })
   }
   return stream
+}
+
+/**
+ * Pass `source` through a stream that fails with `message`, and destroys
+ * `source`, once `timeoutMs` go by without a chunk. The clock starts at the
+ * first chunk, so a slow start is never cut short. A consumer that stops
+ * reading also stops the chunks, so it counts as inactivity too. The clock
+ * keeps running after `source` ends, until readers have taken the last chunk
+ * and the stream is destroyed.
+ */
+export const withInactivityTimeout = (
+  source: Readable,
+  timeoutMs: number,
+  message: string,
+): Readable => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const guarded = new Transform({
+    transform(chunk, _encoding, callback) {
+      clearTimeout(timer)
+      timer = setTimeout(() => guarded.destroy(new Error(message)), timeoutMs)
+      callback(null, chunk)
+    },
+    destroy(error, callback) {
+      clearTimeout(timer)
+      callback(error)
+    },
+  })
+  // Errors reach the caller through `guarded`, which pipeline destroys with them.
+  pipeline(source, guarded, () => {})
+  return guarded
 }
 
 export const createEmptyReadable = (): Readable => {
