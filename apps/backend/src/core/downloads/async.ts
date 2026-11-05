@@ -30,6 +30,22 @@ const createDownload = async (
     return err(new ObjectNotFoundError(`Object with cid=${cid} not found`))
   }
 
+  const activeDownload =
+    await asyncDownloadsRepository.getActiveDownloadByUserAndCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      cid,
+    )
+  if (activeDownload) {
+    logger.info(
+      'Reusing async download id=%s cid=%s (status=%s)',
+      activeDownload.id,
+      cid,
+      activeDownload.status,
+    )
+    return ok(activeDownload)
+  }
+
   const download = await asyncDownloadsRepository.createDownload(
     v4(),
     user.oauthProvider,
