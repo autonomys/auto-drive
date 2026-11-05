@@ -7,6 +7,7 @@ import {
   FileUpload,
   FolderUpload,
   Upload,
+  UploadOptions,
   UploadStatus,
   UploadType,
   FolderTree,
@@ -20,7 +21,6 @@ import { NodesUseCases } from '../objects/nodes.js'
 import { ObjectUseCases } from '../objects/object.js'
 import {
   cidToString,
-  FileUploadOptions,
   MAX_NAME_SIZE,
 } from '@autonomys/auto-dag-data'
 import { CID } from 'multiformats'
@@ -102,7 +102,7 @@ const createFileUpload = async (
   user: UserWithOrganization,
   name: string,
   mimeType: string | null,
-  uploadOptions: FileUploadOptions | null,
+  uploadOptions: UploadOptions | null,
   rootId?: string | null,
   relativeId?: string | null,
 ): Promise<FileUpload> => {
@@ -139,7 +139,7 @@ export const createFolderUpload = async (
   user: UserWithOrganization,
   name: string,
   folderTree: FolderTreeFolder,
-  uploadOptions: FileUploadOptions | null,
+  uploadOptions: UploadOptions | null,
 ): Promise<FolderUpload> => {
   assertFolderTreeNamesFit(folderTree)
 
@@ -167,7 +167,7 @@ const createFileInFolder = async (
   relativeId: string,
   name: string,
   mimeType: string | null,
-  uploadOptions: FileUploadOptions | null = null,
+  uploadOptions: UploadOptions | null = null,
 ): Promise<FileUpload> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
@@ -178,11 +178,20 @@ const createFileInFolder = async (
     throw new Error('Upload is not a folder')
   }
 
+  // Inherit customerReference from parent folder's upload_options when not explicitly provided
+  const effectiveUploadOptions = {
+    ...uploadOptions,
+    ...(upload.upload_options?.customerReference &&
+    !uploadOptions?.customerReference
+      ? { customerReference: upload.upload_options.customerReference }
+      : {}),
+  }
+
   const file = await createFileUpload(
     user,
     name,
     mimeType,
-    uploadOptions,
+    effectiveUploadOptions,
     uploadId,
     relativeId,
   )

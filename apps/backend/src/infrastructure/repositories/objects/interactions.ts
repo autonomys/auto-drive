@@ -10,6 +10,7 @@ type DBInteraction = {
   source: InteractionSource
   cid: string | null
   api_key_id: string | null
+  customer_reference: string | null
   created_at: string | Date
 }
 
@@ -18,6 +19,7 @@ type Interaction = Omit<DBInteraction, 'size' | 'created_at'> & {
   createdAt: Date
   accountId: string
   cid: string | null
+  customerReference: string | null
 }
 
 // A pool, or a client holding an open transaction.
@@ -30,6 +32,7 @@ const mapRows = (rows: DBInteraction[]): Interaction[] => {
     createdAt: new Date(e.created_at),
     accountId: e.account_id,
     cid: e.cid ?? null,
+    customerReference: e.customer_reference ?? null,
   }))
 }
 
@@ -41,12 +44,13 @@ const createInteraction = async (
   source: InteractionSource,
   cid?: string,
   apiKeyId?: string,
+  customerReference?: string,
   executor?: Executor,
 ): Promise<Interaction> => {
   const db = executor ?? (await getDatabase())
 
   const interaction = await db.query<DBInteraction>(
-    'INSERT INTO interactions (id, account_id, type, size, source, cid, api_key_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+    'INSERT INTO interactions (id, account_id, type, size, source, cid, api_key_id, customer_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
     [
       id,
       accountId,
@@ -55,6 +59,7 @@ const createInteraction = async (
       source,
       cid ?? null,
       apiKeyId ?? null,
+      customerReference ?? null,
     ],
   )
 

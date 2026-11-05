@@ -34,15 +34,17 @@ const createInteraction = async (
   source: InteractionSource,
   cid?: string,
   apiKeyId?: string,
+  customerReference?: string,
   executor?: pg.PoolClient,
 ): Promise<string> => {
   logger.debug(
-    'Creating new interaction (accountId=%s, type=%s, size=%d, source=%s, cid=%s)',
+    'Creating new interaction (accountId=%s, type=%s, size=%d, source=%s, cid=%s, customerReference=%s)',
     accountId,
     type,
     size,
     source,
     cid,
+    customerReference,
   )
 
   try {
@@ -63,6 +65,7 @@ const createInteraction = async (
       source,
       cid,
       apiKeyId,
+      customerReference,
       executor,
     )
     logger.info(

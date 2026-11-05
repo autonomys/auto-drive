@@ -277,11 +277,14 @@ const handleFileUploadFinalization = async (
     )
   }
 
+  const customerReference =
+    upload?.upload_options?.customerReference ?? undefined
   await AccountsUseCases.registerInteraction(
     user,
     InteractionType.Upload,
     metadata.totalSize.valueOf(),
     metadata.dataCid,
+    customerReference,
   )
 
   logger.info(

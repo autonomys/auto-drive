@@ -2,7 +2,11 @@ import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
-import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
+import {
+  FolderTreeFolderSchema,
+  uploadOptionsSchema,
+  CUSTOMER_REFERENCE_REGEX,
+} from '@auto-drive/models'
 import { z } from 'zod'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
@@ -10,6 +14,22 @@ import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 
 const logger = createLogger('http:controllers:upload')
+
+const INVALID_CUSTOMER_REFERENCE_ERROR =
+  'Invalid customer reference: must be up to 128 characters and contain only letters, digits, "-", "_", ".", and ":"'
+
+const parseCustomerReference = (
+  req: Request,
+): { valid: true; value: string | undefined } | { valid: false } => {
+  const header = req.headers['x-customer-reference']
+  if (header === undefined) {
+    return { valid: true, value: undefined }
+  }
+  if (typeof header !== 'string' || !CUSTOMER_REFERENCE_REGEX.test(header)) {
+    return { valid: false }
+  }
+  return { valid: true, value: header }
+}
 
 const uploadController = Router()
 
@@ -30,14 +50,34 @@ uploadController.post(
       return
     }
 
+    const customerRefResult = parseCustomerReference(req)
+    if (!customerRefResult.valid) {
+      res.status(400).json({
+        error: INVALID_CUSTOMER_REFERENCE_ERROR,
+      })
+      return
+    }
+
     const safeUploadOptions = z
       .union([uploadOptionsSchema, z.null()])
       .safeParse(uploadOptions)
     if (!safeUploadOptions.success) {
+      const customerRefIssue = safeUploadOptions.error.issues.find((issue) =>
+        issue.path.includes('customerReference'),
+      )
       res.status(400).json({
-        error: 'Invalid upload options',
+        error: customerRefIssue
+          ? customerRefIssue.message
+          : 'Invalid upload options',
       })
       return
+    }
+
+    const effectiveUploadOptions = {
+      ...safeUploadOptions.data,
+      ...(customerRefResult.value
+        ? { customerReference: customerRefResult.value }
+        : {}),
     }
 
     const uploadResult = await handleInternalError(
@@ -45,7 +85,7 @@ uploadController.post(
         user,
         filename,
         mimeType ?? null,
-        safeUploadOptions.data,
+        effectiveUploadOptions,
       ),
       'Failed to create file upload',
     )
@@ -81,6 +121,14 @@ uploadController.post(
       return
     }
 
+    const customerRefResult = parseCustomerReference(req)
+    if (!customerRefResult.valid) {
+      res.status(400).json({
+        error: INVALID_CUSTOMER_REFERENCE_ERROR,
+      })
+      return
+    }
+
     const safeUploadOptions = z
       .union([uploadOptionsSchema, z.null()])
       .safeParse(uploadOptions)
@@ -88,10 +136,22 @@ uploadController.post(
       logger.error('Invalid upload options', {
         error: safeUploadOptions.error,
       })
+      const customerRefIssue = safeUploadOptions.error.issues.find((issue) =>
+        issue.path.includes('customerReference'),
+      )
       res.status(400).json({
-        error: 'Invalid upload options',
+        error: customerRefIssue
+          ? customerRefIssue.message
+          : 'Invalid upload options',
       })
       return
+    }
+
+    const effectiveUploadOptions = {
+      ...safeUploadOptions.data,
+      ...(customerRefResult.value
+        ? { customerReference: customerRefResult.value }
+        : {}),
     }
 
     const upload = await handleInternalError(
@@ -99,7 +159,7 @@ uploadController.post(
         user,
         safeFileTree.data.name,
         safeFileTree.data,
-        safeUploadOptions.data,
+        effectiveUploadOptions,
       ),
       'Failed to create folder upload',
     )
@@ -147,6 +207,14 @@ uploadController.post(
       return
     }
 
+    const customerRefResult = parseCustomerReference(req)
+    if (!customerRefResult.valid) {
+      res.status(400).json({
+        error: INVALID_CUSTOMER_REFERENCE_ERROR,
+      })
+      return
+    }
+
     const safeUploadOptions = z
       .union([uploadOptionsSchema, z.null()])
       .safeParse(uploadOptions)
@@ -154,10 +222,22 @@ uploadController.post(
       logger.error('Invalid upload options', {
         error: safeUploadOptions.error,
       })
+      const customerRefIssue = safeUploadOptions.error.issues.find((issue) =>
+        issue.path.includes('customerReference'),
+      )
       res.status(400).json({
-        error: 'Invalid upload options',
+        error: customerRefIssue
+          ? customerRefIssue.message
+          : 'Invalid upload options',
       })
       return
+    }
+
+    const effectiveUploadOptions = {
+      ...safeUploadOptions.data,
+      ...(customerRefResult.value
+        ? { customerReference: customerRefResult.value }
+        : {}),
     }
 
     const uploadResult = await handleInternalError(
@@ -167,7 +247,7 @@ uploadController.post(
         relativeId,
         name,
         mimeType ?? null,
-        safeUploadOptions.data,
+        effectiveUploadOptions,
       ),
       'Failed to create file in folder',
     )

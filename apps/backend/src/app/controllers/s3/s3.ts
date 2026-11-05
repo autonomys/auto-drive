@@ -23,7 +23,7 @@ import { NextFunction, Request, Response } from 'express'
 import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
-import { UploadOptions } from '@auto-drive/models'
+import { UploadOptions, CUSTOMER_REFERENCE_REGEX } from '@auto-drive/models'
 import {
   CompressionAlgorithm,
   EncryptionAlgorithm,
@@ -79,6 +79,19 @@ const getUploadOptions = (req: Request) => {
   return UploadOptions
 }
 
+const getCustomerReference = (
+  req: Request,
+): { valid: true; value: string | undefined } | { valid: false } => {
+  const header = req.headers['x-amz-meta-customer-reference']
+  if (header === undefined) {
+    return { valid: true, value: undefined }
+  }
+  if (typeof header !== 'string' || !CUSTOMER_REFERENCE_REGEX.test(header)) {
+    return { valid: false }
+  }
+  return { valid: true, value: header }
+}
+
 /**
  * The modification time a client associates with an object, sent as the
  * x-amz-meta-mtime header (rclone uses a float unix-seconds string). Stored and
@@ -104,8 +117,15 @@ const getVersionId = (req: Request): string | undefined => {
 // dedicated paths and must be excluded from the captured userMetadata so they
 // are not double-stored / double-emitted. mtime has its own column; compression
 // and encryption drive the upload options (and round-trip via the IPLD flags);
-// cid is a response-only header the server sets.
-const RESERVED_META_KEYS = new Set(['mtime', 'compression', 'encryption', 'cid'])
+// cid is a response-only header the server sets; customer-reference sets the
+// attribution customer reference.
+const RESERVED_META_KEYS = new Set([
+  'mtime',
+  'compression',
+  'encryption',
+  'cid',
+  'customer-reference',
+])
 
 const headerString = (
   value: string | string[] | undefined,
@@ -921,7 +941,22 @@ export const createMultipartUploadHandler = async (
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const uploadOptions = getUploadOptions(req)
+  const customerRefResult = getCustomerReference(req)
+  if (!customerRefResult.valid) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message:
+        'Invalid customer reference: must be up to 128 characters and contain only letters, digits, "-", "_", ".", and ":"',
+    })
+    return
+  }
+
+  const uploadOptions: UploadOptions = {
+    ...getUploadOptions(req),
+    ...(customerRefResult.value
+      ? { customerReference: customerRefResult.value }
+      : {}),
+  }
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
   const metadata = getObjectMetadata(req)
@@ -1281,7 +1316,22 @@ export const putObjectHandler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
 
-  const uploadOptions = getUploadOptions(req)
+  const customerRefResult = getCustomerReference(req)
+  if (!customerRefResult.valid) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidArgument',
+      Message:
+        'Invalid customer reference: must be up to 128 characters and contain only letters, digits, "-", "_", ".", and ":"',
+    })
+    return
+  }
+
+  const uploadOptions: UploadOptions = {
+    ...getUploadOptions(req),
+    ...(customerRefResult.value
+      ? { customerReference: customerRefResult.value }
+      : {}),
+  }
   const { bucket, key } = parseBucketAndKey(req.params.key)
 
   const metadata = getObjectMetadata(req)

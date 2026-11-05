@@ -1,6 +1,10 @@
-import { FileUploadOptions } from '@autonomys/auto-dag-data'
 import { getDatabase } from '../../drivers/pg.js'
-import { FolderTreeFolder, UploadStatus, UploadType } from '@auto-drive/models'
+import {
+  FolderTreeFolder,
+  UploadOptions,
+  UploadStatus,
+  UploadType,
+} from '@auto-drive/models'
 
 export type UploadEntry = {
   id: string
@@ -13,7 +17,7 @@ export type UploadEntry = {
   relative_id: string | null
   oauth_provider: string
   oauth_user_id: string
-  upload_options: FileUploadOptions | null
+  upload_options: UploadOptions | null
   // Always selected (every read is SELECT *) but previously untyped. Every status
   // transition that anything waits on sets it explicitly — updateUploadEntry,
   // claimUploadForCompletion, releaseUploadCompletionClaim,
@@ -40,7 +44,7 @@ export const createUploadEntry = async (
   relative_id: string | null,
   oauth_provider: string,
   oauth_user_id: string,
-  upload_options: FileUploadOptions | null,
+  upload_options: UploadOptions | null,
 ): Promise<UploadEntry> => {
   const db = await getDatabase()
 

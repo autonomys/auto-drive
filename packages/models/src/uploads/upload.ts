@@ -39,8 +39,10 @@ export type UploadEntry = {
   relative_id: string | null;
   oauth_provider: string;
   oauth_user_id: string;
-  upload_options: FileUploadOptions | null;
+  upload_options: UploadOptions | null;
 };
+
+export const CUSTOMER_REFERENCE_REGEX = /^[a-zA-Z0-9._:-]{1,128}$/;
 
 export const uploadOptionsSchema = z.object({
   compression: z
@@ -54,6 +56,13 @@ export const uploadOptionsSchema = z.object({
       algorithm: z.enum([EncryptionAlgorithm.AES_256_GCM]),
       chunkSize: z.number().optional(),
     })
+    .optional(),
+  customerReference: z
+    .string()
+    .regex(
+      CUSTOMER_REFERENCE_REGEX,
+      'Invalid customer reference: must be up to 128 characters and contain only letters, digits, "-", "_", ".", and ":"',
+    )
     .optional(),
 });
 
@@ -75,7 +84,7 @@ export const fileUploadSchema = z.object({
 });
 
 export type FileUpload = z.infer<typeof fileUploadSchema> & {
-  uploadOptions: FileUploadOptions | null;
+  uploadOptions: UploadOptions | null;
 };
 
 export const mapModelToTable = (upload: Upload): UploadEntry => {
