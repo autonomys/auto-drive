@@ -225,6 +225,19 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   return mapRows(result.rows)
 }
 
+// A buyer's intents in any of the given statuses.
+const getByUserAndStatuses = async (
+  userPublicId: string,
+  statuses: IntentStatus[],
+): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE user_public_id = $1 AND status = ANY($2::text[])',
+    [userPublicId, statuses],
+  )
+  return mapRows(result.rows)
+}
+
 // Returns PENDING intents whose price-lock window has passed and that cleanup
 // should reclaim.
 //
@@ -352,6 +365,7 @@ export const intentsRepository = {
   confirmIntentIfPending,
   setTxHashIfPending,
   getByStatus,
+  getByUserAndStatuses,
   getExpiredPendingIntents,
   expireIntentIfPending,
   updateStatusIfConfirmed,

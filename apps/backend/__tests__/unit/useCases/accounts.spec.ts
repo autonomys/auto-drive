@@ -12,10 +12,12 @@ import { accountsRepository } from '../../../src/infrastructure/repositories/use
 import { interactionsRepository } from '../../../src/infrastructure/repositories/objects/interactions.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
-import { AccountModel, UserRole } from '@auto-drive/models'
+import { AccountModel, OrganizationRole, UserRole } from '@auto-drive/models'
+import { err, ok } from 'neverthrow'
 import {
   ConflictError,
   ForbiddenError,
+  NotFoundError,
   ObjectNotFoundError,
 } from '../../../src/errors/index.js'
 
@@ -66,6 +68,7 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
@@ -121,6 +124,7 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
       }
 
       jest
@@ -147,6 +151,7 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
       }
 
       const initSpy = jest
@@ -174,6 +179,7 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
       }
 
       const initSpy = jest
@@ -192,6 +198,7 @@ describe('AccountsUseCases', () => {
       id: 'acc123',
       organizationId: 'org123',
       model: AccountModel.OneOff,
+      isPartner: false,
       uploadLimit: 1000,
       downloadLimit: 1000,
     }
@@ -352,6 +359,7 @@ describe('AccountsUseCases', () => {
         uploadLimit: 10,
         downloadLimit: 10,
         model: AccountModel.OneOff,
+        isPartner: false,
       }
       const member = {
         publicId: 'pub1',
@@ -392,6 +400,7 @@ describe('AccountsUseCases', () => {
         uploadLimit: 10,
         downloadLimit: 10,
         model: AccountModel.OneOff,
+        isPartner: false,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
@@ -447,6 +456,7 @@ describe('AccountsUseCases', () => {
       uploadLimit: 10,
       downloadLimit: 10,
       model: AccountModel.OneOff,
+      isPartner: false,
     }
 
     beforeEach(() => {
@@ -459,6 +469,9 @@ describe('AccountsUseCases', () => {
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(err(new NotFoundError('Organization not found')))
     })
 
     it('should reject non-admin executors', async () => {
@@ -484,7 +497,27 @@ describe('AccountsUseCases', () => {
         pendingUploadCredits: 15,
         pendingDownloadCredits: 10,
         members: [],
+        organization: null,
       })
+    })
+
+    it('should include the organization with its member roles', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([])
+      const organization = {
+        id: 'org1',
+        name: 'Partner',
+        archivedAt: null,
+        members: ['pub1'],
+        memberships: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
+      }
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(ok(organization))
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'acc1')
+
+      expect(result._unsafeUnwrap().organization).toEqual(organization)
     })
 
     it('should not treat an organization ID as an account ID', async () => {
@@ -509,6 +542,7 @@ describe('AccountsUseCases', () => {
       uploadLimit: 10,
       downloadLimit: 10,
       model: AccountModel.OneOff,
+      isPartner: false,
     }
 
     beforeEach(() => {
@@ -521,6 +555,9 @@ describe('AccountsUseCases', () => {
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(err(new NotFoundError('Organization not found')))
     })
 
     it('should reject non-admin executors', async () => {
@@ -597,6 +634,7 @@ describe('AccountsUseCases', () => {
                 uploadLimit: 10,
                 downloadLimit: 10,
                 model: AccountModel.OneOff,
+                isPartner: false,
               }
             : null,
         )
@@ -642,6 +680,7 @@ describe('AccountsUseCases', () => {
         uploadLimit: 100,
         downloadLimit: 50,
         model: AccountModel.OneOff,
+        isPartner: false,
       })
       jest
         .spyOn(
@@ -665,6 +704,7 @@ describe('AccountsUseCases', () => {
           uploadLimit: 100,
           downloadLimit: 50,
           model: AccountModel.OneOff,
+          isPartner: false,
           pendingUploadCredits: 100,
           pendingDownloadCredits: 50,
         },
@@ -678,6 +718,7 @@ describe('AccountsUseCases', () => {
         uploadLimit: 100,
         downloadLimit: 50,
         model: AccountModel.OneOff,
+        isPartner: false,
       }
       jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
         { publicId: 'pub1', organizationId: 'org1' },
@@ -724,6 +765,7 @@ describe('AccountsUseCases', () => {
           uploadLimit: 100,
           downloadLimit: 50,
           model: AccountModel.OneOff,
+          isPartner: false,
         }))
       jest
         .spyOn(
