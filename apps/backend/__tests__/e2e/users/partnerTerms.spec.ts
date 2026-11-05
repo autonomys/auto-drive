@@ -63,10 +63,11 @@ describe('Partner account terms', () => {
   ) => {
     const db = await getDatabase()
     const id = `intent-${uuidv4()}`
+    // Confirmed, since addCreditsToAccount only credits a confirmed intent.
     await db.query(
       `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at, account_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, userPublicId, IntentStatus.COMPLETED, '1', new Date(), accountId],
+      [id, userPublicId, IntentStatus.CONFIRMED, '1', new Date(), accountId],
     )
     return AccountsUseCases.addCreditsToAccount(
       { id, userPublicId, accountId },

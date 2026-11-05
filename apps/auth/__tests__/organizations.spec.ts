@@ -59,9 +59,11 @@ describe('OrganizationsUseCases membership', () => {
     expect(current.id).toBe(partnerId)
     expect(await isArchived(personal.id)).toBe(true)
     const partner = await OrganizationsUseCases.getOrganization(partnerId)
-    expect(partner.members).toEqual([
+    expect(partner.memberships).toEqual([
       { publicId: user.publicId, role: OrganizationRole.Member },
     ])
+    // Backends from before roles read `members` as public IDs.
+    expect(partner.members).toEqual([user.publicId])
     const [change] = await OrganizationsUseCases.getMembershipChanges(partnerId)
     expect(change).toMatchObject({
       publicId: user.publicId,
@@ -92,7 +94,7 @@ describe('OrganizationsUseCases membership', () => {
     ).rejects.toBeInstanceOf(OrganizationConflictError)
 
     const partner = await OrganizationsUseCases.getOrganization(partnerId)
-    expect(partner.members).toEqual([
+    expect(partner.memberships).toEqual([
       { publicId: user.publicId, role: OrganizationRole.Member },
     ])
     expect(
@@ -155,7 +157,7 @@ describe('OrganizationsUseCases membership', () => {
     })
 
     const partner = await OrganizationsUseCases.getOrganization(partnerId)
-    expect(partner.members[0].role).toBe(OrganizationRole.Admin)
+    expect(partner.memberships[0].role).toBe(OrganizationRole.Admin)
     const [latest] = await OrganizationsUseCases.getMembershipChanges(partnerId)
     expect(latest).toMatchObject({
       fromOrganizationId: partnerId,
@@ -195,7 +197,7 @@ describe('OrganizationsUseCases membership', () => {
     const current = await OrganizationsUseCases.getOrganizationByUser(user)
     expect(current.id).toBe(personal.id)
     const restored = await OrganizationsUseCases.getOrganization(personal.id)
-    expect(restored.members).toEqual([
+    expect(restored.memberships).toEqual([
       { publicId: user.publicId, role: OrganizationRole.Admin },
     ])
     const [change] = await OrganizationsUseCases.getMembershipChanges(partnerId)
@@ -251,7 +253,7 @@ describe('OrganizationsUseCases membership', () => {
       personal.id,
     )
 
-    expect(organization.members).toEqual([
+    expect(organization.memberships).toEqual([
       { publicId: user.publicId, role: OrganizationRole.Admin },
     ])
   })

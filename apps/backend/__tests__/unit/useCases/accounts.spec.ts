@@ -17,6 +17,7 @@ import { AccountModel, OrganizationRole, UserRole } from '@auto-drive/models'
 import { err, ok } from 'neverthrow'
 import {
   BadRequestError,
+  ConflictError,
   ForbiddenError,
   NotFoundError,
   ObjectNotFoundError,
@@ -357,6 +358,21 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
 
+    it('should report an intent that is no longer confirmed as a conflict', async () => {
+      const { err: neverthrowErr } = await import('neverthrow')
+
+      jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowErr('intent_not_confirmed' as const))
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-expired', userPublicId: 'pub1' },
+        BigInt(1),
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+    })
+
     it('should work for any account model (not restricted to OneOff)', async () => {
       const { ok: neverthrowOk } = await import('neverthrow')
       const monthlyAccount = { ...account, model: AccountModel.Monthly }
@@ -627,7 +643,8 @@ describe('AccountsUseCases', () => {
         id: 'org1',
         name: 'Partner',
         archivedAt: null,
-        members: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
+        members: ['pub1'],
+        memberships: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
       }
       jest
         .spyOn(AuthManager, 'getOrganization')
@@ -877,6 +894,42 @@ describe('AccountsUseCases', () => {
       expect(Object.keys(accounts)).toEqual(['pub1', 'pub2'])
       expect(accounts.pub1.id).toBe('acc1')
       expect(accounts.pub2.id).toBe('acc1')
+    })
+
+    // The admin panel lists a page in the order of this response.
+    it('should keep the order of the requested public IDs', async () => {
+      jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+        { publicId: 'pub-b', organizationId: 'org-b' },
+        { publicId: 'pub-a', organizationId: 'org-a' },
+      ] as any)
+      jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockImplementation(async (organizationId) => ({
+          id: `acc-${organizationId}`,
+          organizationId,
+          uploadLimit: 100,
+          downloadLimit: 50,
+          model: AccountModel.OneOff,
+          isPartner: false,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
+        }))
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub-a',
+        'pub-b',
+      ])
+
+      expect(Object.keys(result._unsafeUnwrap())).toEqual(['pub-a', 'pub-b'])
     })
   })
 })

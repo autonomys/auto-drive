@@ -24,6 +24,7 @@ import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
   BadRequestError,
+  ConflictError,
   ForbiddenError,
   ObjectNotFoundError,
   PaymentRequiredError,
@@ -282,11 +283,15 @@ const getUserListAccount = async (
   const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
   const accountInfos = await getAccountInfosByOrganization(users)
 
+  // In request order: auth returns users unordered, and the admin panel lists
+  // a page in the order of this response.
+  const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
   return ok(
     Object.fromEntries(
-      users.flatMap((u) => {
-        const info = u.organizationId && accountInfos.get(u.organizationId)
-        return info ? [[u.publicId, info]] : []
+      userPublicIds.flatMap((publicId) => {
+        const organizationId = usersByPublicId.get(publicId)?.organizationId
+        const info = organizationId && accountInfos.get(organizationId)
+        return info ? [[publicId, info]] : []
       }),
     ),
   )
@@ -435,7 +440,7 @@ const registerInteraction = async (
 const addCreditsToAccount = async (
   intent: Pick<Intent, 'id' | 'userPublicId' | 'accountId'>,
   credits: bigint,
-): Promise<Result<void, ForbiddenError>> => {
+): Promise<Result<void, ForbiddenError | ConflictError>> => {
   // Intents created before account_id was recorded go to the buyer's current
   // account.
   const account =
@@ -451,10 +456,11 @@ const addCreditsToAccount = async (
     Date.now() + terms.expiryDays * 24 * 60 * 60 * 1000,
   )
 
-  // Atomically check the per-account cap and insert inside a single transaction
-  // protected by a per-account advisory lock. This prevents two concurrent
-  // onConfirmedIntent calls for different intents from both passing the cap
-  // check and both inserting, which would push the account over the cap.
+  // Atomically check the per-account cap, insert and complete the intent inside
+  // a single transaction protected by a per-account advisory lock. This
+  // prevents two concurrent onConfirmedIntent calls for different intents from
+  // both passing the cap check and both inserting, which would push the account
+  // over the cap.
   const result =
     await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
       {
@@ -470,6 +476,9 @@ const addCreditsToAccount = async (
     )
 
   if (result.isErr()) {
+    if (result.error === 'intent_not_confirmed') {
+      return err(new ConflictError('Intent is no longer confirmed'))
+    }
     logger.warn(
       'Purchase would exceed per-account cap (accountId=%s, adding=%d, cap=%d)',
       accountId,

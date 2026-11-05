@@ -83,19 +83,23 @@ const getOrganization = async (
     throw new OrganizationNotFoundError('Organization not found')
   }
 
-  const members =
+  const memberships = (
     await organizationMembersRepository.getOrganizationMemberships(
       organizationId,
     )
+  ).map((member) => ({
+    publicId: deriveUserPublicId(member.oauth_provider, member.oauth_user_id),
+    role: organizationRole(member),
+  }))
 
   return {
     id: organization.id,
     name: organization.name,
     archivedAt: organization.archived_at?.toISOString() ?? null,
-    members: members.map((member) => ({
-      publicId: deriveUserPublicId(member.oauth_provider, member.oauth_user_id),
-      role: organizationRole(member),
-    })),
+    // Kept as public IDs: a backend from before roles compares them as
+    // strings, so changing them would break it during a deploy or rollback.
+    members: memberships.map((member) => member.publicId),
+    memberships,
   }
 }
 

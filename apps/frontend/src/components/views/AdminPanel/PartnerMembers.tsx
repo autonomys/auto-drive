@@ -164,7 +164,7 @@ export const PartnerMembers = ({
             </TableHeadRow>
           </TableHead>
           <TableBody>
-            {organization.members.map((member) => (
+            {organization.memberships.map((member) => (
               <TableBodyRow key={member.publicId}>
                 <TableBodyCell>
                   <CopiableText
@@ -213,7 +213,7 @@ export const PartnerMembers = ({
                 </TableBodyCell>
               </TableBodyRow>
             ))}
-            {organization.members.length === 0 && (
+            {organization.memberships.length === 0 && (
               <TableBodyRow>
                 <TableBodyCell
                   colSpan={4}

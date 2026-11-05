@@ -545,7 +545,7 @@ export const createApiService = ({
   ): Promise<void> =>
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
-      { method: 'PATCH', body: { role } },
+      { method: 'PUT', body: { role } },
     ),
   /** Admin: removes a member, who returns to their personal organization. */
   removeOrganizationMember: (
