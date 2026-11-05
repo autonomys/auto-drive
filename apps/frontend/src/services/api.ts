@@ -3,6 +3,7 @@ import {
   AccountInfo,
   AccountInfoWithUser,
   AccountModel,
+  AccountTermsChange,
   AdminAccountDetails,
   OrganizationMembershipChange,
   OrganizationRole,
@@ -561,6 +562,11 @@ export const createApiService = ({
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/membership-changes`,
     ),
+  /** Admin: every change to an account's terms, newest first. */
+  getAccountTermsChanges: (accountId: string): Promise<AccountTermsChange[]> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/terms-changes`,
+    ),
   /** Admin: each user's current account ID, keyed by publicId. */
   adminGetAccountIdsByUsers: async (
     publicIds: string[],
@@ -700,6 +706,12 @@ export const createApiService = ({
     model: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
+    // Credit terms left out are kept; null clears an override.
+    terms: {
+      maxPurchasedBytes?: number | null;
+      creditExpiryDays?: number | null;
+      reason?: string;
+    } = {},
   ): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -713,6 +725,7 @@ export const createApiService = ({
         uploadLimit,
         downloadLimit,
         accountId,
+        ...terms,
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -722,7 +735,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
   },
   publishObject: async (cid: string): Promise<string> => {
