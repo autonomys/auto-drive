@@ -221,7 +221,10 @@ const getPendingCreditsByAccountAndType = async (
     const purchased = await purchasedCreditsRepository.getRemainingCredits(
       account.id,
     )
-    return freeRemaining + Number(purchased.uploadBytesRemaining)
+    // A free allowance spent beyond its limit (the limit was lowered after the
+    // uploads) counts as zero, as in registerInteraction, so it can't hide
+    // purchased bytes from the upload gate.
+    return Math.max(0, freeRemaining) + Number(purchased.uploadBytesRemaining)
   }
 
   return freeRemaining

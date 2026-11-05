@@ -157,6 +157,29 @@ describe('Partner account terms', () => {
       expect(uploadBytesRemaining).toBe(0n)
     })
 
+    it('offers all purchased bytes after free uploads on a lowered allowance', async () => {
+      // A partner created before this release, with a free allowance it used.
+      const { member, account } = await createPartner()
+      const db = await getDatabase()
+      await db.query('UPDATE accounts SET upload_limit = 100 WHERE id = $1', [
+        account.id,
+      ])
+      await AccountsUseCases.registerInteraction(
+        member,
+        InteractionType.Upload,
+        60n,
+      )
+      expect((await setTerms(account.id, {})).isOk()).toBe(true)
+      await grant(account.id, member.publicId, 100n)
+
+      expect(
+        await AccountsUseCases.getPendingCreditsByUserAndType(
+          member,
+          InteractionType.Upload,
+        ),
+      ).toBe(100)
+    })
+
     it('rejects an upload when nothing has been purchased', async () => {
       const { member } = await createPartner()
 
