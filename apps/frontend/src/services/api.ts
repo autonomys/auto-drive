@@ -2,6 +2,7 @@ import { AuthProvider, createAutoDriveApi } from '@autonomys/auto-drive';
 import {
   AccountInfo,
   AccountInfoWithUser,
+  AccountUsageSummary,
   AccountModel,
   AccountTermsChange,
   AdminAccountDetails,
@@ -25,6 +26,7 @@ import {
   UsdcAvailability,
   UsdcPaymentsStatus,
   UsdcPaymentTarget,
+  UsageReport,
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
@@ -566,6 +568,59 @@ export const createApiService = ({
   getAccountTermsChanges: (accountId: string): Promise<AccountTermsChange[]> =>
     adminRequest(
       `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/terms-changes`,
+    ),
+  /** An account's usage over [from, to), for its members and admins. */
+  getUsageReport: (
+    accountId: string,
+    from: string,
+    to: string,
+  ): Promise<UsageReport> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/${encodeURIComponent(accountId)}/usage-report?${new URLSearchParams({ from, to })}`,
+    ),
+  /**
+   * Saves a usage export as a file: the report as JSON, one of its tables as
+   * CSV, or every interaction behind it.
+   */
+  downloadUsageExport: async (
+    accountId: string,
+    path: 'usage-report' | 'usage-report/interactions',
+    params: Record<string, string>,
+    fileName: string,
+  ): Promise<void> => {
+    const session = await getAuthSession();
+    if (!session?.authProvider || !session.accessToken) {
+      throw new Error('No session');
+    }
+
+    const response = await fetch(
+      `${apiBaseUrl}/accounts/${encodeURIComponent(accountId)}/${path}?${new URLSearchParams(params)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Auth-Provider': session.authProvider,
+        },
+      },
+    );
+    if (!response.ok) {
+      throw await toApiError(response, `Export failed: ${response.statusText}`);
+    }
+
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
+  /** Admin: headline usage for each account active in [from, to). */
+  adminGetAccountUsage: (
+    from: string,
+    to: string,
+    partnersOnly: boolean,
+  ): Promise<AccountUsageSummary[]> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/usage?${new URLSearchParams({ from, to, partnersOnly: String(partnersOnly) })}`,
     ),
   /** Admin: each user's current account ID, keyed by publicId. */
   adminGetAccountIdsByUsers: async (

@@ -191,7 +191,7 @@ const RATE_DECIMALS = 6;
 const toBigInt = (value: string | null): bigint | null =>
   value === null ? null : BigInt(value);
 
-const formatAi3 = (shannons: bigint): string =>
+export const formatAi3 = (shannons: bigint): string =>
   `${shannonsToAi3(shannons, { trimTrailingZeros: true })} AI3`;
 
 export const describePayment = (batch: PaymentFields) => {
