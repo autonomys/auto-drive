@@ -190,9 +190,10 @@ const createFileInFolder = async (
   return file
 }
 
-// Serialises drains per upload_id: concurrent runs would race on the shared
-// last_processed_part_index cursor and double-process or skip chunks.
-// In-process only — does not serialise across multiple server processes.
+// Queues work per upload_id within this process. Correctness across processes
+// comes from the row lock in withFileProcessingLock; this queue keeps
+// concurrent requests for one upload from each holding a pool connection while
+// they wait for that lock.
 const drainLocks = new Map<string, Promise<unknown>>()
 
 const withDrainLock = async <T>(
@@ -212,52 +213,12 @@ const withDrainLock = async <T>(
   }
 }
 
-// Processes the contiguous run of stored chunks from last_processed_part_index
+// Processes the contiguous run of stored parts from last_processed_part_index
 // + 1, stopping at the first missing index (parts may arrive out of order).
-// Caller must hold withDrainLock: it reads and advances the shared cursor.
 const drainLoop = async (uploadId: string): Promise<void> => {
-  let hasMore = true
-  while (hasMore) {
-    const info =
-      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
-        uploadId,
-      )
-    if (!info) {
-      throw new Error('File processing info not found')
-    }
-    const next =
-      info.last_processed_part_index == null
-        ? 0
-        : info.last_processed_part_index + 1
-    const part = await filePartsRepository.getChunkByUploadIdAndPartIndex(
-      uploadId,
-      next,
-    )
-    if (!part) {
-      hasMore = false
-    } else {
-      await UploadFileProcessingUseCase.processChunk(uploadId, part.data, next)
-    }
-  }
-}
-
-// Throws if any stored part sits beyond the processed cursor. Such a gap would
-// make getUploadFilePartsSize count bytes that were never written to the IPLD
-// tree, so the assembled object's size would not match its content.
-// Caller must hold withDrainLock so the cursor read is stable.
-const assertNoUnprocessedParts = async (uploadId: string): Promise<void> => {
-  const info =
-    await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(uploadId)
-  const lastProcessed = info?.last_processed_part_index ?? -1
-  // Index-only query: avoids loading the (potentially multi-GB) data column.
-  const unprocessed = await filePartsRepository.getPartIndicesGreaterThan(
-    uploadId,
-    lastProcessed,
-  )
-  if (unprocessed.length > 0) {
-    throw new BadRequestError(
-      `Cannot complete upload: parts stored but not processed (gap in sequence) at part_index=[${unprocessed.join(',')}]`,
-    )
+  let processed = true
+  while (processed) {
+    processed = await UploadFileProcessingUseCase.processNextPart(uploadId)
   }
 }
 
@@ -280,44 +241,53 @@ const uploadChunk = async (
   }
   await checkPermissions(upload, user)
 
-  // Guard, store and drain run under one lock so concurrent uploads of the
-  // same part_index cannot both read a pre-processing cursor and race the
-  // store against the drain. Serialises per upload_id; distinct uploads stay
-  // parallel.
+  // The guard and store run under the upload's row lock, so the cursor they
+  // check cannot move until the part is stored, whichever process is draining.
+  // Serialises per upload_id; distinct uploads stay parallel.
   await withDrainLock(uploadId, async () => {
-    const info =
-      await fileProcessingInfoRepository.getFileProcessingInfoByUploadId(
-        uploadId,
-      )
-    const lastProcessed = info?.last_processed_part_index ?? -1
+    const stored = await UploadFileProcessingUseCase.withFileProcessingLock(
+      uploadId,
+      async (client, info) => {
+        const lastProcessed = info.last_processed_part_index ?? -1
 
-    // An already-processed part is immutable — the streaming model cannot
-    // replace bytes already in the tree. An identical re-upload is a no-op; a
-    // divergent one is rejected rather than left inconsistent with the stored
-    // object (whose CID still reflects the original bytes).
-    if (index <= lastProcessed) {
-      const existing = await filePartsRepository.getChunkByUploadIdAndPartIndex(
-        uploadId,
-        index,
-      )
-      if (existing && Buffer.compare(existing.data, chunkData) !== 0) {
-        throw new BadRequestError(
-          `Cannot replace already-processed part ${index} with different content`,
+        // An already-processed part is immutable — the streaming model cannot
+        // replace bytes already in the tree. An identical re-upload is a no-op;
+        // a divergent one is rejected rather than left inconsistent with the
+        // stored object (whose CID still reflects the original bytes).
+        if (index <= lastProcessed) {
+          const existing =
+            await filePartsRepository.getChunkByUploadIdAndPartIndex(
+              uploadId,
+              index,
+              client,
+            )
+          if (existing && Buffer.compare(existing.data, chunkData) !== 0) {
+            throw new BadRequestError(
+              `Cannot replace already-processed part ${index} with different content`,
+            )
+          }
+          return false
+        }
+
+        // Stored at its declared position (PK is upload_id, part_index), so
+        // arrival order does not matter; the drain then processes whatever run
+        // is ready.
+        await filePartsRepository.addChunk(
+          {
+            upload_id: uploadId,
+            part_index: index,
+            data: chunkData,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+          client,
         )
-      }
-      return
+        return true
+      },
+    )
+    if (stored) {
+      await drainLoop(uploadId)
     }
-
-    // Stored at its declared position (PK is upload_id, part_index), so arrival
-    // order does not matter; the drain then processes whatever run is ready.
-    await filePartsRepository.addChunk({
-      upload_id: uploadId,
-      part_index: index,
-      data: chunkData,
-      created_at: new Date(),
-      updated_at: new Date(),
-    })
-    await drainLoop(uploadId)
   })
 }
 
@@ -447,16 +417,12 @@ const completeUpload = async (
     (await uploadsRepository.getUploadEntryById(uploadId)) ?? upload
 
   try {
-    // FILE uploads: drain any not-yet-processed chunks and reject on a gap before
-    // finalising. Folder uploads have no file_processing_info row and finalise
-    // via processFolderUpload instead. Both steps share one lock; the lockless
-    // helpers are used because the lock-acquiring path would deadlock here
-    // (withDrainLock is not reentrant).
+    // FILE uploads: drain any not-yet-processed chunks before finalising; the
+    // gap check runs inside completeFileProcessing, under the same row lock as
+    // the derivation. Folder uploads have no file_processing_info row and
+    // finalise via processFolderUpload instead.
     if (claimedUpload.type === UploadType.FILE) {
-      await withDrainLock(uploadId, async () => {
-        await drainLoop(uploadId)
-        await assertNoUnprocessedParts(uploadId)
-      })
+      await withDrainLock(uploadId, () => drainLoop(uploadId))
     }
 
     const cid =

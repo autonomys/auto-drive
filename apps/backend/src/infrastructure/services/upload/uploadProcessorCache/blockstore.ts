@@ -7,16 +7,21 @@ import {
 import { Pair } from 'interface-blockstore'
 import { AwaitIterable } from 'interface-store'
 import { CID } from 'multiformats/cid'
+import pg from 'pg'
 import { blockstoreRepository } from '../../../repositories/uploads/index.js'
 import { BaseBlockstore } from 'blockstore-core'
 
 export class MultiUploadBlockstore implements BaseBlockstore {
-  constructor(private readonly uploadId: string) {}
+  constructor(
+    private readonly uploadId: string,
+    private readonly client?: pg.PoolClient,
+  ) {}
 
   async *getFilteredMany(nodeType: MetadataType): AwaitIterable<CID> {
     const blockstore = await blockstoreRepository.getByType(
       this.uploadId,
       nodeType,
+      this.client,
     )
 
     for (const entry of blockstore) {
@@ -25,7 +30,11 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async has(key: Pair['cid']): Promise<boolean> {
-    return blockstoreRepository.hasCid(this.uploadId, cidToString(key))
+    return blockstoreRepository.hasCid(
+      this.uploadId,
+      cidToString(key),
+      this.client,
+    )
   }
 
   async put(cid: Pair['cid'], data: Uint8Array): Promise<Pair['cid']> {
@@ -38,6 +47,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
       decodedData.type,
       size,
       Buffer.from(data),
+      this.client,
     )
 
     return cid
@@ -53,6 +63,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
     const block = await blockstoreRepository.getByCid(
       this.uploadId,
       cidToString(key),
+      this.client,
     )
 
     return Buffer.from(block!.data)
@@ -71,6 +82,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
     await blockstoreRepository.deleteBlockstoreEntry(
       this.uploadId,
       cidToString(key),
+      this.client,
     )
   }
 
@@ -86,6 +98,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   async *getAll(): AwaitIterable<Pair> {
     const blocks = await blockstoreRepository.getBlockstoreEntries(
       this.uploadId,
+      this.client,
     )
 
     for (const block of blocks) {
@@ -99,6 +112,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   async *getAllKeys(): AsyncIterable<Pair['cid']> {
     const blocks = await blockstoreRepository.getBlockstoreEntriesWithoutData(
       this.uploadId,
+      this.client,
     )
 
     for (const block of blocks) {
@@ -110,6 +124,7 @@ export class MultiUploadBlockstore implements BaseBlockstore {
     const block = await blockstoreRepository.getByCIDWithoutData(
       this.uploadId,
       cidToString(key),
+      this.client,
     )
 
     return BigInt(block!.node_size).valueOf()

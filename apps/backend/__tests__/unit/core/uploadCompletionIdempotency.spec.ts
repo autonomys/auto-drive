@@ -224,7 +224,7 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .mockImplementation(async (entry) => entry)
     jest.spyOn(EventRouter, 'publish').mockReturnValue()
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockResolvedValue({
         upload_id: upload.id,
         last_processed_part_index: 0,
@@ -293,9 +293,9 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
     const release = jest
       .spyOn(uploadsRepository, 'releaseUploadCompletionClaim')
       .mockResolvedValue(undefined)
-    // A FILE upload drains its parts first; both helpers read the same cursor.
+    // A FILE upload drains its parts first.
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockResolvedValue({
         upload_id: upload.id,
         last_processed_part_index: 0,
@@ -351,7 +351,7 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .mockImplementation(async (entry) => entry)
     jest.spyOn(EventRouter, 'publish').mockReturnValue()
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockResolvedValue({
         upload_id: upload.id,
         last_processed_part_index: 0,
@@ -397,7 +397,7 @@ describe('UploadsUseCases.completeUpload idempotency', () => {
       .spyOn(uploadsRepository, 'updateUploadEntry')
       .mockImplementation(async (entry) => entry)
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockResolvedValue({
         upload_id: upload.id,
         last_processed_part_index: 0,

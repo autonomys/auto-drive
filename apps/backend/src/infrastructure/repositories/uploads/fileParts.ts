@@ -1,4 +1,8 @@
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
+
+// A pool, or a client holding an open transaction.
+type Executor = pg.Pool | pg.PoolClient
 
 interface FilePart {
   upload_id: string
@@ -10,8 +14,11 @@ interface FilePart {
 
 // UPSERT, not INSERT: re-uploading the same PartNumber must replace the stored
 // bytes rather than fail on the (upload_id, part_index) primary key.
-const addChunk = async (part: FilePart): Promise<FilePart> => {
-  const db = await getDatabase()
+const addChunk = async (
+  part: FilePart,
+  executor?: Executor,
+): Promise<FilePart> => {
+  const db = executor ?? (await getDatabase())
 
   return db
     .query<FilePart>(
@@ -38,8 +45,9 @@ const getChunksByUploadId = async (uploadId: string): Promise<FilePart[]> => {
 const getChunkByUploadIdAndPartIndex = async (
   uploadId: string,
   partIndex: number,
+  executor?: Executor,
 ): Promise<FilePart | null> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   return db
     .query<FilePart>(
@@ -54,8 +62,9 @@ const getChunkByUploadIdAndPartIndex = async (
 const getPartIndicesGreaterThan = async (
   uploadId: string,
   index: number,
+  executor?: Executor,
 ): Promise<number[]> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   return db
     .query<{ part_index: number }>(
@@ -69,8 +78,9 @@ const getPartIndicesGreaterThan = async (
 
 const getUploadFilePartsSize = async (
   uploadId: string,
+  executor?: Executor,
 ): Promise<bigint | null> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   return db
     .query<{
