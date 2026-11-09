@@ -21,18 +21,18 @@ const autoFilesApi = createAutoFilesApi(
  */
 export const isRetrievableFromGateway = async (
   cid: string,
-  totalSize: bigint | number = 0n,
+  totalSize: bigint,
 ): Promise<boolean> => {
-  const size = BigInt(totalSize)
   // For an empty object there is nothing to confirm
-  if (size === 0n) {
+  if (totalSize === 0n) {
     return true
   }
 
+  const baseUrl = config.filesGateway.url.replace(/\/+$/, '')
+  const lastByte = totalSize - 1n
+  let response: Response
   try {
-    const baseUrl = config.filesGateway.url.replace(/\/+$/, '')
-    const lastByte = size - 1n
-    const response = await fetch(
+    response = await fetch(
       `${baseUrl}/files/${cid}?originControl=no-cache`,
       {
         headers: {
@@ -42,26 +42,36 @@ export const isRetrievableFromGateway = async (
         signal: AbortSignal.timeout(GATEWAY_PROBE_TIMEOUT_MS),
       },
     )
+  } catch (error) {
+    logger.warn(error as Error, 'Gateway probe network/timeout failure (cid=%s)', cid)
+    throw error
+  }
 
-    if (response.status !== 206 || !response.body) {
-      await response.body?.cancel().catch(() => {})
-      return false
+  if (response.status !== 206 || !response.body) {
+    await response.body?.cancel().catch(() => {})
+    if (response.status >= 500) {
+      throw new Error(
+        `Gateway probe returned server error status ${response.status} (cid=${cid})`,
+      )
     }
+    return false
+  }
 
-    // Read body to end: chunks are fetched lazily after headers,
-    // so a missing chunk only surfaces mid-body.
-    let bytesRead = 0
-    const MAX_BYTES = 8192
+  // Read body to end: chunks are fetched lazily after headers,
+  // so a missing chunk only surfaces mid-body.
+  let bytesRead = 0
+  const MAX_BYTES = 8192
+  try {
     for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
       bytesRead += chunk.length
       if (bytesRead >= MAX_BYTES) break
     }
-
-    return bytesRead > 0
   } catch (error) {
-    logger.warn(error as Error, 'Gateway probe failed (cid=%s)', cid)
-    return false
+    logger.warn(error as Error, 'Gateway probe stream read failure (cid=%s)', cid)
+    throw error
   }
+
+  return bytesRead === 1
 }
 
 export const FileGateway = {

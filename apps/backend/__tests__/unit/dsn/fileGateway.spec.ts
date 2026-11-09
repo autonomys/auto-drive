@@ -61,14 +61,48 @@ describe('FileGateway.isRetrievableFromGateway', () => {
     expect(result).toBe(false)
   })
 
-  it('returns false when gateway request times out or rejects', async () => {
+  it('throws when gateway request times out or rejects', async () => {
     global.fetch = jest
       .fn<typeof fetch>()
       .mockImplementation(async () => {
         throw new Error('Gateway probe timeout')
       })
 
-    const result = await isRetrievableFromGateway('cid-timeout', 500n)
+    await expect(isRetrievableFromGateway('cid-timeout', 500n)).rejects.toThrow(
+      'Gateway probe timeout',
+    )
+  })
+
+  it('throws when gateway returns 5xx server error', async () => {
+    const cancelMock = jest.fn<() => Promise<void>>().mockResolvedValue()
+    global.fetch = jest.fn<typeof fetch>().mockImplementation(async () => {
+      return {
+        status: 502,
+        body: { cancel: cancelMock },
+      } as unknown as Response
+    })
+
+    await expect(isRetrievableFromGateway('cid-server-err', 500n)).rejects.toThrow(
+      /server error status 502/,
+    )
+  })
+
+  it('returns false when gateway body returns more than 1 byte', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]))
+        controller.close()
+      },
+    })
+
+    global.fetch = jest.fn<typeof fetch>().mockImplementation(async () => {
+      return {
+        status: 206,
+        body: stream,
+      } as unknown as Response
+    })
+
+    const result = await isRetrievableFromGateway('cid-multi-byte', 500n)
     expect(result).toBe(false)
   })
 })

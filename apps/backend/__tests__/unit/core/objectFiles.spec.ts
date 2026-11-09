@@ -380,7 +380,7 @@ describe('FilesUseCases', () => {
       expect(removeSpy).not.toHaveBeenCalled()
     })
 
-    it('stops reclaim sweep early when consecutive probe failures reach the threshold', async () => {
+    it('stops reclaim sweep early when consecutive gateway errors reach the threshold', async () => {
       const { nodesRepository } = await import(
         '../../../src/infrastructure/repositories/index.js'
       )
@@ -397,13 +397,73 @@ describe('FilesUseCases', () => {
         .spyOn(FileGateway, 'isRetrievableFromGateway')
         .mockImplementation(async (cid) => {
           gatewayCalls.push(cid)
-          return false
+          throw new Error('Gateway probe timeout')
         })
 
       await ObjectUseCases.reclaimArchivedNodeData()
 
       // Should stop after config.reclaim.maxConsecutiveProbeFailures (3)
       expect(gatewayCalls).toEqual(['cid-fail-1', 'cid-fail-2', 'cid-fail-3'])
+    })
+
+    it('does not trip circuit breaker for ordinary unindexed misses', async () => {
+      const { nodesRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+      
+      const cids = ['cid-miss-1', 'cid-miss-2', 'cid-miss-3', 'cid-miss-4', 'cid-miss-5']
+      jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockResolvedValue(cids)
+      const gatewayCalls: string[] = []
+      jest
+        .spyOn(FileGateway, 'isRetrievableFromGateway')
+        .mockImplementation(async (cid) => {
+          gatewayCalls.push(cid)
+          return false
+        })
+
+      await ObjectUseCases.reclaimArchivedNodeData()
+
+      // Ordinary misses must not trip the breaker; all candidates are probed
+      expect(gatewayCalls).toEqual(cids)
+    })
+
+    it('skips objects with missing metadata or missing totalSize without stripping data', async () => {
+      const { nodesRepository, metadataRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+
+      jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockResolvedValue(['cid-missing-meta', 'cid-missing-size'])
+      jest
+        .spyOn(metadataRepository, 'getMetadata')
+        .mockImplementation(async (cid) => {
+          if (cid === 'cid-missing-meta') return null as any
+          return {
+            root_cid: cid,
+            head_cid: cid,
+            name: 'test-file',
+            metadata: { type: 'file' },
+            is_archived: true,
+            created_at: new Date(),
+            tags: null,
+          } as any
+        })
+      const gatewaySpy = jest.spyOn(FileGateway, 'isRetrievableFromGateway')
+      const removeSpy = jest.spyOn(nodesRepository, 'removeNodeDataByRootCid')
+
+      await ObjectUseCases.reclaimArchivedNodeData()
+
+      expect(gatewaySpy).not.toHaveBeenCalled()
+      expect(removeSpy).not.toHaveBeenCalled()
     })
 
   })

@@ -562,18 +562,33 @@ const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
       reclaimCursorCid = cid
 
       const meta = await metadataRepository.getMetadata(cid)
-      if (meta?.metadata?.type === 'folder') {
+      if (!meta || meta.metadata?.totalSize === undefined) {
+        continue
+      }
+      if (meta.metadata?.type === 'folder') {
         // Skip folder roots in the sweep for now to safely preserve descendant data
         continue
       }
 
-      const totalSize = meta?.metadata?.totalSize ?? 0n
-      const isRetrievable = await FileGateway.isRetrievableFromGateway(
-        cid,
-        totalSize,
-      )
+      const totalSize = BigInt(meta.metadata.totalSize)
 
-      if (!isRetrievable) {
+      try {
+        const isRetrievable = await FileGateway.isRetrievableFromGateway(
+          cid,
+          totalSize,
+        )
+
+        if (!isRetrievable) {
+          // Unindexed object (404/normal indexing lag) — skip without tripping breaker
+          continue
+        }
+
+        consecutiveFailures = 0
+        await nodesRepository.removeNodeDataByRootCid(cid)
+        logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
+      } catch (error) {
+        // Gateway network, timeout, or 5xx outage
+        logger.warn(error as Error, 'Gateway probe failed (cid=%s)', cid)
         consecutiveFailures++
         if (consecutiveFailures >= maxConsecutiveFailures) {
           logger.warn(
@@ -582,12 +597,7 @@ const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
           )
           break
         }
-        continue
       }
-
-      consecutiveFailures = 0
-      await nodesRepository.removeNodeDataByRootCid(cid)
-      logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
     }
 
     if (cids.length < batchSize) {
