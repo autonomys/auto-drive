@@ -329,6 +329,85 @@ describe('createTransactionManager — submission reroute and error recovery', (
     expect(mockAccountManager.registerTransaction).toHaveBeenCalledTimes(2)
   })
 
+  it('resyncs nonce and keeps wallet when encountering 1010: Invalid Transaction: Transaction is outdated', async () => {
+    const outdatedError = new Error(
+      '1010: Invalid Transaction: Transaction is outdated',
+    )
+    const mockExtrinsic = {
+      hash: { toString: (): string => '0xtx' },
+      signAndSend: jest.fn(
+        (_pair: KeyringPair, _opts: unknown, cb: (res: unknown) => unknown) => {
+          setTimeout(() => {
+            cb({
+              status: {
+                isInBlock: false,
+                isInvalid: false,
+                isUsurped: false,
+                type: 'Future',
+              },
+            })
+          }, 10)
+          return Promise.reject(outdatedError)
+        },
+      ),
+    }
+
+    const mockApi = {
+      tx: {
+        system: {
+          remark: jest.fn(() => mockExtrinsic),
+        },
+      },
+      registry: {
+        findMetaError: () => ({ section: 'x', name: 'y', docs: ['z'] }),
+      },
+      rpc: {
+        chain: {
+          getBlock: jest.fn(),
+          subscribeNewHeads: jest.fn(),
+          getHeader: jest.fn(),
+          getBlockHash: jest.fn(),
+        },
+      },
+      once: jest.fn(),
+      off: jest.fn(),
+    } as unknown as ApiPromise
+
+    const mockAccountManager = {
+      registerTransaction: jest.fn(async () => ({ account: alice, nonce: 1 })),
+      markUnfunded: jest.fn(async () => {}),
+      removeAccount: jest.fn(async () => {}),
+      resyncAccount: jest.fn(async () => {}),
+      refreshBalances: jest.fn(async () => {}),
+      getAccountStates: jest.fn(() => new Map()),
+      stop: jest.fn(),
+    }
+
+    const txManager = createTransactionManager(
+      mockApi,
+      mockAccountManager as unknown as Awaited<
+        ReturnType<typeof createAccountManagerFn>
+      >,
+    )
+    const results = await txManager.submit([
+      {
+        module: 'system',
+        method: 'remark',
+        params: ['tx-1'],
+      },
+    ])
+
+    expect(results).toHaveLength(1)
+    expect(results[0].success).toBe(false)
+    expect(results[0].status).toBe('Failed')
+    // Outdated nonce must not mark wallet unfunded
+    expect(mockAccountManager.markUnfunded).not.toHaveBeenCalled()
+    // It is an infrastructure/chain nonce issue, not an account fault, so account is not removed
+    expect(mockAccountManager.removeAccount).not.toHaveBeenCalled()
+    // Nonce must be resynced to recover
+    expect(mockAccountManager.resyncAccount).toHaveBeenCalledWith(alice.address)
+  })
+
   it('resyncs nonce and keeps wallet when encountering transient network failure (WS error)', async () => {
     const mockExtrinsic = {
       hash: { toString: (): string => '0xtx' },

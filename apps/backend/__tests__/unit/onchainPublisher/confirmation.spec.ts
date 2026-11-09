@@ -60,15 +60,45 @@ describe('confirmation helpers', () => {
   })
 
   describe('isInsufficientFundsError', () => {
-    it('detects numeric and string error code 1010', () => {
-      expect(isInsufficientFundsError({ code: 1010 })).toBe(true)
-      expect(isInsufficientFundsError({ code: '1010' })).toBe(true)
+    it('does not treat bare error code 1010 as insufficient funds', () => {
+      expect(isInsufficientFundsError({ code: 1010 })).toBe(false)
+      expect(isInsufficientFundsError({ code: '1010' })).toBe(false)
     })
 
-    it('detects error messages matching 1010 or fee payment inability', () => {
+    it('returns false for non-payment 1010 variants', () => {
       expect(
         isInsufficientFundsError(
-          new Error('1010: Invalid Transaction: Inability to pay some fees'),
+          new Error('1010: Invalid Transaction: Transaction is outdated'),
+        ),
+      ).toBe(false)
+      expect(
+        isInsufficientFundsError(
+          new Error('1010: Invalid Transaction: BadProof'),
+        ),
+      ).toBe(false)
+      expect(
+        isInsufficientFundsError(
+          new Error('1010: Invalid Transaction: ExhaustsResources'),
+        ),
+      ).toBe(false)
+      expect(
+        isInsufficientFundsError(
+          new Error('Transaction included at hash 0x1010abcdef'),
+        ),
+      ).toBe(false)
+    })
+
+    it('detects fee payment inability error messages', () => {
+      expect(
+        isInsufficientFundsError(
+          new Error(
+            '1010: Invalid Transaction: Inability to pay some fees , e.g. account balance too low',
+          ),
+        ),
+      ).toBe(true)
+      expect(
+        isInsufficientFundsError(
+          new Error('1010: Invalid Transaction: Payment'),
         ),
       ).toBe(true)
       expect(

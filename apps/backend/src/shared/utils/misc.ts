@@ -46,6 +46,31 @@ export const nonNegativeIntEnv = (key: string, fallback: number): number => {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback
 }
 
+// Parse a positive-BigInt env var, falling back to `fallback` for missing,
+// non-numeric, decimal, scientific notation, or non-positive (<= 0n) values.
+// Logs a console warning on parse failure so typos do not crash service startup.
+export const positiveBigIntEnv = (key: string, fallback: bigint): bigint => {
+  const raw = env(key, fallback.toString())
+  try {
+    if (
+      /^[0-9]+(\.[0-9]+)?e[+-]?[0-9]+$/i.test(raw) ||
+      /^[0-9]+\.[0-9]+$/.test(raw)
+    ) {
+      const num = Number(raw)
+      if (Number.isFinite(num) && num > 0) {
+        return BigInt(Math.floor(num))
+      }
+    }
+    const parsed = BigInt(raw)
+    return parsed > 0n ? parsed : fallback
+  } catch {
+    console.warn(
+      `[config] Invalid BigInt for ${key}: "${raw}". Falling back to default (${fallback.toString()}).`,
+    )
+    return fallback
+  }
+}
+
 export const consumeStream = async (stream: Readable) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for await (const _ of stream) {

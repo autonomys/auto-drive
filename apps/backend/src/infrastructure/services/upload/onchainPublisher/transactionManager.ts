@@ -743,6 +743,8 @@ export const createTransactionManager = (
 
         return result
       }
+
+      throw new Error('Unexpected exit from transaction submission retry loop')
     }
 
     const promises = transactions.map((transaction) =>
@@ -761,7 +763,6 @@ export const createTransactionManager = (
 
         return result
       }),
-    )
     )
 
     return Promise.all(promises)

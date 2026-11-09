@@ -6,6 +6,7 @@ import {
   env,
   positiveIntEnv,
   nonNegativeIntEnv,
+  positiveBigIntEnv,
 } from './shared/utils/misc.js'
 import { getAddress, isAddress } from 'viem'
 
@@ -176,13 +177,15 @@ export const config = {
     // Minimum free balance (in shannons) required for a publisher signer wallet.
     // Wallets falling below this threshold are marked unfunded and excluded from
     // transaction registration until topped up. Default: 1 AI3 (10^18 shannons).
-    minSignerBalance: BigInt(
-      env('MIN_SIGNER_BALANCE', (10n ** 18n).toString()),
+    minSignerBalance: positiveBigIntEnv(
+      'MIN_SIGNER_BALANCE',
+      10n ** 18n,
     ),
     // Early-warning alert threshold for publisher signer balances (in shannons).
     // Default: 100 AI3 (100 * 10^18 shannons).
-    lowSignerBalanceWarn: BigInt(
-      env('LOW_SIGNER_BALANCE_WARN', (100n * 10n ** 18n).toString()),
+    lowSignerBalanceWarn: positiveBigIntEnv(
+      'LOW_SIGNER_BALANCE_WARN',
+      100n * 10n ** 18n,
     ),
     // Cooldown duration (in ms) during which an unfunded signer wallet is excluded
     // from rotation before its balance is re-checked for re-admission. Default: 60s.

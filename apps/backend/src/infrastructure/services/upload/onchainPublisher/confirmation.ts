@@ -48,18 +48,23 @@ export const isAccountFault = (status?: string): boolean => status === 'Invalid'
  */
 export const isInsufficientFundsError = (error: unknown): boolean => {
   if (!error) return false
-  if (typeof error === 'object') {
-    const err = error as { code?: number | string; message?: string }
-    if (err.code === 1010 || err.code === '1010') return true
-    if (typeof err.message === 'string') {
-      const msg = err.message.toLowerCase()
-      return (
-        msg.includes('1010') ||
-        msg.includes('inability to pay some fees') ||
-        msg.includes('insufficient funds') ||
-        msg.includes('insufficient balance')
-      )
-    }
-  }
-  return false
+  const msg =
+    typeof error === 'string'
+      ? error
+      : typeof error === 'object' &&
+          'message' in error &&
+          typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : ''
+  if (!msg) return false
+
+  const lower = msg.toLowerCase()
+  return (
+    lower.includes('inability to pay some fees') ||
+    lower.includes('account balance too low') ||
+    lower.includes('insufficient balance') ||
+    lower.includes('insufficient funds') ||
+    lower.includes('invalid transaction: payment') ||
+    (/\bpayment\b/i.test(msg) && lower.includes('invalid transaction'))
+  )
 }
