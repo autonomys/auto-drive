@@ -11,10 +11,15 @@ import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../../src/infrastructure/repositories/objects/interactions.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
+import { config } from '../../../src/config.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
-import { AccountModel, UserRole } from '@auto-drive/models'
+import { AccountModel, OrganizationRole, UserRole } from '@auto-drive/models'
+import { err, ok } from 'neverthrow'
 import {
+  BadRequestError,
+  ConflictError,
   ForbiddenError,
+  NotFoundError,
   ObjectNotFoundError,
 } from '../../../src/errors/index.js'
 
@@ -28,16 +33,12 @@ describe('AccountsUseCases', () => {
   })
 
   describe('updateAccount', () => {
-    it('should error when executor is not admin', async () => {
-      const executor = {
-        id: 'user1',
-        role: UserRole.User,
-        publicId: 'pub1',
-      }
+    const admin = { role: UserRole.Admin, publicId: 'pub1' } as any
 
+    it('should error when executor is not admin', async () => {
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        'acc123',
         AccountModel.OneOff,
         1000,
         1000,
@@ -47,47 +48,12 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
     })
 
-    it('should error when user has no organization', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: null,
-      } as any)
-
-      const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
-        AccountModel.OneOff,
-        1000,
-        1000,
-      )
-
-      expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
-    })
-
     it('should error when account not found', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: 'org123',
-      } as any)
-
-      jest
-        .spyOn(accountsRepository, 'getByOrganizationId')
-        .mockResolvedValue(null)
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
 
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        admin,
+        'acc123',
         AccountModel.OneOff,
         1000,
         1000,
@@ -97,48 +63,130 @@ describe('AccountsUseCases', () => {
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
 
-    it('should update account successfully', async () => {
-      const executor = {
-        id: 'admin1',
-        role: UserRole.Admin,
-        publicId: 'pub1',
-      }
-
-      jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
-        organizationId: 'org123',
-      } as any)
-
+    // By account ID: the account can be shared by several users, so no
+    // single user identifies it.
+    it('should update the account by its ID', async () => {
       const account = {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
-
-      jest
-        .spyOn(accountsRepository, 'getByOrganizationId')
+      const lookup = jest
+        .spyOn(accountsRepository, 'getById')
         .mockResolvedValue(account)
-
+      const userLookup = jest.spyOn(AuthManager, 'getUserFromPublicId')
       const updateSpy = jest
         .spyOn(accountsRepository, 'updateAccount')
         .mockResolvedValue(account)
 
       const result = await AccountsUseCases.updateAccount(
-        executor as any,
-        'user2',
+        admin,
+        'acc123',
         AccountModel.Monthly,
         5000,
         5000,
       )
 
       expect(result.isOk()).toBe(true)
+      expect(lookup).toHaveBeenCalledWith('acc123')
+      expect(userLookup).not.toHaveBeenCalled()
       expect(updateSpy).toHaveBeenCalledWith(
         'acc123',
-        AccountModel.Monthly,
-        5000,
-        5000,
+        {
+          model: AccountModel.Monthly,
+          uploadLimit: 5000,
+          downloadLimit: 5000,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
+        },
+        'pub1',
+        undefined,
       )
+    })
+
+    // Undefined keeps an override, null clears it.
+    it('should keep, set and clear credit term overrides', async () => {
+      const account = {
+        id: 'acc123',
+        organizationId: 'org123',
+        model: AccountModel.OneOff,
+        isPartner: false,
+        uploadLimit: 1000,
+        downloadLimit: 1000,
+        maxPurchasedBytes: 5000,
+        creditExpiryDays: 30,
+      }
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      const updateSpy = jest
+        .spyOn(accountsRepository, 'updateAccount')
+        .mockResolvedValue(account)
+
+      await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.OneOff,
+        1000,
+        1000,
+        { maxPurchasedBytes: 9000, creditExpiryDays: null, reason: 'deal' },
+      )
+      await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.OneOff,
+        1000,
+        1000,
+      )
+
+      expect(updateSpy).toHaveBeenNthCalledWith(
+        1,
+        'acc123',
+        expect.objectContaining({
+          maxPurchasedBytes: 9000,
+          creditExpiryDays: null,
+        }),
+        'pub1',
+        'deal',
+      )
+      expect(updateSpy).toHaveBeenNthCalledWith(
+        2,
+        'acc123',
+        expect.objectContaining({
+          maxPurchasedBytes: 5000,
+          creditExpiryDays: 30,
+        }),
+        'pub1',
+        undefined,
+      )
+    })
+
+    it('should reject a free upload allowance on a partner account', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue({
+        id: 'acc123',
+        organizationId: 'org123',
+        model: AccountModel.Monthly,
+        isPartner: true,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
+        uploadLimit: 0,
+        downloadLimit: 1000,
+      })
+      const updateSpy = jest.spyOn(accountsRepository, 'updateAccount')
+
+      const result = await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.Monthly,
+        1,
+        1000,
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      expect(updateSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -166,6 +214,9 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       jest
@@ -192,6 +243,9 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       const initSpy = jest
@@ -219,6 +273,9 @@ describe('AccountsUseCases', () => {
         id: 'acc123',
         organizationId: 'org123',
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       const initSpy = jest
@@ -237,6 +294,9 @@ describe('AccountsUseCases', () => {
       id: 'acc123',
       organizationId: 'org123',
       model: AccountModel.OneOff,
+      isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
       uploadLimit: 1000,
       downloadLimit: 1000,
     }
@@ -263,9 +323,8 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(undefined as any)
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-xyz', userPublicId: 'pub1' },
         BigInt(500),
-        'intent-xyz',
       )
 
       expect(result.isOk()).toBe(true)
@@ -283,7 +342,7 @@ describe('AccountsUseCases', () => {
       expect(updateSpy).not.toHaveBeenCalled()
     })
 
-    it('should reject when purchase would exceed per-user cap', async () => {
+    it('should reject when purchase would exceed per-account cap', async () => {
       const { err: neverthrowErr } = await import('neverthrow')
 
       jest
@@ -291,13 +350,27 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(neverthrowErr('cap_exceeded' as const))
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-over-cap', userPublicId: 'pub1' },
         BigInt(1),
-        'intent-over-cap',
       )
 
       expect(result.isErr()).toBe(true)
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('should report an intent that is no longer confirmed as a conflict', async () => {
+      const { err: neverthrowErr } = await import('neverthrow')
+
+      jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowErr('intent_not_confirmed' as const))
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-expired', userPublicId: 'pub1' },
+        BigInt(1),
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
     })
 
     it('should work for any account model (not restricted to OneOff)', async () => {
@@ -311,12 +384,60 @@ describe('AccountsUseCases', () => {
         .mockResolvedValue(neverthrowOk({} as any))
 
       const result = await AccountsUseCases.addCreditsToAccount(
-        'pub1',
+        { id: 'intent-monthly', userPublicId: 'pub1' },
         BigInt(100),
-        'intent-monthly',
       )
 
       expect(result.isOk()).toBe(true)
+    })
+
+    // The buyer may have moved to another organization since creating the
+    // intent; the credits still go to the account it was created for.
+    it('should credit the account of the intent, not the current one of the buyer', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+      jest
+        .spyOn(accountsRepository, 'getById')
+        .mockResolvedValue({ ...account, id: 'acc-at-creation' })
+      const createSpy = jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      const result = await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-1', userPublicId: 'pub1', accountId: 'acc-at-creation' },
+        BigInt(100),
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 'acc-at-creation' }),
+        expect.anything(),
+      )
+      expect(AuthManager.getUserFromPublicId).not.toHaveBeenCalled()
+      expect(AccountsUseCases.getOrCreateAccount).not.toHaveBeenCalled()
+    })
+
+    it('should use the cap and expiry overrides of the account', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+      jest.spyOn(AccountsUseCases, 'getOrCreateAccount').mockResolvedValue({
+        ...account,
+        maxPurchasedBytes: 7000,
+        creditExpiryDays: 1000,
+      })
+      const createSpy = jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      const before = Date.now()
+      await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-partner', userPublicId: 'pub1' },
+        BigInt(500),
+      )
+
+      const [params, cap] = createSpy.mock.calls[0]
+      expect(cap).toBe(7000n)
+      expect(params.expiresAt.getTime() - before).toBeGreaterThanOrEqual(
+        1000 * 24 * 60 * 60 * 1000,
+      )
     })
   })
 
@@ -363,6 +484,9 @@ describe('AccountsUseCases', () => {
         uploadLimit: 10,
         downloadLimit: 10,
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
       const member = {
         publicId: 'pub1',
@@ -403,6 +527,9 @@ describe('AccountsUseCases', () => {
         uploadLimit: 10,
         downloadLimit: 10,
         model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
@@ -458,6 +585,9 @@ describe('AccountsUseCases', () => {
       uploadLimit: 10,
       downloadLimit: 10,
       model: AccountModel.OneOff,
+      isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
     }
 
     beforeEach(() => {
@@ -470,6 +600,9 @@ describe('AccountsUseCases', () => {
       jest
         .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
         .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(err(new NotFoundError('Organization not found')))
     })
 
     it('should reject non-admin executors', async () => {
@@ -495,11 +628,85 @@ describe('AccountsUseCases', () => {
         pendingUploadCredits: 15,
         pendingDownloadCredits: 10,
         members: [],
+        organization: null,
+        defaultCreditTerms: {
+          maxPurchasedBytes: Number(config.credits.maxBytesPerAccount),
+          creditExpiryDays: config.credits.expiryDays,
+        },
       })
     })
 
-    it('should fall back to an organization ID and list its members', async () => {
+    it('should include the organization with its member roles', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([])
+      const organization = {
+        id: 'org1',
+        name: 'Partner',
+        archivedAt: null,
+        members: ['pub1'],
+        memberships: [{ publicId: 'pub1', role: OrganizationRole.Admin }],
+      }
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(ok(organization))
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'acc1')
+
+      expect(result._unsafeUnwrap().organization).toEqual(organization)
+    })
+
+    it('should not treat an organization ID as an account ID', async () => {
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+      const byOrganization = jest.spyOn(
+        accountsRepository,
+        'getByOrganizationId',
+      )
+
+      const result = await AccountsUseCases.adminGetAccount(admin, 'org1')
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      expect(byOrganization).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('adminGetAccountByOrganization', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+    const account = {
+      id: 'acc1',
+      organizationId: 'org1',
+      uploadLimit: 10,
+      downloadLimit: 10,
+      model: AccountModel.OneOff,
+      isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
+    }
+
+    beforeEach(() => {
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: BigInt(5) } as any)
+      jest
+        .spyOn(AuthManager, 'getOrganization')
+        .mockResolvedValue(err(new NotFoundError('Organization not found')))
+    })
+
+    it('should reject non-admin executors', async () => {
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        'org1',
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+    })
+
+    it('should return the account of the organization and list its members', async () => {
       const lookup = jest
         .spyOn(accountsRepository, 'getByOrganizationId')
         .mockResolvedValue(account)
@@ -510,7 +717,10 @@ describe('AccountsUseCases', () => {
           { publicId: 'pending', organizationId: null },
         ] as any)
 
-      const result = await AccountsUseCases.adminGetAccount(admin, 'org1')
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        admin,
+        'org1',
+      )
 
       expect(lookup).toHaveBeenCalledWith('org1')
       expect(search).toHaveBeenCalledWith('', 'org1')
@@ -519,13 +729,15 @@ describe('AccountsUseCases', () => {
       ])
     })
 
-    it('should return not found for an unknown ID', async () => {
-      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(null)
+    it('should return not found for an unknown organization', async () => {
       jest
         .spyOn(accountsRepository, 'getByOrganizationId')
         .mockResolvedValue(null)
 
-      const result = await AccountsUseCases.adminGetAccount(admin, 'nope')
+      const result = await AccountsUseCases.adminGetAccountByOrganization(
+        admin,
+        'nope',
+      )
 
       expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
     })
@@ -559,6 +771,9 @@ describe('AccountsUseCases', () => {
                 uploadLimit: 10,
                 downloadLimit: 10,
                 model: AccountModel.OneOff,
+                isPartner: false,
+                maxPurchasedBytes: null,
+                creditExpiryDays: null,
               }
             : null,
         )
@@ -572,6 +787,149 @@ describe('AccountsUseCases', () => {
 
       expect(result._unsafeUnwrap()).toEqual({ pub1: 'acc1' })
       expect(create).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getUserListAccount', () => {
+    const admin = { role: UserRole.Admin, publicId: 'admin' } as any
+
+    it('should reject non-admin executors before any lookup', async () => {
+      const lookup = jest
+        .spyOn(AuthManager, 'getUsersFromPublicIds')
+        .mockResolvedValue([])
+
+      const result = await AccountsUseCases.getUserListAccount(
+        { role: UserRole.User, publicId: 'pub1' } as any,
+        ['pub2'],
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ForbiddenError)
+      expect(lookup).not.toHaveBeenCalled()
+    })
+
+    it('should return account info keyed by publicId for known users', async () => {
+      jest
+        .spyOn(AuthManager, 'getUsersFromPublicIds')
+        .mockResolvedValue([
+          { publicId: 'pub1', organizationId: 'org1' },
+        ] as any)
+      jest.spyOn(accountsRepository, 'getByOrganizationId').mockResolvedValue({
+        id: 'acc1',
+        organizationId: 'org1',
+        uploadLimit: 100,
+        downloadLimit: 50,
+        model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
+      })
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub1',
+        'unknown',
+      ])
+
+      expect(result._unsafeUnwrap()).toEqual({
+        pub1: {
+          id: 'acc1',
+          organizationId: 'org1',
+          uploadLimit: 100,
+          downloadLimit: 50,
+          model: AccountModel.OneOff,
+          isPartner: false,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
+          pendingUploadCredits: 100,
+          pendingDownloadCredits: 50,
+        },
+      })
+    })
+
+    it('should look up a shared account once for all its members', async () => {
+      const account = {
+        id: 'acc1',
+        organizationId: 'org1',
+        uploadLimit: 100,
+        downloadLimit: 50,
+        model: AccountModel.OneOff,
+        isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
+      }
+      jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+        { publicId: 'pub1', organizationId: 'org1' },
+        { publicId: 'pub2', organizationId: 'org1' },
+        { publicId: 'pending', organizationId: null },
+      ] as any)
+      const lookup = jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockResolvedValue(account)
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub1',
+        'pub2',
+        'pending',
+      ])
+
+      const accounts = result._unsafeUnwrap()
+      expect(lookup).toHaveBeenCalledTimes(1)
+      expect(Object.keys(accounts)).toEqual(['pub1', 'pub2'])
+      expect(accounts.pub1.id).toBe('acc1')
+      expect(accounts.pub2.id).toBe('acc1')
+    })
+
+    // The admin panel lists a page in the order of this response.
+    it('should keep the order of the requested public IDs', async () => {
+      jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+        { publicId: 'pub-b', organizationId: 'org-b' },
+        { publicId: 'pub-a', organizationId: 'org-a' },
+      ] as any)
+      jest
+        .spyOn(accountsRepository, 'getByOrganizationId')
+        .mockImplementation(async (organizationId) => ({
+          id: `acc-${organizationId}`,
+          organizationId,
+          uploadLimit: 100,
+          downloadLimit: 50,
+          model: AccountModel.OneOff,
+          isPartner: false,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
+        }))
+      jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      const result = await AccountsUseCases.getUserListAccount(admin, [
+        'pub-a',
+        'pub-b',
+      ])
+
+      expect(Object.keys(result._unsafeUnwrap())).toEqual(['pub-a', 'pub-b'])
     })
   })
 })

@@ -16,4 +16,14 @@ export const config = {
   revokeTokenEmittedBeforeInSeconds: Number(
     env('REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS', '0'),
   ),
+  web3Auth: {
+    // Frontend origins that wallet sign-in messages may be issued for
+    allowedOrigins: env(
+      'WEB3_AUTH_ALLOWED_ORIGINS',
+      'https://explorer.ai3.storage',
+    )
+      .split(',')
+      .map((origin) => origin.trim().replace(/\/+$/, '').toLowerCase())
+      .filter(Boolean),
+  },
 }

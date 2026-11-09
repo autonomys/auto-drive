@@ -137,17 +137,10 @@ const anonymiseUser = async (requestId: string): Promise<void> => {
   )
 
   // Remove from organizations
-  const memberships = await organizationMembersRepository.getOrganizationMembershipsByUser(
+  await organizationMembersRepository.removeUserMemberships(
     request.oauth_provider,
     request.oauth_user_id,
   )
-  for (const membership of memberships) {
-    await organizationMembersRepository.removeMemberFromOrganization(
-      membership.organization_id,
-      request.oauth_provider,
-      request.oauth_user_id,
-    )
-  }
 
   // Anonymise user PII fields
   await usersRepository.updateUsername(

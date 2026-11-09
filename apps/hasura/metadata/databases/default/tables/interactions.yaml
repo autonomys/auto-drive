@@ -2,7 +2,8 @@ table:
   name: interactions
   schema: public
 select_permissions:
-  - role: user
+  # Usage history is read by the admin panel only
+  - role: app-admin
     permission:
       columns:
         - id

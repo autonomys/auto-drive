@@ -1,9 +1,11 @@
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { Intent, IntentStatus, PaymentMethod } from '@auto-drive/models'
 
 type DBIntent = {
   id: string
   user_public_id: string
+  account_id: string | null
   status: IntentStatus
   // Both NULLABLE in the DB (see 20250915125036-payments-up.sql), and typed that
   // way so the compiler keeps the coalescing below load-bearing. Declared as
@@ -31,6 +33,7 @@ const mapRows = (rows: DBIntent[]): Intent[] => {
   return rows.map((row) => ({
     id: row.id,
     userPublicId: row.user_public_id,
+    accountId: row.account_id ?? undefined,
     status: row.status,
     // `?? undefined`, like fromAddress and expiresAt below, and not merely for
     // consistency: the idempotency guard in markIntentAsConfirmed exempts rows
@@ -76,8 +79,8 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
     `INSERT INTO intents
        (id, user_public_id, status, tx_hash, payment_amount, shannons_per_byte,
         expires_at, payment_method, token_amount, quoted_token_amount,
-        quoted_ai3_shannons, usd_rate_at_creation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        quoted_ai3_shannons, usd_rate_at_creation, account_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       intent.id,
@@ -94,6 +97,7 @@ const createIntent = async (intent: Intent): Promise<Intent> => {
       intent.quotedTokenAmount?.toString() ?? null,
       intent.quotedAi3Shannons?.toString() ?? null,
       intent.usdRateAtCreation?.toString() ?? null,
+      intent.accountId ?? null,
     ],
   )
   return mapRows(result.rows)[0]
@@ -221,6 +225,19 @@ const getByStatus = async (status: IntentStatus): Promise<Intent[]> => {
   return mapRows(result.rows)
 }
 
+// A buyer's intents in any of the given statuses.
+const getByUserAndStatuses = async (
+  userPublicId: string,
+  statuses: IntentStatus[],
+): Promise<Intent[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBIntent>(
+    'SELECT * FROM intents WHERE user_public_id = $1 AND status = ANY($2::text[])',
+    [userPublicId, statuses],
+  )
+  return mapRows(result.rows)
+}
+
 // Returns PENDING intents whose price-lock window has passed and that cleanup
 // should reclaim.
 //
@@ -281,6 +298,25 @@ const expireIntentIfPending = async (intentId: string): Promise<boolean> => {
   return (result.rowCount ?? 0) > 0
 }
 
+// Moves an intent out of CONFIRMED, only if it is still CONFIRMED. Returns
+// false if the status had already changed (e.g. the buyer's deletion expired
+// it), so a confirmation that loses that race writes nothing. Takes the
+// caller's client when the move must commit together with the credit insert.
+const updateStatusIfConfirmed = async (
+  intentId: string,
+  status: IntentStatus,
+  client?: pg.PoolClient,
+): Promise<boolean> => {
+  const db = client ?? (await getDatabase())
+  const result = await db.query(
+    `UPDATE intents
+     SET status = $1
+     WHERE id = $2 AND status = $3`,
+    [status, intentId, IntentStatus.CONFIRMED],
+  )
+  return (result.rowCount ?? 0) > 0
+}
+
 // Returns PENDING intents that already have an on-chain tx_hash, for one
 // payment method.
 // These are intents where the user submitted a transaction but the payment
@@ -311,7 +347,7 @@ const getPendingWithTxHash = async (
   return mapRows(result.rows)
 }
 
-// Returns all intents that were blocked by the per-user cap.
+// Returns all intents that were blocked by the per-account cap.
 // These are terminal — the polling loop skips them — and require admin review.
 const getOverCapIntents = async (): Promise<Intent[]> => {
   const db = await getDatabase()
@@ -329,8 +365,10 @@ export const intentsRepository = {
   confirmIntentIfPending,
   setTxHashIfPending,
   getByStatus,
+  getByUserAndStatuses,
   getExpiredPendingIntents,
   expireIntentIfPending,
+  updateStatusIfConfirmed,
   getOverCapIntents,
   getPendingWithTxHash,
 }

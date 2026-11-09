@@ -46,13 +46,19 @@ accountController.post(
       return
     }
 
-    if (!req.body.userPublicIds) {
-      res.status(400).json({ error: 'userPublicIds is required' })
+    const userPublicIds = z
+      .array(z.string())
+      .max(100)
+      .safeParse(req.body.userPublicIds)
+    if (!userPublicIds.success) {
+      res
+        .status(400)
+        .json({ error: 'userPublicIds must be an array of strings' })
       return
     }
 
-    const accountByPublicId = await handleInternalError(
-      AccountsUseCases.getUserListAccount(req.body.userPublicIds),
+    const accountByPublicId = await handleInternalErrorResult(
+      AccountsUseCases.getUserListAccount(user, userPublicIds.data),
       'Failed to get user list accounts',
     )
     if (accountByPublicId.isErr()) {
@@ -123,7 +129,54 @@ accountController.post(
   }),
 )
 
-// Admin-only: one account by account ID or organization ID, with its members.
+// Admin-only: the account of an organization, with its members.
+accountController.get(
+  '/admin/by-organization/:organizationId',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetAccountByOrganization(
+        user,
+        req.params.organizationId,
+      ),
+      'Failed to get account',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// Admin-only: the history of changes to an account's terms.
+accountController.get(
+  '/admin/:id/terms-changes',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetTermsChanges(user, req.params.id),
+      'Failed to get account terms changes',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// Admin-only: one account by account ID, with its members.
 accountController.get(
   '/admin/:id',
   asyncSafeHandler(async (req: Request, res: Response) => {
@@ -194,11 +247,11 @@ accountController.post(
       return
     }
 
-    const { publicId, uploadLimit, downloadLimit, model } = req.body
+    const { accountId, uploadLimit, downloadLimit, model } = req.body
 
-    if (typeof publicId !== 'string') {
+    if (typeof accountId !== 'string') {
       res.status(400).json({
-        error: 'Missing or invalid attribute `publicId` in body',
+        error: 'Missing or invalid attribute `accountId` in body',
       })
       return
     }
@@ -225,13 +278,42 @@ accountController.post(
       return
     }
 
+    // Overrides of the global credit terms; null clears one.
+    const terms = z
+      .object({
+        maxPurchasedBytes: z
+          .number()
+          .int()
+          .positive()
+          .safe()
+          .nullable()
+          .optional(),
+        creditExpiryDays: z
+          .number()
+          .int()
+          .positive()
+          .max(36500)
+          .nullable()
+          .optional(),
+        reason: z.string().trim().max(500).optional(),
+      })
+      .safeParse(req.body)
+    if (!terms.success) {
+      res.status(400).json({
+        error:
+          'Invalid `maxPurchasedBytes`, `creditExpiryDays` or `reason` in body',
+      })
+      return
+    }
+
     const updateResult = await handleInternalErrorResult(
       AccountsUseCases.updateAccount(
         executor,
-        publicId,
+        accountId,
         safeModel.data,
         uploadLimit,
         downloadLimit,
+        terms.data,
       ),
       'Failed to update account',
     )

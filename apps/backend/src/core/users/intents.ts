@@ -1,4 +1,5 @@
 import {
+  Account,
   Intent,
   IntentMispaymentReason,
   IntentStatus,
@@ -36,7 +37,7 @@ import { AccountsUseCases } from './accounts.js'
 import { FeatureFlagsUseCases } from '../featureFlags/index.js'
 import { UsdcPaymentsUseCases } from '../payments/usdc.js'
 import { transactionByteFee } from '@autonomys/auto-consensus'
-import { ApiPromise, WsProvider } from '@polkadot/api'
+import { ApiPromise, WsProvider } from '../../shared/utils/polkadot.js'
 import { priceOracle } from '../../infrastructure/services/priceOracle/index.js'
 import { OracleUnavailableError } from '../../infrastructure/services/priceOracle/types.js'
 import {
@@ -161,7 +162,7 @@ const DECIMAL_DIGITS = /^\d+$/
  *
  * A decimal string is the canonical form. Every other size on an intent
  * (shannonsPerByte, paymentAmount) already crosses the wire as a string, and a
- * string keeps working unchanged if the per-user cap ever moves past 2^53. A
+ * string keeps working unchanged if the per-account cap ever moves past 2^53. A
  * JSON number is also accepted, since callers reach for one naturally, but only
  * while it is a safe integer — so no lossy float can enter the byte path, and a
  * caller who needs a bigger value is told to send a string instead of silently
@@ -231,7 +232,7 @@ const parsePaymentMethod = (
   )
 }
 
-// Reject a purchase that cannot fit under the per-user credit cap, before the
+// Reject a purchase that cannot fit under the per-account credit cap, before the
 // user has been asked to pay anything.
 //
 // THIS IS A FAST-FAIL, NOT A RESERVATION. Nothing is held: two concurrent
@@ -263,11 +264,10 @@ const parsePaymentMethod = (
 // between the two would surface as a pre-check that waves through purchases the
 // real check then rejects, which is the failure mode this exists to prevent.
 const checkCapHeadroom = async (
-  executor: UserWithOrganization,
+  account: Account,
   requestedBytes: bigint,
 ): Promise<Result<void, CreditCapExceededError>> => {
-  const cap = config.credits.maxBytesPerUser
-  const account = await AccountsUseCases.getOrCreateAccount(executor)
+  const cap = AccountsUseCases.getCreditTerms(account).maxBytes
   const { uploadBytesRemaining } =
     await purchasedCreditsRepository.getRemainingCredits(account.id)
 
@@ -281,7 +281,7 @@ const checkCapHeadroom = async (
     const headroom =
       uploadBytesRemaining >= cap ? 0n : cap - uploadBytesRemaining
     logger.info(
-      'Rejecting intent creation — would exceed per-user credit cap',
+      'Rejecting intent creation — would exceed per-account credit cap',
       {
         accountId: account.id,
         requestedBytes: requestedBytes.toString(),
@@ -291,7 +291,7 @@ const checkCapHeadroom = async (
     )
     return err(
       new CreditCapExceededError(
-        `Purchase of ${requestedBytes} bytes would exceed the per-user credit ` +
+        `Purchase of ${requestedBytes} bytes would exceed the per-account credit ` +
           `cap of ${cap} bytes: the account already holds ` +
           `${uploadBytesRemaining} bytes, leaving ${headroom} available`,
       ),
@@ -538,20 +538,27 @@ const createIntent = async (
         ),
       )
     }
+  }
+
+  // Credits go to the account the purchase was made for, even if the buyer
+  // moves to another organisation before the payment confirms.
+  const account = await AccountsUseCases.getOrCreateAccount(executor)
+
+  if (requestedBytes !== undefined) {
     // A single purchase larger than the whole cap can never be granted, whatever
-    // the account balance is. Failing it as a malformed request is both clearer
-    // than a headroom message and cheaper — it skips the account and balance
-    // reads below.
-    if (requestedBytes > config.credits.maxBytesPerUser) {
+    // the account balance is. Failing it as a malformed request is clearer than
+    // a headroom message.
+    const { maxBytes } = AccountsUseCases.getCreditTerms(account)
+    if (requestedBytes > maxBytes) {
       return err(
         new BadRequestError(
           `Invalid requestedBytes: ${requestedBytes} exceeds the maximum ` +
-            `${config.credits.maxBytesPerUser} bytes purchasable per account`,
+            `${maxBytes} bytes purchasable per account`,
         ),
       )
     }
 
-    const headroom = await checkCapHeadroom(executor, requestedBytes)
+    const headroom = await checkCapHeadroom(account, requestedBytes)
     if (headroom.isErr()) {
       return err(headroom.error)
     }
@@ -601,6 +608,7 @@ const createIntent = async (
     const intent = await intentsRepository.createIntent({
       id: randomBytes32(),
       userPublicId: executor.publicId,
+      accountId: account.id,
       status: IntentStatus.PENDING,
       paymentAmount: undefined,
       shannonsPerByte,
@@ -664,6 +672,7 @@ const createIntent = async (
   const intent = await intentsRepository.createIntent({
     id: randomBytes32(),
     userPublicId: executor.publicId,
+    accountId: account.id,
     status: IntentStatus.PENDING,
     paymentAmount: undefined,
     shannonsPerByte,
@@ -843,7 +852,7 @@ const amountInIntentAsset = (
  * payment that lost the conditional transition — and both need the same answer,
  * because they are the same event reached at different moments. Every log is
  * delivered several times over: paymentManager.start() runs in the frontend API
- * and the frontend worker, each with its own watchContractEvent over the
+ * and the frontend worker, each with its own payment event poll over the
  * contract, and the queued watch-intent-tx task calls watchTransaction again.
  * Whether a duplicate arrives after the settling write commits (the guard) or
  * races it (the transition) is a matter of scheduling, not of what happened on
@@ -1191,7 +1200,7 @@ const markIntentAsConfirmed = async ({
     // THIS payment settled it, delivered twice. The common case, and the reason
     // the read-back exists. Every log is delivered by several callers —
     // paymentManager.start() runs in both the frontend API and the frontend
-    // worker, each with its own watchContractEvent, and the queued
+    // worker, each with its own payment event poll, and the queued
     // watch-intent-tx task calls watchTransaction again — with the same intent
     // id, hash and amount, unserialised. One wins here and the others land in
     // this branch. Filing them reports a second payment for money that arrived
@@ -1422,10 +1431,10 @@ const onConfirmedIntent = async (intentId: string) => {
       fromAddress: intent.fromAddress,
       txHash: intent.txHash,
     })
-    await intentsRepository.updateIntent({
-      ...intent,
-      status: IntentStatus.FAILED,
-    })
+    await intentsRepository.updateStatusIfConfirmed(
+      intentId,
+      IntentStatus.FAILED,
+    )
     return ok()
   }
 
@@ -1477,46 +1486,49 @@ const onConfirmedIntent = async (intentId: string) => {
       fromAddress: intent.fromAddress,
       txHash: intent.txHash,
     })
-    await intentsRepository.updateIntent({
-      ...intent,
-      status: IntentStatus.FAILED,
-    })
+    await intentsRepository.updateStatusIfConfirmed(
+      intentId,
+      IntentStatus.FAILED,
+    )
     return ok()
   }
 
   const addResult = await AccountsUseCases.addCreditsToAccount(
-    intent.userPublicId,
+    intent,
     creditBytes,
-    intentId,
   )
 
   if (addResult.isErr()) {
     if (addResult.error instanceof ForbiddenError) {
-      // The user's purchased credit balance is at or above the per-user cap.
+      // The user's purchased credit balance is at or above the per-account cap.
       // Mark the intent OVER_CAP (terminal) so the polling loop stops retrying
       // and an admin can review.  The payment is on-chain; resolution requires
       // a manual decision (adjust cap + reprocess, or arrange a refund).
-      logger.warn('Intent blocked by per-user cap — marking OVER_CAP', {
+      logger.warn('Intent blocked by per-account cap — marking OVER_CAP', {
         intentId,
         userPublicId: intent.userPublicId,
         paymentMethod: intent.paymentMethod,
         receivedAmount: receivedAmount.toString(),
         creditBytes: creditBytes.toString(),
       })
-      await intentsRepository.updateIntent({
-        ...intent,
-        status: IntentStatus.OVER_CAP,
+      await intentsRepository.updateStatusIfConfirmed(
+        intentId,
+        IntentStatus.OVER_CAP,
+      )
+      return ok()
+    }
+    if (addResult.error instanceof ConflictError) {
+      // The intent left CONFIRMED after it was read, e.g. the buyer's deletion
+      // expired it. Nothing was credited, and the poller won't pick it up again.
+      logger.warn('onConfirmedIntent: intent is no longer confirmed', {
+        intentId,
       })
       return ok()
     }
     return err(addResult.error)
   }
 
-  await intentsRepository.updateIntent({
-    ...intent,
-    status: IntentStatus.COMPLETED,
-  })
-
+  // addCreditsToAccount moved the intent to COMPLETED with the credit insert.
   return ok()
 }
 
@@ -1561,7 +1573,9 @@ const getMispayments = async (executor: User) => {
 // loop will attempt to grant credits on its next tick.
 //
 // Intended admin workflow:
-//  1. Admin calls POST /accounts/update to raise the user's credit cap.
+//  1. The account gets headroom under its cap: it spends credits, or an admin
+//     raises the account's maxPurchasedBytes via POST /accounts/update (the
+//     server-wide MAX_CREDITS_PER_USER applies when it has no override).
 //  2. Admin calls POST /intents/:id/reprocess to re-queue this intent.
 //  3. The polling loop picks it up within 30 seconds and calls onConfirmedIntent.
 //

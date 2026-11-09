@@ -75,8 +75,8 @@ export const authOptions: AuthOptions = {
             suppressExceptions: false,
           };
 
-          if (!message.verify(verifyParams, verifyOpts))
-            throw new Error('Invalid signature');
+          const { success } = await message.verify(verifyParams, verifyOpts);
+          if (!success) throw new Error('Invalid signature');
 
           return {
             id: credentials.address,

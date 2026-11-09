@@ -2537,11 +2537,9 @@ describe('AWS S3 - SDK', () => {
   })
 
   // Issue #815: an unresolvable chunk used to be discovered only after 200 +
-  // headers had been sent. Worse than a reset — downloadService forks the stream
-  // for caching and stream-fork does not propagate destroy, so the response
-  // simply stalled until an infrastructure timeout, which the client reports as
-  // `INTERNAL_ERROR; received from peer`: no status, no S3 error body, no way to
-  // tell "retry me" from "permanently broken".
+  // headers had been sent, which the client reports as `INTERNAL_ERROR; received
+  // from peer`: no status, no S3 error body, no way to tell "retry me" from
+  // "permanently broken".
   describe('an object whose chunk cannot be resolved', () => {
     const UnresolvableKey = 'unresolvable-chunk.bin'
 

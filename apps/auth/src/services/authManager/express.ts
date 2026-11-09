@@ -32,7 +32,7 @@ export const handleAuth = async (
 export const handleAuthIgnoreOnboarding = async (
   req: Request,
   res: Response,
-): Promise<MaybeUser | null> => {
+): Promise<(MaybeUser & { apiKeyId?: string }) | null> => {
   logger.trace('handleAuthIgnoreOnboarding called')
   const accessToken = req.headers.authorization?.split(' ')[1]
   if (!accessToken) {
@@ -66,7 +66,8 @@ export const handleAuthIgnoreOnboarding = async (
     return null
   }
 
-  return UsersUseCases.getUserByOAuthUser(oauthUser)
+  const user = await UsersUseCases.getUserByOAuthUser(oauthUser)
+  return oauthUser.apiKeyId ? { ...user, apiKeyId: oauthUser.apiKeyId } : user
 }
 
 export const handleAdminAuth = async (
@@ -127,6 +128,20 @@ export const handleAdminAuth = async (
   }
 
   return isAdmin
+}
+
+/**
+ * Accepts the backend only, by its service secret, and never a user token.
+ * Membership changes have preconditions on backend data (credits, payments),
+ * so admins make them through the backend rather than here.
+ */
+export const handleServiceAuth = (req: Request, res: Response): boolean => {
+  const accessToken = req.headers.authorization?.split(' ')[1]
+  if (!config.apiSecret || accessToken !== config.apiSecret) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return false
+  }
+  return true
 }
 
 export const refreshAccessToken = async (

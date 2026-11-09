@@ -70,6 +70,18 @@ const getDeletedOwnerships = async (cid: string): Promise<Ownership[]> => {
   return result.rows
 }
 
+// Active and removed rows alike
+const getAllOwnerships = async (cid: string): Promise<Ownership[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<Ownership>({
+    text: 'SELECT * FROM object_ownership WHERE cid = $1',
+    values: [cid],
+  })
+
+  return result.rows
+}
+
 const getAdmins = async (cid: string): Promise<Ownership[]> => {
   const db = await getDatabase()
 
@@ -164,6 +176,7 @@ export const ownershipRepository = {
   updateDeletedAt,
   getOwnerships,
   getDeletedOwnerships,
+  getAllOwnerships,
   getAdmins,
   getAdminOwnershipState,
 }

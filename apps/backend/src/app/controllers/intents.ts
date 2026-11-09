@@ -111,7 +111,7 @@ intentsController.post(
 // ---------------------------------------------------------------------------
 // GET /intents/over-cap  (admin only)
 // Lists all intents that were confirmed on-chain but could not be converted
-// to credits because the user was already at the per-user cap.
+// to credits because the user was already at the per-account cap.
 // These are terminal — the polling loop skips them.  An admin must review
 // and either raise the cap + reprocess, or arrange a refund out-of-band.
 //
@@ -231,7 +231,7 @@ intentsController.post(
     // this string byte for byte and nothing else normalises it.
     //
     // A transaction hash carries no checksum encoding, so wallets emit lowercase
-    // and viem hands the event subscription lowercase — but a hand-rolled API
+    // and viem hands the event poll lowercase — but a hand-rolled API
     // client is free to post `0xAB12…` for the very same transaction. That value
     // is then stored in `intents.tx_hash` and travels on the watch task, and the
     // three consequences are all silent:

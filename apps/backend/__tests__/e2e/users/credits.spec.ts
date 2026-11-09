@@ -6,6 +6,7 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { PreconditionError } from '../../utils/error.js'
+import { ConflictError } from '../../../src/errors/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import {
   createMockUser,
@@ -22,15 +23,28 @@ import { jest } from '@jest/globals'
 import { v4 as uuidv4 } from 'uuid'
 
 // Inserts a minimal intent row so the purchased_credits.intent_id FK is satisfied.
-const createTestIntent = async (userPublicId: string): Promise<string> => {
+// Confirmed by default, since addCreditsToAccount only credits a confirmed intent.
+const createTestIntent = async (
+  userPublicId: string,
+  status: IntentStatus = IntentStatus.CONFIRMED,
+): Promise<string> => {
   const db = await getDatabase()
   const id = `test-intent-${uuidv4()}`
   await db.query(
     `INSERT INTO intents (id, user_public_id, status, shannons_per_byte, expires_at)
      VALUES ($1, $2, $3, $4, $5)`,
-    [id, userPublicId, IntentStatus.COMPLETED, '1', new Date()],
+    [id, userPublicId, status, '1', new Date()],
   )
   return id
+}
+
+const getIntentStatus = async (id: string): Promise<string> => {
+  const db = await getDatabase()
+  const result = await db.query<{ status: string }>(
+    'SELECT status FROM intents WHERE id = $1',
+    [id],
+  )
+  return result.rows[0].status
 }
 
 describe('CreditsUseCases', () => {
@@ -100,9 +114,8 @@ describe('CreditsUseCases', () => {
     const intentId = await createTestIntent(mockUser.publicId)
 
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -113,12 +126,34 @@ describe('CreditsUseCases', () => {
     expect(rows[0].uploadBytesOriginal).toBe(creditsToAdd)
     expect(rows[0].uploadBytesRemaining).toBe(creditsToAdd)
     expect(rows[0].intentId).toBe(intentId)
+    expect(await getIntentStatus(intentId)).toBe(IntentStatus.COMPLETED)
 
     // The free/one-off account limits must remain untouched.
     const after = await AccountsUseCases.getAccountById(account.id)
     if (!after) throw new Error('Account not found')
     expect(after.uploadLimit).toBe(account.uploadLimit)
     expect(after.downloadLimit).toBe(account.downloadLimit)
+  })
+
+  // A deletion can expire a confirmed intent while the poller is crediting it.
+  it('should credit nothing for an intent that is no longer confirmed', async () => {
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
+    const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+    const intentId = await createTestIntent(
+      mockUser.publicId,
+      IntentStatus.EXPIRED,
+    )
+
+    const result = await AccountsUseCases.addCreditsToAccount(
+      { id: intentId, userPublicId: mockUser.publicId, accountId: account.id },
+      BigInt(123),
+    )
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+    expect(await purchasedCreditsRepository.getByAccountId(account.id)).toEqual(
+      [],
+    )
+    expect(await getIntentStatus(intentId)).toBe(IntentStatus.EXPIRED)
   })
 
   it('purchased credits should count toward the total available credits', async () => {
@@ -134,9 +169,8 @@ describe('CreditsUseCases', () => {
     )
 
     await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       creditsToAdd,
-      intentId,
     )
 
     const after = await AccountsUseCases.getPendingCreditsByUserAndType(
@@ -160,16 +194,14 @@ describe('CreditsUseCases', () => {
     // Switch to Monthly model — purchased credits should still work.
     await accountsRepository.updateAccount(
       account.id,
-      AccountModel.Monthly,
-      account.uploadLimit,
-      account.downloadLimit,
+      { ...account, model: AccountModel.Monthly },
+      'admin',
     )
 
     const intentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: intentId, userPublicId: mockUser.publicId },
       BigInt(50),
-      intentId,
     )
 
     expect(result.isOk()).toBe(true)
@@ -179,7 +211,7 @@ describe('CreditsUseCases', () => {
     expect(rows[0].uploadBytesOriginal).toBe(BigInt(50))
   })
 
-  it('should reject a purchase that would exceed the per-user cap', async () => {
+  it('should reject a purchase that would exceed the per-account cap', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
 
     // Manually insert a row that consumes most of the cap (100 GiB).
@@ -201,9 +233,8 @@ describe('CreditsUseCases', () => {
     // Trying to add even 1 more byte should be rejected.
     const overCapIntentId = await createTestIntent(mockUser.publicId)
     const result = await AccountsUseCases.addCreditsToAccount(
-      mockUser.publicId,
+      { id: overCapIntentId, userPublicId: mockUser.publicId },
       BigInt(1),
-      overCapIntentId,
     )
 
     expect(result.isErr()).toBe(true)
@@ -227,16 +258,15 @@ describe('CreditsUseCases', () => {
     })
     await accountsRepository.updateAccount(
       account.id,
-      AccountModel.OneOff,
-      0, // uploadLimit = 0 (no free-tier bytes)
-      0, // downloadLimit = 0
+      { ...account, uploadLimit: 0, downloadLimit: 0 }, // no free-tier bytes
+      'admin',
     )
 
     // Fire two concurrent 90 MB upload interactions simultaneously.
     // consumeUpTo serialises access via FOR UPDATE: one caller gets 90 MB,
     // the other only gets 10 MB from purchased credits.  The free-tier guard
     // then detects that the remaining 80 MB cannot be covered by free-tier
-    // (uploadLimit = 0), refunds the 10 MB back, and throws.
+    // (uploadLimit = 0) and throws, rolling back the 10 MB deduction.
     const [result1, result2] = await Promise.allSettled([
       AccountsUseCases.registerInteraction(
         mockUser,
@@ -254,14 +284,15 @@ describe('CreditsUseCases', () => {
     const statuses = [result1.status, result2.status].sort()
     expect(statuses).toEqual(['fulfilled', 'rejected'])
 
-    // The rejected upload must have thrown PaymentRequiredError and refunded
-    // the partial purchased-credit deduction.  10 MB (= 100 - 90) must remain.
-    const remaining =
-      await purchasedCreditsRepository.getRemainingCredits(account.id)
+    // The rejected upload must have thrown PaymentRequiredError and rolled
+    // back the partial purchased-credit deduction.  10 MB (= 100 - 90) remain.
+    const remaining = await purchasedCreditsRepository.getRemainingCredits(
+      account.id,
+    )
     expect(remaining.uploadBytesRemaining).toBe(MB(10))
 
     // Only 90 MB should be recorded as consumed from purchased credits —
-    // the second caller's partial deduction was rolled back via refundCredits.
+    // the second caller's partial deduction was rolled back.
     const now = new Date()
     const purchasedInteractions =
       await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
@@ -279,11 +310,164 @@ describe('CreditsUseCases', () => {
 
     // After the race, only 10 MB of purchased credits remain and 0 free-tier
     // bytes are available — a new 90 MB upload must be denied at the gate.
-    const pendingAfter =
-      await AccountsUseCases.getPendingCreditsByUserAndType(
+    const pendingAfter = await AccountsUseCases.getPendingCreditsByUserAndType(
+      mockUser,
+      InteractionType.Upload,
+    )
+    expect(pendingAfter).toBe(Number(MB(10)))
+  })
+
+  describe('attribution', () => {
+    const MB = (n: number) => BigInt(n * 1024 * 1024)
+
+    const seedBatch = async (accountId: string, bytes: bigint, days: number) =>
+      purchasedCreditsRepository.createPurchasedCredit({
+        accountId,
+        intentId: await createTestIntent(mockUser.publicId),
+        uploadBytesOriginal: bytes,
+        downloadBytesOriginal: bytes,
+        expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      })
+
+    const getInteractions = async (accountId: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{
+        id: string
+        source: InteractionSource
+        size: string
+        api_key_id: string | null
+      }>('SELECT * FROM interactions WHERE account_id = $1', [accountId])
+      return result.rows
+    }
+
+    const getConsumption = async (accountId: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{
+        interaction_id: string
+        purchased_credit_id: string
+        bytes: string
+      }>(
+        `SELECT c.* FROM interaction_credit_consumption c
+         JOIN purchased_credits p ON p.id = c.purchased_credit_id
+         WHERE p.account_id = $1`,
+        [accountId],
+      )
+      return result.rows
+    }
+
+    it('records the API key on the interaction', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+
+      await AccountsUseCases.registerInteraction(
+        { ...mockUser, apiKeyId: 'key-1' },
+        InteractionType.Upload,
+        BigInt(1024),
+      )
+
+      const [interaction] = await getInteractions(account.id)
+      expect(interaction.api_key_id).toBe('key-1')
+    })
+
+    it('records no API key for a session upload', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+
+      await AccountsUseCases.registerInteraction(
         mockUser,
         InteractionType.Upload,
+        BigInt(1024),
       )
-    expect(pendingAfter).toBe(Number(MB(10)))
+
+      const [interaction] = await getInteractions(account.id)
+      expect(interaction.api_key_id).toBeNull()
+      expect(await getConsumption(account.id)).toHaveLength(0)
+    })
+
+    it('records the bytes drawn from each batch when an upload spans two', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+      const first = await seedBatch(account.id, MB(10), 30)
+      const second = await seedBatch(account.id, MB(10), 60)
+
+      await AccountsUseCases.registerInteraction(
+        mockUser,
+        InteractionType.Upload,
+        MB(15),
+      )
+
+      const [purchased] = (await getInteractions(account.id)).filter(
+        (i) => i.source === InteractionSource.Purchased,
+      )
+      const consumption = await getConsumption(account.id)
+      expect(
+        Object.fromEntries(
+          consumption.map((c) => [c.purchased_credit_id, BigInt(c.bytes)]),
+        ),
+      ).toEqual({ [first.id]: MB(10), [second.id]: MB(5) })
+      expect(consumption.every((c) => c.interaction_id === purchased.id)).toBe(
+        true,
+      )
+      expect(BigInt(purchased.size)).toBe(MB(15))
+    })
+
+    it('gives consumption rows only to the purchased part of a split upload', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+      const batch = await seedBatch(account.id, BigInt(1000), 30)
+
+      await AccountsUseCases.registerInteraction(
+        mockUser,
+        InteractionType.Upload,
+        BigInt(1500),
+      )
+
+      const interactions = await getInteractions(account.id)
+      const purchased = interactions.find(
+        (i) => i.source === InteractionSource.Purchased,
+      )
+      expect(interactions).toHaveLength(2)
+      expect(await getConsumption(account.id)).toEqual([
+        expect.objectContaining({
+          interaction_id: purchased?.id,
+          purchased_credit_id: batch.id,
+          bytes: '1000',
+        }),
+      ])
+    })
+
+    it('leaves no trace of a rejected upload', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+      await seedBatch(account.id, MB(10), 30)
+      await accountsRepository.updateAccount(
+        account.id,
+        { ...account, uploadLimit: 0, downloadLimit: 0 },
+        'admin',
+      )
+
+      await expect(
+        AccountsUseCases.registerInteraction(
+          mockUser,
+          InteractionType.Upload,
+          MB(15),
+        ),
+      ).rejects.toThrow('Insufficient credits')
+
+      expect(await getInteractions(account.id)).toHaveLength(0)
+      expect(await getConsumption(account.id)).toHaveLength(0)
+      const remaining = await purchasedCreditsRepository.getRemainingCredits(
+        account.id,
+      )
+      expect(remaining.uploadBytesRemaining).toBe(MB(10))
+    })
+
+    it('records the API key on downloads', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+
+      await AccountsUseCases.registerInteraction(
+        { ...mockUser, apiKeyId: 'key-2' },
+        InteractionType.Download,
+        BigInt(1024),
+      )
+
+      const [interaction] = await getInteractions(account.id)
+      expect(interaction.api_key_id).toBe('key-2')
+    })
   })
 })

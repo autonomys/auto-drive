@@ -23,6 +23,9 @@ const AUTO_EVM_RECEIPT_TIMEOUT_MS = 180_000
 // perfectly fine. 10 minutes covers a slow inclusion plus the confirmations.
 const ETHEREUM_RECEIPT_TIMEOUT_MS = 600_000
 
+// At least an hour of Auto EVM blocks.
+const AUTO_EVM_EVENT_LOOKBACK_BLOCKS = 600
+
 // AutoDriveUSDCReceiver exposes its configured ERC20 as `token()` — the public
 // getter of an immutable. Read at startup to check this deployment's
 // USDC_TOKEN_ADDRESS against the contract that is actually deployed.
@@ -53,6 +56,10 @@ export const ai3Chain: PaymentChain<
   contractAddress: config.paymentManager.contractAddress,
   confirmations: config.paymentManager.confirmations,
   receiptTimeoutMs: AUTO_EVM_RECEIPT_TIMEOUT_MS,
+  eventSource: {
+    kind: 'getLogs',
+    lookbackBlocks: AUTO_EVM_EVENT_LOOKBACK_BLOCKS,
+  },
   abi: intentPaymentReceivedAbi,
   eventName: 'IntentPaymentReceived',
   toPayment: (log, receipt) => ({
@@ -98,6 +105,7 @@ export const createUsdcChain = (
     contractAddress,
     confirmations: config.ethereum.confirmations,
     receiptTimeoutMs: ETHEREUM_RECEIPT_TIMEOUT_MS,
+    eventSource: { kind: 'filter' },
     abi: intentTokenPaymentReceivedAbi,
     eventName: 'IntentTokenPaymentReceived',
     // The receiver's token is immutable and these logs are already filtered to

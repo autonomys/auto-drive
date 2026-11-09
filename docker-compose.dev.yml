@@ -4,7 +4,7 @@ volumes:
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17.9
     container_name: auto_drive_postgres_db
     environment:
       POSTGRES_USER: postgres
@@ -127,5 +127,6 @@ services:
       - JWT_SECRET_ALGORITHM=${JWT_SECRET_ALGORITHM}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
       - API_SECRET=${API_SECRET}
+      - WEB3_AUTH_ALLOWED_ORIGINS=${WEB3_AUTH_ALLOWED_ORIGINS}
     profiles:
       - auth

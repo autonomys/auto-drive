@@ -1,11 +1,14 @@
 import {
+  IntentStatus,
   PaymentMethod,
   PurchasedCredit,
   PurchasedCreditSummary,
 } from '@auto-drive/models'
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { err, ok, Result } from 'neverthrow'
 import { createLogger } from '../../drivers/logger.js'
+import { intentsRepository } from './intents.js'
 
 const logger = createLogger('repositories:purchasedCredits')
 
@@ -111,80 +114,69 @@ const getActiveByAccountId = async (
 
 // ---------------------------------------------------------------------------
 // consumeUpTo
-// Atomically consumes up to `bytes` from purchased credit rows in FIFO order
-// (soonest-expiry first). Returns the number of bytes actually consumed.
-// Never fails — if fewer than `bytes` are available it simply drains whatever
-// exists and returns that amount. This is the sole consumption path; it
-// replaced an earlier two-phase approach that had a TOCTOU race between
-// transactions.
+// Consumes up to `bytes` from purchased credit rows in FIFO order
+// (soonest-expiry first) and returns what it took from each row. Never fails —
+// if fewer than `bytes` are available it drains whatever exists.
+//
+// Runs on the caller's client, inside the caller's transaction: the rows stay
+// locked FOR UPDATE until the caller commits, and the caller writes the
+// interaction and its per-batch consumption rows before committing, so the
+// ledger can never disagree with the balances. Rolling back undoes everything.
 // ---------------------------------------------------------------------------
 
+export type BatchConsumption = { purchasedCreditId: string; bytes: bigint }
+
 const consumeUpTo = async (
+  client: pg.PoolClient,
   accountId: string,
   creditType: 'upload' | 'download',
   bytes: bigint,
-): Promise<bigint> => {
-  if (bytes <= BigInt(0)) return BigInt(0)
+): Promise<BatchConsumption[]> => {
+  if (bytes <= BigInt(0)) return []
 
-  const db = await getDatabase()
-  const client = await db.connect()
+  const remainingCol =
+    creditType === 'upload'
+      ? 'upload_bytes_remaining'
+      : 'download_bytes_remaining'
 
-  try {
-    await client.query('BEGIN')
+  const rowsResult = await client.query<DBPurchasedCredit>(
+    `SELECT *
+     FROM purchased_credits
+     WHERE account_id = $1
+       AND expired = FALSE
+       AND expires_at > NOW()
+       AND ${remainingCol} > 0
+     ORDER BY expires_at ASC, purchased_at ASC
+     FOR UPDATE`,
+    [accountId],
+  )
 
-    const remainingCol =
+  const consumed: BatchConsumption[] = []
+  let toConsume = bytes
+
+  for (const row of rowsResult.rows) {
+    if (toConsume <= BigInt(0)) break
+
+    const rowRemaining = BigInt(
       creditType === 'upload'
-        ? 'upload_bytes_remaining'
-        : 'download_bytes_remaining'
-
-    const rowsResult = await client.query<DBPurchasedCredit>(
-      `SELECT *
-       FROM purchased_credits
-       WHERE account_id = $1
-         AND expired = FALSE
-         AND expires_at > NOW()
-         AND ${remainingCol} > 0
-       ORDER BY expires_at ASC, purchased_at ASC
-       FOR UPDATE`,
-      [accountId],
+        ? row.upload_bytes_remaining
+        : row.download_bytes_remaining,
     )
 
-    const rows = rowsResult.rows
-    let toConsume = bytes
-    let totalConsumed = BigInt(0)
+    const deduction = toConsume < rowRemaining ? toConsume : rowRemaining
 
-    for (const row of rows) {
-      if (toConsume <= BigInt(0)) break
+    await client.query(
+      `UPDATE purchased_credits
+       SET ${remainingCol} = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [(rowRemaining - deduction).toString(), row.id],
+    )
 
-      const rowRemaining = BigInt(
-        creditType === 'upload'
-          ? row.upload_bytes_remaining
-          : row.download_bytes_remaining,
-      )
-
-      const deduction = toConsume < rowRemaining ? toConsume : rowRemaining
-      const newRemaining = rowRemaining - deduction
-
-      await client.query(
-        `UPDATE purchased_credits
-         SET ${remainingCol} = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [newRemaining.toString(), row.id],
-      )
-
-      toConsume -= deduction
-      totalConsumed += deduction
-    }
-
-    await client.query('COMMIT')
-    return totalConsumed
-  } catch (error) {
-    await client.query('ROLLBACK')
-    logger.error(error, 'consumeUpTo: transaction failed, rolled back')
-    throw error
-  } finally {
-    client.release()
+    toConsume -= deduction
+    consumed.push({ purchasedCreditId: row.id, bytes: deduction })
   }
+
+  return consumed
 }
 
 // ---------------------------------------------------------------------------
@@ -385,102 +377,14 @@ const getByAccountId = async (
 }
 
 // ---------------------------------------------------------------------------
-// refundCredits
-// Compensating transaction: adds bytes back to the account's active rows in
-// FIFO order (soonest-expiry first), up to each row's original purchase
-// amount. Called when interaction recording fails after consumeUpTo has
-// already committed, to avoid permanent financial data loss.
-// If not all bytes can be refunded (e.g. rows expired between consumption
-// and the refund attempt), logs a warning but does not throw.
-// ---------------------------------------------------------------------------
-
-const refundCredits = async (
-  accountId: string,
-  creditType: 'upload' | 'download',
-  bytes: bigint,
-): Promise<void> => {
-  if (bytes <= BigInt(0)) return
-
-  const db = await getDatabase()
-  const client = await db.connect()
-
-  try {
-    await client.query('BEGIN')
-
-    const remainingCol =
-      creditType === 'upload'
-        ? 'upload_bytes_remaining'
-        : 'download_bytes_remaining'
-
-    // Lock in the same FIFO order as consumeUpTo so we refund to the rows
-    // that were actually consumed from.
-    const rowsResult = await client.query<DBPurchasedCredit>(
-      `SELECT *
-       FROM purchased_credits
-       WHERE account_id = $1
-         AND expired = FALSE
-         AND expires_at > NOW()
-       ORDER BY expires_at ASC, purchased_at ASC
-       FOR UPDATE`,
-      [accountId],
-    )
-
-    let toRefund = bytes
-
-    for (const row of rowsResult.rows) {
-      if (toRefund <= BigInt(0)) break
-
-      const currentRemaining = BigInt(
-        creditType === 'upload'
-          ? row.upload_bytes_remaining
-          : row.download_bytes_remaining,
-      )
-      const original = BigInt(
-        creditType === 'upload'
-          ? row.upload_bytes_original
-          : row.download_bytes_original,
-      )
-
-      // Only refund up to the original purchase amount for this row.
-      const capacity = original - currentRemaining
-      if (capacity <= BigInt(0)) continue
-
-      const refund = toRefund < capacity ? toRefund : capacity
-
-      await client.query(
-        `UPDATE purchased_credits
-         SET ${remainingCol} = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [(currentRemaining + refund).toString(), row.id],
-      )
-
-      toRefund -= refund
-    }
-
-    if (toRefund > BigInt(0)) {
-      logger.warn(
-        'refundCredits: could not fully refund %d bytes for account %s (rows may have expired)',
-        toRefund,
-        accountId,
-      )
-    }
-
-    await client.query('COMMIT')
-  } catch (error) {
-    await client.query('ROLLBACK')
-    logger.error(error, 'refundCredits: transaction failed, rolled back')
-    throw error
-  } finally {
-    client.release()
-  }
-}
-
-// ---------------------------------------------------------------------------
 // createPurchasedCreditWithCapCheck
-// Atomically checks the per-user cap and inserts a new credit row in a
+// Atomically checks the per-account cap and inserts a new credit row in a
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
 // would push upload remaining over the cap.
+// The same transaction moves the intent from CONFIRMED to COMPLETED, and
+// returns err('intent_not_confirmed') without inserting if it has left
+// CONFIRMED, e.g. because the buyer's deletion expired it.
 // Download bytes are not capped — they are not allocated on purchase right
 // now (downloadBytesOriginal is expected to be 0n). Infrastructure is kept
 // for future use.
@@ -488,8 +392,10 @@ const refundCredits = async (
 
 const createPurchasedCreditWithCapCheck = async (
   params: CreatePurchasedCreditParams,
-  maxBytesPerUser: bigint,
-): Promise<Result<PurchasedCredit, 'cap_exceeded'>> => {
+  maxBytesPerAccount: bigint,
+): Promise<
+  Result<PurchasedCredit, 'cap_exceeded' | 'intent_not_confirmed'>
+> => {
   const db = await getDatabase()
   const client = await db.connect()
 
@@ -522,9 +428,19 @@ const createPurchasedCreditWithCapCheck = async (
     const currentRow = currentResult.rows[0]
     const currentUpload = BigInt(currentRow.upload_bytes_remaining)
 
-    if (currentUpload + params.uploadBytesOriginal > maxBytesPerUser) {
+    if (currentUpload + params.uploadBytesOriginal > maxBytesPerAccount) {
       await client.query('ROLLBACK')
       return err('cap_exceeded' as const)
+    }
+
+    const completed = await intentsRepository.updateStatusIfConfirmed(
+      params.intentId,
+      IntentStatus.COMPLETED,
+      client,
+    )
+    if (!completed) {
+      await client.query('ROLLBACK')
+      return err('intent_not_confirmed' as const)
     }
 
     const insertResult = await client.query<DBPurchasedCredit>(
@@ -945,7 +861,6 @@ export const purchasedCreditsRepository = {
   createPurchasedCredit,
   getActiveByAccountId,
   consumeUpTo,
-  refundCredits,
   getRemainingCredits,
   getExpiringCredits,
   getExpiringCreditsAggregate,

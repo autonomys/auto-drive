@@ -1,11 +1,12 @@
 /* eslint-disable camelcase */
 import { create } from 'zustand';
 import { ObjectSummary } from '@auto-drive/models';
-import { Metadata_Roots_Order_By, Order_By } from '../../../../gql/graphql';
+import { Metadata_Roots_Order_By } from '../../../../gql/graphql';
 import { resetParams } from '@/utils/table';
 import {
   TABLE_ROW_LIMITS,
   TABLE_SORT_KEYS,
+  TABLE_SORT_ORDER_FROM_PARAM,
   defaultParams,
 } from '@/constants/table';
 
@@ -149,16 +150,17 @@ export const useFileTableState = create<FileTableStore>()((set, get) => {
         }
 
         const sortKeyParam = searchParams.get('sortKey');
-        const sortOrderParam = searchParams.get('sortOrder') as Order_By;
+        const sortOrder = TABLE_SORT_ORDER_FROM_PARAM.get(
+          searchParams.get('sortOrder') ?? '',
+        );
 
         if (
           sortKeyParam &&
           TABLE_SORT_KEYS.includes(sortKeyParam) &&
-          (sortOrderParam === Order_By.AscNullsLast ||
-            sortOrderParam === Order_By.DescNullsLast)
+          sortOrder
         ) {
           newSortBy = {
-            [sortKeyParam]: sortOrderParam,
+            [sortKeyParam]: sortOrder,
           } as Metadata_Roots_Order_By;
           paramsChanged = true;
         }

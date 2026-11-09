@@ -55,6 +55,7 @@ The service supports multiple authentication providers:
 
 - Ethereum wallet authentication using Sign-In with Ethereum
 - Validates signed messages using the `siwe` library
+- Messages carry a one-time nonce from `POST /users/web3/nonce` and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS`
 - Uses wallet address as both user ID and username
 
 ### 5. **API Key Authentication**
@@ -82,6 +83,7 @@ Environment variables:
 - `JWT_SECRET_ALGORITHM`: JWT algorithm (default: RS256)
 - `API_SECRET`: Secret for admin API authentication
 - `REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS`: Tokens issued before this time are revoked (0 = disabled)
+- `WEB3_AUTH_ALLOWED_ORIGINS`: Comma-separated frontend origins that wallet sign-in messages may be issued for (default: `https://explorer.ai3.storage`)
 
 ## Hasura Integration
 
@@ -194,7 +196,21 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information with members
+#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles)
+
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each write takes the acting admin's public ID as `actor` and is recorded in `users.organization_membership_changes`.
+
+#### `POST /organizations`: Creates an organization (`{ name }`)
+
+#### `POST /organizations/batch`: Gets organizations by ID with their member count and archive date (`{ ids }`, up to 100)
+
+#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
+
+#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`). The user leaves their current organization, which is archived if no members remain
+
+#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`)
+
+#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one
 
 ## Security Considerations
 

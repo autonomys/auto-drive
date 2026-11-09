@@ -1,10 +1,12 @@
-import { ApiPromise } from '@polkadot/api'
-import {
+import type {
   SubmittableExtrinsic,
   SubmittableResultValue,
 } from '@polkadot/api/types'
-import { KeyringPair } from '@polkadot/keyring/types'
-import { waitReady } from '@polkadot/wasm-crypto'
+import type { KeyringPair } from '@polkadot/keyring/types'
+import {
+  ApiPromise,
+  cryptoWaitReady,
+} from '../../../../shared/utils/polkadot.js'
 import { createConnection } from '../../../drivers/substrate.js'
 import { Transaction, TransactionResult } from '@auto-drive/models'
 import { createLogger } from '../../../drivers/logger.js'
@@ -555,19 +557,72 @@ export const submitTransaction = (
   })
 }
 
+const CAPACITY_SUMMARY_INTERVAL_MS = 60_000
+
+// Nearest-rank percentile of an ascending array
+const percentile = (sorted: number[], p: number) =>
+  sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)]
+
 export const createTransactionManager = () => {
   let api: ApiPromise
   let accountManager: Awaited<ReturnType<typeof createAccountManager>>
 
+  const pLimitted = pLimit(config.params.maxConcurrentUploads)
+
+  // Publisher capacity at INFO, so throughput can be measured without DEBUG
+  // tracing: how long each transaction held a pLimit slot (acquired until
+  // released, including account recovery after a failure) and how many slots
+  // are busy. Aborted transactions were cut short by the task timeout, so they
+  // are counted but kept out of the percentiles. Silent while the publisher is
+  // idle.
+  let holdTimesMs: number[] = []
+  let settledOk = 0
+  let aborted = 0
+  let summaryTimer: ReturnType<typeof setInterval> | undefined
+  const logCapacitySummary = () => {
+    const sorted = holdTimesMs.sort((a, b) => a - b)
+    const ok = settledOk
+    const abortedCount = aborted
+    holdTimesMs = []
+    settledOk = 0
+    aborted = 0
+    if (
+      sorted.length === 0 &&
+      abortedCount === 0 &&
+      pLimitted.activeCount === 0
+    )
+      return
+
+    const seconds = (ms: number | undefined) =>
+      ms === undefined ? '-' : (ms / 1000).toFixed(1)
+    logger.info(
+      'Publisher capacity: %d tx settled (%d ok), %d aborted in %ds, slot hold p50=%ss p95=%ss | in-flight %d/%d, queued %d',
+      sorted.length,
+      ok,
+      abortedCount,
+      CAPACITY_SUMMARY_INTERVAL_MS / 1000,
+      seconds(percentile(sorted, 50)),
+      seconds(percentile(sorted, 95)),
+      pLimitted.activeCount,
+      config.params.maxConcurrentUploads,
+      pLimitted.pendingCount,
+    )
+  }
+
   const uniqueExecution = pLimit(1)
   const ensureInitialized = () =>
     uniqueExecution(async (): Promise<void> => {
-      await waitReady()
+      await cryptoWaitReady()
       api = api ?? (await createConnection())
       accountManager = accountManager ?? (await createAccountManager(api))
+      if (!summaryTimer) {
+        summaryTimer = setInterval(
+          logCapacitySummary,
+          CAPACITY_SUMMARY_INTERVAL_MS,
+        )
+        summaryTimer.unref()
+      }
     })
-
-  const pLimitted = pLimit(config.params.maxConcurrentUploads)
 
   const submit = async (
     transactions: Transaction[],
@@ -588,8 +643,9 @@ export const createTransactionManager = () => {
           ...transaction.params,
         )
 
-        return pLimitted(() =>
-          submitTransaction(api, account, trx, nonce, signal)
+        return pLimitted(() => {
+          const slotAcquiredAt = Date.now()
+          return submitTransaction(api, account, trx, nonce, signal)
             .catch((error) => {
               logger.error(error as Error, 'Transaction submission failed')
               return {
@@ -623,9 +679,18 @@ export const createTransactionManager = () => {
                 }
               }
 
+              // The slot is released when this callback returns, so the hold
+              // is measured here, after any recovery above
+              if (result.status === 'Aborted') {
+                aborted++
+              } else {
+                holdTimesMs.push(Date.now() - slotAcquiredAt)
+                if (result.success) settledOk++
+              }
+
               return result
-            }),
-        )
+            })
+        })
       },
     )
 

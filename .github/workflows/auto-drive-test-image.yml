@@ -81,11 +81,14 @@ jobs:
       - name: Start container
         run: |
           docker run -d --name auto-drive-test -p 127.0.0.1:28640:80 auto-drive-test:ci
-          for _ in $(seq 120); do
-            if [ "$(docker inspect -f '{{.State.Health.Status}}' auto-drive-test)" = healthy ]; then
-              exit 0
-            fi
-            sleep 1
+          # The image exits once its own start timeout passes, so this only
+          # waits for that verdict; the cap guards against a hang.
+          for _ in $(seq 300); do
+            case "$(docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' auto-drive-test)" in
+              "running healthy") exit 0 ;;
+              running*) sleep 1 ;;
+              *) break ;;
+            esac
           done
           docker logs auto-drive-test
           exit 1

@@ -11,15 +11,20 @@ import {
   AccountInfoWithUser,
   AccountWithTotalSize,
   AdminAccountDetails,
+  Intent,
+  AccountTermsChange,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
 import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { InteractionsUseCases } from '../objects/interactions.js'
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
+import { getDatabase } from '../../infrastructure/drivers/pg.js'
 import { config } from '../../config.js'
 import { err, ok, Result } from 'neverthrow'
 import {
+  BadRequestError,
+  ConflictError,
   ForbiddenError,
   ObjectNotFoundError,
   PaymentRequiredError,
@@ -28,16 +33,38 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 
 const logger = createLogger('AccountsUseCases')
 
+/**
+ * The holding cap and expiry period that apply to an account: its overrides,
+ * or the global defaults where it has none.
+ */
+const getCreditTerms = (
+  account: Pick<Account, 'maxPurchasedBytes' | 'creditExpiryDays'>,
+): { maxBytes: bigint; expiryDays: number } => ({
+  maxBytes:
+    typeof account.maxPurchasedBytes === 'number'
+      ? BigInt(account.maxPurchasedBytes)
+      : config.credits.maxBytesPerAccount,
+  expiryDays: account.creditExpiryDays ?? config.credits.expiryDays,
+})
+
+// A credit term left undefined stays as it is; null clears the override.
 const updateAccount = async (
   executor: User,
-  userPublicId: string,
+  accountId: string,
   model: AccountModel,
   uploadLimit: number,
   downloadLimit: number,
-): Promise<Result<void, ForbiddenError | ObjectNotFoundError>> => {
+  terms: {
+    maxPurchasedBytes?: number | null
+    creditExpiryDays?: number | null
+    reason?: string
+  } = {},
+): Promise<
+  Result<void, ForbiddenError | ObjectNotFoundError | BadRequestError>
+> => {
   if (executor.role !== UserRole.Admin) {
     logger.warn('User does not have admin privileges', {
-      userPublicId,
+      accountId,
       model,
       uploadLimit,
       downloadLimit,
@@ -45,17 +72,10 @@ const updateAccount = async (
     return err(new ForbiddenError('User does not have admin privileges'))
   }
 
-  const user = await AuthManager.getUserFromPublicId(userPublicId)
-  if (!user.organizationId) {
-    return err(new ObjectNotFoundError('User has no organization ID'))
-  }
-
-  const account = await accountsRepository.getByOrganizationId(
-    user.organizationId,
-  )
+  const account = await accountsRepository.getById(accountId)
   if (!account) {
     logger.warn('Account not found', {
-      userPublicId,
+      accountId,
       model,
       uploadLimit,
       downloadLimit,
@@ -63,8 +83,17 @@ const updateAccount = async (
     return err(new ObjectNotFoundError('Account not found'))
   }
 
+  // A partner account's uploads are paid with purchased credits only.
+  if (account.isPartner && uploadLimit !== 0) {
+    return err(
+      new BadRequestError(
+        'A partner account has no free upload allowance: its upload limit must be 0',
+      ),
+    )
+  }
+
   logger.debug('Updating account', {
-    userPublicId,
+    accountId,
     model,
     uploadLimit,
     downloadLimit,
@@ -72,9 +101,21 @@ const updateAccount = async (
 
   await accountsRepository.updateAccount(
     account.id,
-    model,
-    uploadLimit,
-    downloadLimit,
+    {
+      model,
+      uploadLimit,
+      downloadLimit,
+      maxPurchasedBytes:
+        terms.maxPurchasedBytes === undefined
+          ? account.maxPurchasedBytes
+          : terms.maxPurchasedBytes,
+      creditExpiryDays:
+        terms.creditExpiryDays === undefined
+          ? account.creditExpiryDays
+          : terms.creditExpiryDays,
+    },
+    executor.publicId,
+    terms.reason,
   )
 
   return ok()
@@ -119,27 +160,14 @@ const initAccount = async (
   uploadLimit: number,
   downloadLimit: number,
 ): Promise<Account> => {
-  const account = await accountsRepository.getByOrganizationId(organizationId)
-  if (account) {
-    throw new Error('Account already exists')
-  }
-
-  const newAccount = {
-    id: v4(),
+  // Returns the existing account if the organisation already has one.
+  return accountsRepository.createAccount(
+    v4(),
     organizationId,
-    model: config.params.defaultAccount.model as AccountModel,
+    config.params.defaultAccount.model as AccountModel,
     uploadLimit,
     downloadLimit,
-  }
-  await accountsRepository.createAccount(
-    newAccount.id,
-    organizationId,
-    newAccount.model,
-    newAccount.uploadLimit,
-    newAccount.downloadLimit,
   )
-
-  return newAccount
 }
 
 const getPendingCreditsByAccountAndType = async (
@@ -193,7 +221,10 @@ const getPendingCreditsByAccountAndType = async (
     const purchased = await purchasedCreditsRepository.getRemainingCredits(
       account.id,
     )
-    return freeRemaining + Number(purchased.uploadBytesRemaining)
+    // A free allowance spent beyond its limit (the limit was lowered after the
+    // uploads) counts as zero, as in registerInteraction, so it can't hide
+    // purchased bytes from the upload gate.
+    return Math.max(0, freeRemaining) + Number(purchased.uploadBytesRemaining)
   }
 
   return freeRemaining
@@ -220,21 +251,53 @@ const getAccountInfo = async (
   }
 }
 
+// Members of an organisation share its account, so it is looked up once per
+// organisation.
+const getAccountInfosByOrganization = async (
+  users: UserWithOrganization[],
+): Promise<Map<string, AccountInfo>> => {
+  const byOrganization = new Map<string, UserWithOrganization>()
+  for (const user of users) {
+    if (user.organizationId && !byOrganization.has(user.organizationId)) {
+      byOrganization.set(user.organizationId, user)
+    }
+  }
+
+  return new Map(
+    await Promise.all(
+      [...byOrganization].map(
+        async ([organizationId, user]) =>
+          [organizationId, await getAccountInfo(user)] as const,
+      ),
+    ),
+  )
+}
+
 const getUserListAccount = async (
+  executor: User,
   userPublicIds: string[],
-): Promise<Record<string, AccountInfo>> => {
-  if (userPublicIds.length === 0) return {}
+): Promise<Result<Record<string, AccountInfo>, ForbiddenError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (userPublicIds.length === 0) return ok({})
 
   const users = await AuthManager.getUsersFromPublicIds(userPublicIds)
+  const accountInfos = await getAccountInfosByOrganization(users)
+
+  // In request order: auth returns users unordered, and the admin panel lists
+  // a page in the order of this response.
   const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
-
-  const entries = await Promise.all(
-    userPublicIds
-      .filter((id) => usersByPublicId.has(id))
-      .map(async (id) => [id, await getAccountInfo(usersByPublicId.get(id)!)]),
+  return ok(
+    Object.fromEntries(
+      userPublicIds.flatMap((publicId) => {
+        const organizationId = usersByPublicId.get(publicId)?.organizationId
+        const info = organizationId && accountInfos.get(organizationId)
+        return info ? [[publicId, info]] : []
+      }),
+    ),
   )
-
-  return Object.fromEntries(entries)
 }
 
 const getPendingCreditsByUserAndType = async (
@@ -262,189 +325,178 @@ const registerInteraction = async (
     size,
   )
 
-  // Atomically consume as many bytes as possible from purchased credits in a
-  // single transaction. Returns the number of bytes actually deducted. This
-  // avoids the TOCTOU race that existed with the previous two-phase approach
-  // where releasing FOR UPDATE locks between calls allowed concurrent requests
-  // to consume the same credits.
-  //
-  // Downloads use only the free-tier guard below. Purchased download bytes
-  // are not allocated on purchase or consumed here; consumeUpTo and its
-  // compensation logic are upload-only for now.
-  const fromPurchased =
-    type === InteractionType.Upload
-      ? await purchasedCreditsRepository.consumeUpTo(
-          account.id,
-          creditType,
-          size,
-        )
-      : BigInt(0)
+  // One transaction for the whole interaction: drawing down purchased batches,
+  // the free-tier guard, and writing the interactions with their per-batch
+  // consumption rows. Any failure rolls all of it back, so the ledger never
+  // disagrees with the balances and nothing needs a compensating refund.
+  const db = await getDatabase()
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
 
-  const fromFree = size - fromPurchased
-
-  // Guard: verify the user has enough free-tier budget to cover any remainder
-  // BEFORE writing any interaction records.  This is the last line of defence
-  // against double-spend races: consumeUpTo serialises the purchased pool, but
-  // a concurrent request that only received a partial purchased allocation must
-  // not silently overflow into free-tier credits it does not own.
-  //
-  // Critically, this check runs before either interaction ledger entry is
-  // written so that if the guard fires, the compensating refund leaves the
-  // system in a fully clean state — no dangling Purchased ledger entries.
-  if (fromFree > BigInt(0)) {
-    const end = new Date()
-    const start =
-      account.model === AccountModel.Monthly
-        ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
-        : new Date(0)
-
-    const freeTierInteractions =
-      await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
-        account.id,
-        type,
-        start,
-        end,
-        InteractionSource.FreeTier,
-      )
-
-    const spentFree = freeTierInteractions.reduce(
-      (acc, i) => acc + BigInt(i.size),
-      BigInt(0),
-    )
-    const freeLimit = BigInt(
+    // consumeUpTo locks the account's purchased rows until commit, which
+    // serialises concurrent uploads against the purchased pool.
+    //
+    // Downloads use only the free-tier guard below. Purchased download bytes
+    // are not allocated on purchase or consumed here.
+    const consumed =
       type === InteractionType.Upload
-        ? account.uploadLimit
-        : account.downloadLimit,
-    )
-    const freeAvailable =
-      freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+        ? await purchasedCreditsRepository.consumeUpTo(
+            client,
+            account.id,
+            creditType,
+            size,
+          )
+        : []
+    const fromPurchased = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
+    const fromFree = size - fromPurchased
 
-    if (fromFree > freeAvailable) {
-      logger.warn(
-        'registerInteraction: insufficient free-tier credits — refunding purchased bytes and rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
-        account.id,
-        fromFree,
-        freeAvailable,
-      )
-      if (fromPurchased > BigInt(0)) {
-        await purchasedCreditsRepository.refundCredits(
+    // Guard: a request that only received a partial purchased allocation must
+    // not silently overflow into free-tier credits it does not own.
+    if (fromFree > BigInt(0)) {
+      const end = new Date()
+      const start =
+        account.model === AccountModel.Monthly
+          ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+          : new Date(0)
+
+      const freeTierInteractions =
+        await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
           account.id,
-          creditType,
-          fromPurchased,
+          type,
+          start,
+          end,
+          InteractionSource.FreeTier,
+          client,
+        )
+
+      const spentFree = freeTierInteractions.reduce(
+        (acc, i) => acc + BigInt(i.size),
+        BigInt(0),
+      )
+      const freeLimit = BigInt(
+        type === InteractionType.Upload
+          ? account.uploadLimit
+          : account.downloadLimit,
+      )
+      const freeAvailable =
+        freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
+
+      if (fromFree > freeAvailable) {
+        logger.warn(
+          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+          account.id,
+          fromFree,
+          freeAvailable,
+        )
+        throw new PaymentRequiredError(
+          `Insufficient credits to process ${creditType}`,
         )
       }
-      throw new PaymentRequiredError(
-        `Insufficient credits to process ${creditType}`,
-      )
     }
-  }
 
-  // consumeUpTo commits its own transaction before we record the interaction.
-  // If createInteraction fails, the credits are already deducted with no
-  // ledger entry — permanent financial loss. Guard with a compensating refund.
-  if (fromPurchased > BigInt(0)) {
-    try {
-      await InteractionsUseCases.createInteraction(
+    if (fromPurchased > BigInt(0)) {
+      const interactionId = await InteractionsUseCases.createInteraction(
         account.id,
         type,
         fromPurchased,
         InteractionSource.Purchased,
         cid,
+        user.apiKeyId,
+        client,
       )
-    } catch (interactionError) {
-      logger.error(
-        interactionError,
-        'registerInteraction: purchased interaction recording failed after consumeUpTo committed — attempting compensating refund (accountId=%s, type=%s, bytes=%d)',
-        account.id,
-        creditType,
-        fromPurchased,
+      await interactionsRepository.createCreditConsumption(
+        interactionId,
+        consumed,
+        client,
       )
-      try {
-        await purchasedCreditsRepository.refundCredits(
-          account.id,
-          creditType,
-          fromPurchased,
-        )
-        logger.warn(
-          'registerInteraction: compensating refund succeeded (accountId=%s, bytes=%d)',
-          account.id,
-          fromPurchased,
-        )
-      } catch (refundError) {
-        logger.error(
-          refundError,
-          'CRITICAL: registerInteraction: interaction recording AND refund both failed — manual recovery required (accountId=%s, type=%s, bytes=%d)',
-          account.id,
-          creditType,
-          fromPurchased,
-        )
-      }
-      throw interactionError
     }
-  }
 
-  if (fromFree > BigInt(0)) {
-    logger.debug(
-      'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
-      account.id,
-      fromPurchased,
-      fromFree,
-    )
+    if (fromFree > BigInt(0)) {
+      logger.debug(
+        'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
+        account.id,
+        fromPurchased,
+        fromFree,
+      )
 
-    await InteractionsUseCases.createInteraction(
-      account.id,
-      type,
-      fromFree,
-      InteractionSource.FreeTier,
-      cid,
-    )
+      await InteractionsUseCases.createInteraction(
+        account.id,
+        type,
+        fromFree,
+        InteractionSource.FreeTier,
+        cid,
+        user.apiKeyId,
+        client,
+      )
+    }
+
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
   }
 }
 
 const addCreditsToAccount = async (
-  publicId: string,
+  intent: Pick<Intent, 'id' | 'userPublicId' | 'accountId'>,
   credits: bigint,
-  intentId: string,
-): Promise<Result<void, ForbiddenError>> => {
-  const user = await AuthManager.getUserFromPublicId(publicId)
-  const account = await AccountsUseCases.getOrCreateAccount(user)
+): Promise<Result<void, ForbiddenError | ConflictError>> => {
+  // Intents created before account_id was recorded go to the buyer's current
+  // account.
+  const account =
+    (intent.accountId &&
+      (await accountsRepository.getById(intent.accountId))) ||
+    (await AccountsUseCases.getOrCreateAccount(
+      await AuthManager.getUserFromPublicId(intent.userPublicId),
+    ))
+  const accountId = account.id
+  const terms = getCreditTerms(account)
 
   const expiresAt = new Date(
-    Date.now() + config.credits.expiryDays * 24 * 60 * 60 * 1000,
+    Date.now() + terms.expiryDays * 24 * 60 * 60 * 1000,
   )
 
-  // Atomically check the per-user cap and insert inside a single transaction
-  // protected by a per-account advisory lock. This prevents two concurrent
-  // onConfirmedIntent calls for different intents from both passing the cap
-  // check and both inserting, which would push the account over the cap.
+  // Atomically check the per-account cap, insert and complete the intent inside
+  // a single transaction protected by a per-account advisory lock. This
+  // prevents two concurrent onConfirmedIntent calls for different intents from
+  // both passing the cap check and both inserting, which would push the account
+  // over the cap.
   const result =
     await purchasedCreditsRepository.createPurchasedCreditWithCapCheck(
       {
-        accountId: account.id,
-        intentId,
+        accountId,
+        intentId: intent.id,
         uploadBytesOriginal: credits,
         // Download credits are not allocated on purchase — infrastructure is
         // kept for future use but download limits are not enforced right now.
         downloadBytesOriginal: 0n,
         expiresAt,
       },
-      config.credits.maxBytesPerUser,
+      terms.maxBytes,
     )
 
   if (result.isErr()) {
+    if (result.error === 'intent_not_confirmed') {
+      return err(new ConflictError('Intent is no longer confirmed'))
+    }
     logger.warn(
-      'Purchase would exceed per-user cap (accountId=%s, adding=%d, cap=%d)',
-      account.id,
+      'Purchase would exceed per-account cap (accountId=%s, adding=%d, cap=%d)',
+      accountId,
       credits,
-      config.credits.maxBytesPerUser,
+      terms.maxBytes,
     )
-    return err(new ForbiddenError('Purchase would exceed per-user credit cap'))
+    return err(
+      new ForbiddenError('Purchase would exceed per-account credit cap'),
+    )
   }
 
   logger.info(
     'Purchased credits created (accountId=%s, intentId=%s, bytes=%d, expiresAt=%s)',
-    account.id,
-    intentId,
+    accountId,
+    intent.id,
     credits,
     expiresAt.toISOString(),
   )
@@ -505,23 +557,7 @@ const adminSearchAccounts = async (
 
   type MemberUser = UserWithOrganization & { organizationId: string }
   const onboarded = users.filter((u): u is MemberUser => !!u.organizationId)
-
-  // One lookup per organisation: getAccountInfo may create the account, and
-  // concurrent creates for members of the same organisation would collide.
-  const byOrganization = new Map<string, MemberUser>()
-  for (const user of onboarded) {
-    if (!byOrganization.has(user.organizationId)) {
-      byOrganization.set(user.organizationId, user)
-    }
-  }
-  const accountInfos = new Map(
-    await Promise.all(
-      [...byOrganization].map(
-        async ([organizationId, user]) =>
-          [organizationId, await getAccountInfo(user)] as const,
-      ),
-    ),
-  )
+  const accountInfos = await getAccountInfosByOrganization(onboarded)
 
   return ok(
     onboarded.map((user) => ({
@@ -532,13 +568,13 @@ const adminSearchAccounts = async (
 }
 
 /**
- * Admin account page: the account for an account ID or an organization ID,
- * with its members. Members can be empty, e.g. once the only member has
- * deleted their user: the account and its credits stay.
+ * Admin account page: an account with its members. Members can be empty, e.g.
+ * once the only member has deleted their user: the account and its credits
+ * stay.
  */
 const adminGetAccount = async (
   executor: User,
-  id: string,
+  accountId: string,
 ): Promise<
   Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
 > => {
@@ -546,28 +582,75 @@ const adminGetAccount = async (
     return err(new ForbiddenError('User does not have admin privileges'))
   }
 
-  const account =
-    (await accountsRepository.getById(id)) ??
-    (await accountsRepository.getByOrganizationId(id))
+  const account = await accountsRepository.getById(accountId)
   if (!account) {
     return err(new ObjectNotFoundError('Account not found'))
   }
 
-  const [pendingUploadCredits, pendingDownloadCredits, users] =
+  return ok(await getAdminAccountDetails(account))
+}
+
+/** Admin: the account of an organization, as on the account page. */
+const adminGetAccountByOrganization = async (
+  executor: User,
+  organizationId: string,
+): Promise<
+  Result<AdminAccountDetails, ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account = await accountsRepository.getByOrganizationId(organizationId)
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  return ok(await getAdminAccountDetails(account))
+}
+
+const getAdminAccountDetails = async (
+  account: Account,
+): Promise<AdminAccountDetails> => {
+  const [pendingUploadCredits, pendingDownloadCredits, users, organization] =
     await Promise.all([
       getPendingCreditsByAccountAndType(account, InteractionType.Upload),
       getPendingCreditsByAccountAndType(account, InteractionType.Download),
       AuthManager.adminSearchUsers('', account.organizationId),
+      AuthManager.getOrganization(account.organizationId),
     ])
 
-  return ok({
+  return {
     ...account,
     pendingUploadCredits,
     pendingDownloadCredits,
     // Auth returns only this organization's members; `organizationId` is
-    // their first membership, so it is only used to skip unonboarded users.
+    // null for unonboarded users, who are skipped.
     members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
-  })
+    organization: organization.unwrapOr(null),
+    defaultCreditTerms: {
+      maxPurchasedBytes: Number(config.credits.maxBytesPerAccount),
+      creditExpiryDays: config.credits.expiryDays,
+    },
+  }
+}
+
+/** Admin: every change to an account's terms, newest first. */
+const adminGetTermsChanges = async (
+  executor: User,
+  accountId: string,
+): Promise<
+  Result<AccountTermsChange[], ForbiddenError | ObjectNotFoundError>
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (!(await accountsRepository.getById(accountId))) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  return ok(await accountsRepository.getTermsChanges(accountId))
 }
 
 /**
@@ -598,7 +681,10 @@ const adminGetAccountIdsByUsers = async (
 export const AccountsUseCases = {
   adminSearchAccounts,
   adminGetAccount,
+  adminGetAccountByOrganization,
   adminGetAccountIdsByUsers,
+  adminGetTermsChanges,
+  getCreditTerms,
   updateAccount,
   getOrCreateAccount,
   initAccount,
