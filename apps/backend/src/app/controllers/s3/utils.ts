@@ -8,7 +8,13 @@ export const sendXML = <T extends object>(
 ) => {
   res.setHeader('Content-Type', 'application/xml')
 
-  res.send(js2xmlparser.parse(rootName, json))
+  // Not for success bodies: they can carry a value the client sends back, such
+  // as a continuation token, and a rewritten one would silently skip keys.
+  res.send(
+    js2xmlparser.parse(rootName, json, {
+      replaceInvalidChars: rootName === 'Error',
+    }),
+  )
 }
 
 // Control characters XML 1.0 cannot represent (all except TAB, LF, CR).
