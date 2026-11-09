@@ -34,8 +34,8 @@ const retrieveFileByteRange = async (
     metadata.dataCid,
     byteRange,
   )
-  return readByteRange(metadata.chunks, byteRange, async (chunks) => {
-    const fetcher = await selectObjectFetcher(metadata)
+  return readByteRange(metadata.chunks, byteRange, async (chunks: string[]) => {
+    const fetcher = await FilesUseCases.selectObjectFetcher(metadata)
     return composeNodesDataAsFileReadable({
       fetcher,
       chunks,
@@ -50,7 +50,7 @@ const retrieveFullFile = async (metadata: OffchainMetadata) => {
     metadata.dataCid,
     metadata.type,
   )
-  const fetcher = await selectObjectFetcher(metadata)
+  const fetcher = await FilesUseCases.selectObjectFetcher(metadata)
 
   return fetcher.fetchFile(metadata.dataCid)
 }
@@ -66,13 +66,15 @@ const retrieveObject = async (
 
   const isFullRetrieval = !byteRange
   if (isFullRetrieval) {
-    return retrieveFullFile(metadata)
+    return FilesUseCases.retrieveFullFile(metadata)
   }
 
-  return retrieveFileByteRange(metadata, byteRange)
+  return FilesUseCases.retrieveFileByteRange(metadata, byteRange)
 }
 
 export const FilesUseCases = {
   retrieveObject,
+  retrieveFullFile,
+  retrieveFileByteRange,
   selectObjectFetcher,
 }

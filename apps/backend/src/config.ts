@@ -191,6 +191,11 @@ export const config = {
   reclaim: {
     batchSize: positiveIntEnv('RECLAIM_BATCH_SIZE', 50),
     probeTimeoutMs: positiveIntEnv('FILES_GATEWAY_PROBE_TIMEOUT_MS', 10000),
+    sweepTimeoutMs: positiveIntEnv('RECLAIM_SWEEP_TIMEOUT_MS', 60000),
+    maxConsecutiveProbeFailures: positiveIntEnv(
+      'RECLAIM_MAX_CONSECUTIVE_FAILURES',
+      3,
+    ),
   },
   publishing: {
     // Backstop timeout for a single on-chain publishing task (publish-nodes /

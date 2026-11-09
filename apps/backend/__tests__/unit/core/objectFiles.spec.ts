@@ -18,6 +18,7 @@ const { DBObjectFetcher } = await import(
   '../../../src/core/objects/files/fetchers.js'
 )
 const { ObjectUseCases } = await import('../../../src/core/objects/object.js')
+const { config } = await import('../../../src/config.js')
 import { OffchainMetadata } from '@autonomys/auto-dag-data'
 import { Readable } from 'stream'
 
@@ -224,6 +225,23 @@ describe('FilesUseCases', () => {
       expect(removeNodeDataSpy).not.toHaveBeenCalled()
     })
 
+    beforeEach(async () => {
+      const { metadataRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      jest
+        .spyOn(metadataRepository, 'getMetadata')
+        .mockImplementation(async (cid) => ({
+          root_cid: cid,
+          head_cid: cid,
+          name: 'test.bin',
+          metadata: { type: 'file', totalSize: 1000n, dataCid: cid, chunks: [] },
+          is_archived: true,
+          created_at: new Date(),
+          tags: null,
+        } as any))
+    })
+
     it('reclaimArchivedNodeData strips node data only when FileGateway confirms retrievability', async () => {
       const { nodesRepository } = await import(
         '../../../src/infrastructure/repositories/index.js'
@@ -254,38 +272,43 @@ describe('FilesUseCases', () => {
       const { FileGateway } = await import(
         '../../../src/infrastructure/services/dsn/fileGateway/index.js'
       )
-      const { config } = await import('../../../src/config.js')
       const batchSize = config.reclaim.batchSize
-      const fullUnconfirmedBatch = Array.from(
-        { length: batchSize },
-        (_, i) => `cid-unconfirmed-${String(i).padStart(3, '0')}`,
-      )
+      const prevMaxFailures = config.reclaim.maxConsecutiveProbeFailures
+      config.reclaim.maxConsecutiveProbeFailures = batchSize + 1
+      try {
+        const fullUnconfirmedBatch = Array.from(
+          { length: batchSize },
+          (_, i) => `cid-unconfirmed-${String(i).padStart(3, '0')}`,
+        )
 
-      const getArchivedSpy = jest
-        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
-        .mockImplementation(async (_limit, afterCid) => {
-          if (!afterCid) return fullUnconfirmedBatch
-          return ['cid-confirmed-next-page']
-        })
-      jest
-        .spyOn(FileGateway, 'isRetrievableFromGateway')
-        .mockImplementation(async (cid) => cid === 'cid-confirmed-next-page')
-      const removeNodeDataSpy = jest
-        .spyOn(nodesRepository, 'removeNodeDataByRootCid')
-        .mockResolvedValue(undefined as any)
+        const getArchivedSpy = jest
+          .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+          .mockImplementation(async (_limit, afterCid) => {
+            if (!afterCid) return fullUnconfirmedBatch
+            return ['cid-confirmed-next-page']
+          })
+        jest
+          .spyOn(FileGateway, 'isRetrievableFromGateway')
+          .mockImplementation(async (cid) => cid === 'cid-confirmed-next-page')
+        const removeNodeDataSpy = jest
+          .spyOn(nodesRepository, 'removeNodeDataByRootCid')
+          .mockResolvedValue(undefined as any)
 
-      // Sweep 1 hits a full batch of unconfirmed CIDs
-      await ObjectUseCases.reclaimArchivedNodeData()
-      expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, null)
-      expect(removeNodeDataSpy).not.toHaveBeenCalled()
+        // Sweep 1 hits a full batch of unconfirmed CIDs
+        await ObjectUseCases.reclaimArchivedNodeData()
+        expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, null)
+        expect(removeNodeDataSpy).not.toHaveBeenCalled()
 
-      // Sweep 2 advances past the last CID of Sweep 1 instead of stalling
-      await ObjectUseCases.reclaimArchivedNodeData()
-      expect(getArchivedSpy).toHaveBeenLastCalledWith(
-        batchSize,
-        fullUnconfirmedBatch[batchSize - 1],
-      )
-      expect(removeNodeDataSpy).toHaveBeenCalledWith('cid-confirmed-next-page')
+        // Sweep 2 advances past the last CID of Sweep 1 instead of stalling
+        await ObjectUseCases.reclaimArchivedNodeData()
+        expect(getArchivedSpy).toHaveBeenLastCalledWith(
+          batchSize,
+          fullUnconfirmedBatch[batchSize - 1],
+        )
+        expect(removeNodeDataSpy).toHaveBeenCalledWith('cid-confirmed-next-page')
+      } finally {
+        config.reclaim.maxConsecutiveProbeFailures = prevMaxFailures
+      }
     })
 
     it('does not advance cursor past unvisited CIDs when aborted mid-sweep', async () => {
@@ -295,8 +318,7 @@ describe('FilesUseCases', () => {
       const { FileGateway } = await import(
         '../../../src/infrastructure/services/dsn/fileGateway/index.js'
       )
-      const { config } = await import('../../../src/config.js')
-      const batchSize = config.reclaim.batchSize
+            const batchSize = config.reclaim.batchSize
 
       const batch = Array.from({ length: batchSize }, (_, i) => `cid-abort-${i}`)
       const remainingBatch = batch.slice(2)
@@ -327,6 +349,63 @@ describe('FilesUseCases', () => {
       expect(getArchivedSpy).toHaveBeenLastCalledWith(batchSize, 'cid-abort-1')
       expect(gatewayCalls).toContain('cid-abort-2')
     })
+    it('skips folder roots in reclaim sweep to preserve child nodes', async () => {
+      const { nodesRepository, metadataRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+
+      jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockResolvedValue(['cid-folder-root'])
+      jest
+        .spyOn(metadataRepository, 'getMetadata')
+        .mockImplementation(async (cid) => ({
+          root_cid: cid,
+          head_cid: cid,
+          name: 'my-folder',
+          metadata: { type: 'folder', totalSize: 5000n, dataCid: cid, chunks: [] },
+          is_archived: true,
+          created_at: new Date(),
+          tags: null,
+        } as any))
+      const gatewaySpy = jest.spyOn(FileGateway, 'isRetrievableFromGateway')
+      const removeSpy = jest.spyOn(nodesRepository, 'removeNodeDataByRootCid')
+
+      await ObjectUseCases.reclaimArchivedNodeData()
+
+      expect(gatewaySpy).not.toHaveBeenCalled()
+      expect(removeSpy).not.toHaveBeenCalled()
+    })
+
+    it('stops reclaim sweep early when consecutive probe failures reach the threshold', async () => {
+      const { nodesRepository } = await import(
+        '../../../src/infrastructure/repositories/index.js'
+      )
+      const { FileGateway } = await import(
+        '../../../src/infrastructure/services/dsn/fileGateway/index.js'
+      )
+      
+      const cids = ['cid-fail-1', 'cid-fail-2', 'cid-fail-3', 'cid-fail-4', 'cid-fail-5']
+      jest
+        .spyOn(nodesRepository, 'getArchivedRootCidsWithData')
+        .mockResolvedValue(cids)
+      const gatewayCalls: string[] = []
+      jest
+        .spyOn(FileGateway, 'isRetrievableFromGateway')
+        .mockImplementation(async (cid) => {
+          gatewayCalls.push(cid)
+          return false
+        })
+
+      await ObjectUseCases.reclaimArchivedNodeData()
+
+      // Should stop after config.reclaim.maxConsecutiveProbeFailures (3)
+      expect(gatewayCalls).toEqual(['cid-fail-1', 'cid-fail-2', 'cid-fail-3'])
+    })
+
   })
 })
 

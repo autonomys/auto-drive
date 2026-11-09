@@ -646,7 +646,9 @@ const getArchivedRootCidsWithData = async (
         FROM metadata m
         JOIN nodes n ON n.root_cid = m.head_cid
         WHERE m.is_archived = true
+          AND (m.metadata->>'type' IS NULL OR m.metadata->>'type' != 'folder')
           AND n.encoded_node IS NOT NULL
+          AND n.block_published_on IS NOT NULL
           AND ($2::text IS NULL OR m.head_cid > $2)
         ORDER BY m.head_cid ASC
         LIMIT $1

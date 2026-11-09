@@ -520,33 +520,81 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
 }
 
 let reclaimCursorCid: string | null = null
+let isReclaimRunning = false
 
 const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
-  const batchSize = config.reclaim.batchSize
-  let cids = await nodesRepository.getArchivedRootCidsWithData(
-    batchSize,
-    reclaimCursorCid,
-  )
-  if (cids.length === 0 && reclaimCursorCid !== null) {
-    reclaimCursorCid = null
-    cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
+  if (isReclaimRunning) {
+    logger.warn('Previous reclaim sweep is still running, skipping interval')
+    return
   }
-  logger.info(
-    'Reclaim sweep: %d object(s) still holding node data',
-    cids.length,
-  )
+  isReclaimRunning = true
 
-  for (const cid of cids) {
-    if (signal?.aborted) return
-    reclaimCursorCid = cid
-    if (!(await FileGateway.isRetrievableFromGateway(cid))) continue
+  try {
+    const batchSize = config.reclaim.batchSize
+    const deadline = Date.now() + config.reclaim.sweepTimeoutMs
+    const maxConsecutiveFailures = config.reclaim.maxConsecutiveProbeFailures
 
-    await nodesRepository.removeNodeDataByRootCid(cid)
-    logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
-  }
+    let cids = await nodesRepository.getArchivedRootCidsWithData(
+      batchSize,
+      reclaimCursorCid,
+    )
+    if (cids.length === 0 && reclaimCursorCid !== null) {
+      reclaimCursorCid = null
+      cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
+    }
+    logger.info(
+      'Reclaim sweep: %d object(s) still holding node data',
+      cids.length,
+    )
 
-  if (cids.length < batchSize) {
-    reclaimCursorCid = null
+    let consecutiveFailures = 0
+
+    for (const cid of cids) {
+      if (signal?.aborted) return
+      if (Date.now() > deadline) {
+        logger.warn(
+          'Reclaim sweep reached wall-clock budget (%dms), stopping batch',
+          config.reclaim.sweepTimeoutMs,
+        )
+        break
+      }
+
+      reclaimCursorCid = cid
+
+      const meta = await metadataRepository.getMetadata(cid)
+      if (meta?.metadata?.type === 'folder') {
+        // Skip folder roots in the sweep for now to safely preserve descendant data
+        continue
+      }
+
+      const totalSize = meta?.metadata?.totalSize ?? 0n
+      const isRetrievable = await FileGateway.isRetrievableFromGateway(
+        cid,
+        totalSize,
+      )
+
+      if (!isRetrievable) {
+        consecutiveFailures++
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          logger.warn(
+            'Reclaim sweep encountered %d consecutive probe failures, stopping batch',
+            consecutiveFailures,
+          )
+          break
+        }
+        continue
+      }
+
+      consecutiveFailures = 0
+      await nodesRepository.removeNodeDataByRootCid(cid)
+      logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
+    }
+
+    if (cids.length < batchSize) {
+      reclaimCursorCid = null
+    }
+  } finally {
+    isReclaimRunning = false
   }
 }
 
