@@ -27,6 +27,12 @@ export const PurchasedCreditSchema = z.object({
    * or rows never refunded.
    */
   refundTxHash: z.string().nullable(),
+  /**
+   * Upload bytes the refund took back: what the batch had left when it was
+   * refunded. Null on unrefunded rows and on rows refunded before this field
+   * existed.
+   */
+  refundedUploadBytes: z.bigint().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -29,6 +29,7 @@ type DBPurchasedCredit = {
   expired: boolean
   refunded_at: Date | null
   refund_tx_hash: string | null
+  refunded_upload_bytes: string | null
   created_at: Date
   updated_at: Date
 }
@@ -46,6 +47,10 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   expired: row.expired,
   refundedAt: row.refunded_at,
   refundTxHash: row.refund_tx_hash,
+  refundedUploadBytes:
+    row.refunded_upload_bytes === null
+      ? null
+      : BigInt(row.refunded_upload_bytes),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
@@ -493,7 +498,7 @@ const UUID_REGEX =
 // markAsRefunded
 // Admin action: zero out remaining bytes for a single purchased_credits row
 // and mark it as refunded, recording the on-chain transaction hash of the
-// AI3 refund transfer.  Called after an admin has processed an out-of-band
+// AI3 refund transfer and the upload bytes the refund took back.  Called after an admin has processed an out-of-band
 // refund (manual AI3 transfer back to the user's wallet).
 // Depleted rows (0 upload bytes remaining, never refunded) are rejected
 // with notRefundable — nothing was forfeited, so no refund is owed on them.
@@ -520,7 +525,8 @@ const markAsRefunded = async (
   const db = await getDatabase()
   const result = await db.query<DBPurchasedCredit>(
     `UPDATE purchased_credits
-     SET upload_bytes_remaining   = 0,
+     SET refunded_upload_bytes    = upload_bytes_remaining,
+         upload_bytes_remaining   = 0,
          download_bytes_remaining = 0,
          refunded_at              = NOW(),
          refund_tx_hash           = $2,
@@ -696,7 +702,8 @@ const markManyAsRefunded = async (
 
     const updated = await client.query<DBPurchasedCredit>(
       `UPDATE purchased_credits
-       SET upload_bytes_remaining   = 0,
+       SET refunded_upload_bytes    = upload_bytes_remaining,
+           upload_bytes_remaining   = 0,
            download_bytes_remaining = 0,
            refunded_at              = NOW(),
            refund_tx_hash           = $2,
