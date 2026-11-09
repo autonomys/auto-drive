@@ -47,6 +47,16 @@ export class ObjectNotFoundError extends HttpError {
   }
 }
 
+// A versionId the key never had. Kept apart from ObjectNotFoundError because S3
+// names the two 404s differently (NoSuchVersion vs NoSuchKey).
+export class VersionNotFoundError extends HttpError {
+  static readonly statusCode = 404
+  constructor(message: string) {
+    super(VersionNotFoundError.statusCode, message)
+    this.name = 'VersionNotFoundError'
+  }
+}
+
 /**
  * A Range the object cannot satisfy → 416. Carries the object's real size so the
  * caller can answer with the `Content-Range: bytes * /<size>` S3 requires, which

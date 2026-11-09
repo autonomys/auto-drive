@@ -1,10 +1,12 @@
 import { S3UseCases } from '../../../core/s3/index.js'
 import {
   HttpError,
+  BadRequestError,
   ForbiddenError,
   RangeNotSatisfiableError,
   ChunkNotFoundError,
   PaymentRequiredError,
+  VersionNotFoundError,
 } from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
@@ -491,32 +493,28 @@ export const applyVerbatimBodyHeaders = (
  * each path segment URL-encoded and an optional "?versionId=..." suffix. Returns
  * null when the header is missing or malformed.
  *
- * A source `?versionId=` is intentionally NOT honoured: a copy always duplicates
- * the source key's CURRENT version (and stacks a new version on the destination).
- * Copying a specific historical source version is out of scope — versionId is the
- * content CID, so a client that needs an exact version can address it another
- * way. The suffix is stripped (not rejected) so routine clients that append the
- * current versionId still copy successfully.
+ * The versionId (a content CID) names the source version to copy; without one
+ * the source key's current version is copied. Either way the copy stacks a new
+ * version on the destination.
  */
 const parseCopySource = (
   req: Request,
-): { bucket: string; key: string } | null => {
+): { bucket: string; key: string; versionId?: string } | null => {
   const raw = req.headers['x-amz-copy-source']
   if (typeof raw !== 'string' || raw.length === 0) return null
 
-  // Strip any ?versionId= suffix (a specific source version is not honoured — the
-  // current version is copied, see above), strip a leading slash, then URL-decode.
-  const withoutVersion = raw.split('?')[0].replace(/^\//, '')
+  const [path, query = ''] = raw.split('?', 2)
   let decoded: string
   try {
-    decoded = decodeURIComponent(withoutVersion)
+    decoded = decodeURIComponent(path.replace(/^\//, ''))
   } catch {
     // Malformed percent-encoding — treat as no valid source.
     return null
   }
   if (decoded.length === 0) return null
 
-  return parseBucketAndKey(decoded)
+  const versionId = new URLSearchParams(query).get('versionId') || undefined
+  return { ...parseBucketAndKey(decoded), versionId }
 }
 
 /**
@@ -1398,6 +1396,7 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   const result = await S3UseCases.copyObject(user, {
     SourceBucket: source.bucket,
     SourceKey: source.key,
+    SourceVersionId: source.versionId,
     Bucket: bucket,
     Key: key,
     Mtime: mtime,
@@ -1405,16 +1404,30 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   })
 
   if (result.isErr()) {
-    // Source key not found in the caller's namespace → NoSuchKey, per S3.
-    sendNoSuchKey(res, source.key)
+    const { error } = result
+    if (error instanceof VersionNotFoundError) {
+      sendXML(res.status(404), 'Error', {
+        Code: 'NoSuchVersion',
+        Message: 'The specified version does not exist.',
+        Key: source.key,
+        VersionId: source.versionId,
+      })
+    } else if (error instanceof BadRequestError) {
+      handleS3Error(error, res)
+    } else {
+      // Source key not found in the caller's namespace → NoSuchKey, per S3.
+      sendNoSuchKey(res, source.key)
+    }
     return
   }
 
   const { ETag, Cid, LastModified } = result.value
   res.set('x-amz-meta-cid', Cid)
   res.set('ETag', ETag)
-  // versionId of the version this copy created = its content CID.
+  // versionId of the version this copy created = its content CID, which is also
+  // the versionId of the source version it copied.
   res.set('x-amz-version-id', Cid)
+  res.set('x-amz-copy-source-version-id', Cid)
   // The CopyObjectResult body carries ETag + LastModified. rclone re-HEADs the
   // destination afterward, so these are informational, but the XML must be
   // well-formed for the AWS SDK's response parser.
