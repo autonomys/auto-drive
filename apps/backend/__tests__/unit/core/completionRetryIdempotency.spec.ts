@@ -277,10 +277,10 @@ describe('completeUploadProcessing retry idempotency', () => {
 
   // The limit of that resume. Reusing the derived root is right only while the
   // upload still holds the bytes it was derived from, and `part A, failed
-  // complete, part B, complete` is legal at every step: uploadChunk has no status
-  // guard, the failed completion released the row to PENDING, and S3 permits
-  // UploadPart after a failed CompleteMultipartUpload. Silently returning A's CID
-  // would hand the client a truncated object to store and reference.
+  // complete, part B, complete` is legal at every step: the failed completion
+  // released the row to PENDING, so uploadChunk accepts parts again, and S3
+  // permits UploadPart after a failed CompleteMultipartUpload. Silently returning
+  // A's CID would hand the client a truncated object to store and reference.
   it('refuses to reuse a root node once more parts have been stored', async () => {
     installFakeBlockstore()
 

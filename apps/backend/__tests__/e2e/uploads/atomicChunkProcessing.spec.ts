@@ -2,9 +2,12 @@ import { jest } from '@jest/globals'
 import { createHash, randomBytes } from 'crypto'
 import { MemoryBlockstore } from 'blockstore-core'
 import {
+  cidOfNode,
   cidToString,
+  createFileChunkIpldNode,
   decodeNode,
   DEFAULT_MAX_CHUNK_SIZE,
+  encodeNode,
   IPLDNodeData,
   MetadataType,
   processFileToIPLDFormat,
@@ -21,6 +24,9 @@ import { AccountsUseCases } from '../../../src/core/index.js'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
 import { filePartsRepository } from '../../../src/infrastructure/repositories/uploads/fileParts.js'
 import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
+import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
+import { toBlockstoreRow } from '../../../src/infrastructure/services/upload/uploadProcessorCache/blockstore.js'
+import { BadRequestError, ConflictError } from '../../../src/errors/index.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -301,5 +307,77 @@ describe('atomic per-part processing', () => {
     const cid = await UploadsUseCases.completeUpload(user, uploadId)
     expect(cid).toBe(await goldenCid(name, file))
     expect(sha256Of(await readBack(uploadId, cid))).toBe(sha256Of(file))
+  })
+  // Completion claims the upload before it takes the row lock, so a part that
+  // reaches the lock afterwards must be refused, not stored into an upload whose
+  // root does not cover it.
+  it('refuses parts while completion holds the claim and after it finishes', async () => {
+    const name = 'late-part.bin'
+    const file = randomBytes(PART_SIZE)
+    const late = randomBytes(1000)
+    const uploadId = await createUpload(name)
+    await UploadsUseCases.uploadChunk(user, uploadId, 0, file)
+
+    expect(await uploadsRepository.claimUploadForCompletion(uploadId, 0)).toBe(
+      true,
+    )
+    await expect(
+      UploadsUseCases.uploadChunk(user, uploadId, 1, late),
+    ).rejects.toBeInstanceOf(ConflictError)
+    await uploadsRepository.releaseUploadCompletionClaim(uploadId)
+
+    await expectCleanResult(uploadId, name, file)
+    const rows = await chunkRows(uploadId)
+    await expect(
+      UploadsUseCases.uploadChunk(user, uploadId, 1, late),
+    ).rejects.toBeInstanceOf(BadRequestError)
+    expect(await chunkRows(uploadId)).toBe(rows)
+    expect(
+      await filePartsRepository.getPartIndicesGreaterThan(uploadId, 0),
+    ).toEqual([])
+  })
+
+  // A checked-out client has no pool 'error' listener, so without one of its own
+  // a dropped connection's 'error' event would crash the process.
+  it('survives the connection dropping mid-transaction and keeps the original error', async () => {
+    const name = 'dropped-connection.bin'
+    const file = randomBytes(PART_SIZE)
+    const uploadId = await createUpload(name)
+
+    await expect(
+      UploadFileProcessingUseCase.withFileProcessingLock(
+        uploadId,
+        async (client) => {
+          const ended = new Promise((resolve) => client.once('end', resolve))
+          await client
+            .query('SELECT pg_terminate_backend(pg_backend_pid())')
+            .catch(() => undefined)
+          await ended
+          // ROLLBACK now fails too; this is the error the caller must see.
+          throw new BadRequestError('original failure')
+        },
+      ),
+    ).rejects.toThrow('original failure')
+
+    await UploadsUseCases.uploadChunk(user, uploadId, 0, file)
+    await expectCleanResult(uploadId, name, file)
+  })
+
+  // More nodes than one INSERT takes, so the rows span batches and must still
+  // read back in the order given.
+  it('keeps chunk rows in order across insert batches', async () => {
+    const uploadId = await createUpload('batches.bin')
+    const rows = Array.from({ length: 1001 }, (_, i) => {
+      const node = createFileChunkIpldNode(Buffer.from(`chunk ${i}`))
+      return toBlockstoreRow(cidOfNode(node), encodeNode(node))
+    })
+
+    await blockstoreRepository.addChunkEntries(uploadId, rows)
+
+    const stored = await blockstoreRepository.getByType(
+      uploadId,
+      MetadataType.FileChunk,
+    )
+    expect(stored.map((e) => e.cid)).toEqual(rows.map((r) => r.cid))
   })
 })

@@ -33,6 +33,7 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { sendMetricToVictoria } from '../../infrastructure/drivers/vmetrics.js'
 import {
   BadRequestError,
+  ConflictError,
   ForbiddenError,
   ObjectNotFoundError,
 } from '../../errors/index.js'
@@ -190,10 +191,11 @@ const createFileInFolder = async (
   return file
 }
 
-// Queues work per upload_id within this process. Correctness across processes
-// comes from the row lock in withFileProcessingLock; this queue keeps
-// concurrent requests for one upload from each holding a pool connection while
-// they wait for that lock.
+// Queues part stores and drains per upload_id within this process. Correctness
+// across processes comes from the row lock in withFileProcessingLock; this queue
+// keeps concurrent part requests for one upload from each holding a pool
+// connection while they wait for that lock. Root derivation takes the row lock
+// outside it, and uploadChunk refuses any part that waited behind one.
 const drainLocks = new Map<string, Promise<unknown>>()
 
 const withDrainLock = async <T>(
@@ -241,13 +243,27 @@ const uploadChunk = async (
   }
   await checkPermissions(upload, user)
 
-  // The guard and store run under the upload's row lock, so the cursor they
-  // check cannot move until the part is stored, whichever process is draining.
-  // Serialises per upload_id; distinct uploads stay parallel.
+  // The guards and store run under the upload's row lock, so the status and
+  // cursor they check cannot change until the part is stored, whichever process
+  // is draining or completing. Serialises per upload_id; distinct uploads stay
+  // parallel.
   await withDrainLock(uploadId, async () => {
     const stored = await UploadFileProcessingUseCase.withFileProcessingLock(
       uploadId,
       async (client, info) => {
+        // Completion claims the upload before it takes the lock, so a part that
+        // waited behind a completion is refused here rather than stored into an
+        // upload whose root does not cover it.
+        const status = (
+          await uploadsRepository.getUploadEntryById(uploadId, client)
+        )?.status
+        if (status !== UploadStatus.PENDING) {
+          const message = `Upload ${uploadId} is ${status ?? 'gone'} and no longer accepts parts`
+          throw status === UploadStatus.COMPLETING
+            ? new ConflictError(message)
+            : new BadRequestError(message)
+        }
+
         const lastProcessed = info.last_processed_part_index ?? -1
 
         // An already-processed part is immutable — the streaming model cannot
@@ -282,6 +298,16 @@ const uploadChunk = async (
           },
           client,
         )
+        // The next part in sequence is processed now, from the bytes in hand,
+        // rather than read back from the database by the drain.
+        if (index === lastProcessed + 1) {
+          await UploadFileProcessingUseCase.processPart(
+            client,
+            info,
+            index,
+            chunkData,
+          )
+        }
         return true
       },
     )

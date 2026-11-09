@@ -6,12 +6,12 @@ import {
   fileProcessingInfoRepository,
 } from '../../infrastructure/repositories/uploads/fileProcessingInfo.js'
 import { getUploadBlockstore } from '../../infrastructure/services/upload/uploadProcessorCache/index.js'
-import { getDatabase } from '../../infrastructure/drivers/pg.js'
+import { toBlockstoreRow } from '../../infrastructure/services/upload/uploadProcessorCache/blockstore.js'
+import { withTransaction } from '../../infrastructure/drivers/pg.js'
 import {
   cidOfNode,
   cidToString,
   createFileChunkIpldNode,
-  decodeIPLDNodeData,
   DEFAULT_MAX_CHUNK_SIZE,
   DEFAULT_MAX_LINK_PER_NODE,
   fileBuilders,
@@ -20,7 +20,10 @@ import {
   processChunksToIPLDFormat,
   OffchainMetadata,
 } from '@autonomys/auto-dag-data'
-import { blockstoreRepository } from '../../infrastructure/repositories/uploads/blockstore.js'
+import {
+  blockstoreRepository,
+  ChunkEntry,
+} from '../../infrastructure/repositories/uploads/blockstore.js'
 import {
   FolderUpload,
   InteractionType,
@@ -67,12 +70,8 @@ const getUnprocessedChunkFromLatestFilePart = async (
 const withFileProcessingLock = async <T>(
   uploadId: string,
   fn: (client: pg.PoolClient, info: FileProcessingInfo) => Promise<T>,
-): Promise<T> => {
-  const db = await getDatabase()
-  const client = await db.connect()
-  try {
-    await client.query('BEGIN')
-
+): Promise<T> =>
+  withTransaction(async (client) => {
     const info =
       await fileProcessingInfoRepository.getFileProcessingInfoForUpdate(
         client,
@@ -82,28 +81,54 @@ const withFileProcessingLock = async <T>(
       logger.error('File processing info not found (uploadId=%s)', uploadId)
       throw new Error('File processing info not found')
     }
+    return fn(client, info)
+  })
 
-    const result = await fn(client, info)
-    await client.query('COMMIT')
-    return result
-  } catch (error) {
-    await client.query('ROLLBACK')
-    throw error
-  } finally {
-    client.release()
+// Keeps a part's chunk nodes in memory, in order, as blockstore rows, so they
+// are written with addChunkEntries inside the part's transaction.
+// processChunksToIPLDFormat only calls put(); anything else rejects
+// (BaseBlockstore's default).
+class ChunkCollector extends BaseBlockstore {
+  readonly rows: ChunkEntry[] = []
+
+  async put(cid: CID, block: Uint8Array): Promise<CID> {
+    this.rows.push(toBlockstoreRow(cid, block))
+    return cid
   }
 }
 
-// Keeps the chunk nodes in memory, in order, so a part's nodes are written with
-// one INSERT inside its transaction. processChunksToIPLDFormat only calls put();
-// anything else rejects (BaseBlockstore's default).
-class ChunkCollector extends BaseBlockstore {
-  readonly nodes: Array<{ cid: CID; block: Uint8Array }> = []
+/**
+ * Processes part `index` from `data`: chunks it after the pending tail, writes
+ * its chunk nodes and advances the cursor, all on `client`. The caller must
+ * hold withFileProcessingLock, and `index` must be the part after the cursor.
+ */
+const processPart = async (
+  client: pg.PoolClient,
+  fileProcessingInfo: FileProcessingInfo,
+  index: number,
+  data: Buffer,
+): Promise<void> => {
+  const { upload_id: uploadId } = fileProcessingInfo
+  logger.trace('Processing part (uploadId=%s, partIndex=%d)', uploadId, index)
+  const latestPartLeftOver =
+    await getUnprocessedChunkFromLatestFilePart(fileProcessingInfo)
 
-  async put(cid: CID, block: Uint8Array): Promise<CID> {
-    this.nodes.push({ cid, block })
-    return cid
-  }
+  const collector = new ChunkCollector()
+  const leftOver = await processChunksToIPLDFormat(
+    collector,
+    [latestPartLeftOver, data],
+    fileBuilders,
+  )
+  await blockstoreRepository.addChunkEntries(uploadId, collector.rows, client)
+
+  await fileProcessingInfoRepository.updateFileProcessingInfo(
+    {
+      ...fileProcessingInfo,
+      last_processed_part_index: index,
+      pending_bytes: leftOver,
+    },
+    client,
+  )
 }
 
 /**
@@ -127,40 +152,7 @@ const processNextPart = async (uploadId: string): Promise<boolean> =>
       return false
     }
 
-    logger.trace('Processing part (uploadId=%s, partIndex=%d)', uploadId, index)
-    const latestPartLeftOver =
-      await getUnprocessedChunkFromLatestFilePart(fileProcessingInfo)
-
-    const collector = new ChunkCollector()
-    const leftOver = await processChunksToIPLDFormat(
-      collector,
-      [latestPartLeftOver, part.data],
-      fileBuilders,
-    )
-
-    await blockstoreRepository.addChunkEntries(
-      uploadId,
-      collector.nodes.map(({ cid, block }) => {
-        const decoded = decodeIPLDNodeData(block)
-        return {
-          cid: cidToString(cid),
-          node_type: decoded.type,
-          node_size: decoded.size ?? BigInt(0).valueOf(),
-          data: Buffer.from(block),
-        }
-      }),
-      client,
-    )
-
-    await fileProcessingInfoRepository.updateFileProcessingInfo(
-      {
-        ...fileProcessingInfo,
-        last_processed_part_index: index,
-        pending_bytes: leftOver,
-      },
-      client,
-    )
-
+    await processPart(client, fileProcessingInfo, index, part.data)
     return true
   })
 
@@ -193,9 +185,10 @@ const completeFileProcessing = async (uploadId: string): Promise<CID> => {
 
   // Under the row lock that part processing takes, in one transaction: a part
   // arriving concurrently is either processed before the gap check below or
-  // waits until the root is derived, and a failure part-way through, including
-  // inside the chunker's destructive single-chunk path, rolls back to the state
-  // before completion started.
+  // waits for the lock and is then refused, since completion has claimed the
+  // upload (see uploadChunk); and a failure part-way through, including inside
+  // the chunker's destructive single-chunk path, rolls back to the state before
+  // completion started.
   return withFileProcessingLock(uploadId, (client, fileProcessingInfo) =>
     deriveFileRoot(client, uploadId, upload, fileProcessingInfo),
   )
@@ -239,10 +232,11 @@ const deriveFileRoot = async (
     )
 
     // Reuse is only correct while the upload still holds the bytes the root was
-    // built from, and that can stop being true between the two calls. uploadChunk
-    // has no status guard, the failed completion above released the row back to
-    // PENDING, and S3 permits UploadPart after a failed CompleteMultipartUpload —
-    // so `part A, failed complete, part B, complete` is legal at every step.
+    // built from, and that can stop being true between the two calls. The failed
+    // completion above released the row back to PENDING, so uploadChunk accepts
+    // parts again, and S3 permits UploadPart after a failed
+    // CompleteMultipartUpload — so `part A, failed complete, part B, complete` is
+    // legal at every step.
     // Returning the existing root there answers 200 with a CID covering A alone,
     // and on the S3 route the composite ETag is computed from the client's part
     // list, so the mapping would store an ETag that does not describe the stored
@@ -251,10 +245,7 @@ const deriveFileRoot = async (
     // one in a content-addressed store.
     //
     // Detected by size because the root node's size IS the uploadedSize it was
-    // derived from, so one aggregate query over the stored parts settles it. The
-    // alternative — refusing uploadChunk once a root exists — costs a query on
-    // the per-part hot path and still cannot see a part that arrives after the
-    // derivation within a single completion, which this comparison does.
+    // derived from, so one aggregate query over the stored parts settles it.
     const derivedSize = BigInt(existingRootNodes[0].node_size).valueOf()
     const storedSize =
       (await filePartsRepository.getUploadFilePartsSize(uploadId, client)) ??
@@ -472,6 +463,7 @@ const handleFolderUploadFinalization = async (
 
 export const UploadFileProcessingUseCase = {
   withFileProcessingLock,
+  processPart,
   processNextPart,
   completeUploadProcessing,
   handleFileUploadFinalization,

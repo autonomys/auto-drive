@@ -1,9 +1,5 @@
 import { MetadataType } from '@autonomys/auto-dag-data'
-import pg from 'pg'
-import { getDatabase } from '../../drivers/pg.js'
-
-// A pool, or a client holding an open transaction.
-type Executor = pg.Pool | pg.PoolClient
+import { Executor, getDatabase } from '../../drivers/pg.js'
 
 interface BlockstoreEntry {
   upload_id: string
@@ -48,6 +44,9 @@ const addBlockstoreEntry = async (
   )
 }
 
+// A chunk node's row, minus the upload it belongs to.
+export type ChunkEntry = Omit<BlockstoreEntry, 'upload_id'>
+
 // Rows per INSERT in addChunkEntries: about 32 MiB of payload at the default
 // chunk size, and 2,001 bind parameters.
 const CHUNK_ENTRIES_PER_INSERT = 500
@@ -59,7 +58,7 @@ const CHUNK_ENTRIES_PER_INSERT = 500
 // DAG builder reads them back in.
 const addChunkEntries = async (
   uploadId: string,
-  entries: Array<Omit<BlockstoreEntry, 'upload_id'>>,
+  entries: ChunkEntry[],
   executor?: Executor,
 ) => {
   const db = executor ?? (await getDatabase())

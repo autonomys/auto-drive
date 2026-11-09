@@ -118,6 +118,46 @@ export const getDatabase = async () => {
   return db
 }
 
+// A pool, or a client holding an open transaction.
+export type Executor = pg.Pool | pg.PoolClient
+
+/**
+ * Runs `fn` in a transaction on one pooled client: COMMIT if it resolves,
+ * ROLLBACK if it throws. `fn` must run every query on that client.
+ *
+ * The pool stops listening for a client's 'error' events while the client is
+ * checked out, so a connection dropping mid-transaction would emit one with no
+ * listener and crash the process. The listener here absorbs it: the client's
+ * queries reject instead, and the client is discarded rather than reused.
+ */
+export const withTransaction = async <T>(
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> => {
+  const pool = await getDatabase()
+  const client = await pool.connect()
+  let connectionError: Error | undefined
+  const onError = (error: Error) => {
+    connectionError = error
+    logger.error(error, 'Connection error during a transaction')
+  }
+  client.on('error', onError)
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    // A failed ROLLBACK must not replace the error that caused it.
+    await client.query('ROLLBACK').catch((rollbackError: Error) => {
+      connectionError ??= rollbackError
+    })
+    throw error
+  } finally {
+    client.removeListener('error', onError)
+    client.release(connectionError)
+  }
+}
+
 export const closeDatabase = async () => {
   stopRuntimeMetrics?.()
   stopRuntimeMetrics = undefined

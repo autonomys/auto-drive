@@ -8,8 +8,23 @@ import { Pair } from 'interface-blockstore'
 import { AwaitIterable } from 'interface-store'
 import { CID } from 'multiformats/cid'
 import pg from 'pg'
-import { blockstoreRepository } from '../../../repositories/uploads/index.js'
+import {
+  blockstoreRepository,
+  ChunkEntry,
+} from '../../../repositories/uploads/index.js'
 import { BaseBlockstore } from 'blockstore-core'
+
+// The blockstore row for an encoded node. `data` is a view of the node's bytes,
+// not a copy.
+export const toBlockstoreRow = (cid: CID, block: Uint8Array): ChunkEntry => {
+  const decoded = decodeIPLDNodeData(block)
+  return {
+    cid: cidToString(cid),
+    node_type: decoded.type,
+    node_size: decoded.size ?? BigInt(0).valueOf(),
+    data: Buffer.from(block.buffer, block.byteOffset, block.byteLength),
+  }
+}
 
 export class MultiUploadBlockstore implements BaseBlockstore {
   constructor(
@@ -38,15 +53,13 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   }
 
   async put(cid: Pair['cid'], data: Uint8Array): Promise<Pair['cid']> {
-    const decodedData = decodeIPLDNodeData(data)
-    const size = decodedData.size ?? BigInt(0).valueOf()
-
+    const row = toBlockstoreRow(cid, data)
     await blockstoreRepository.addBlockstoreEntry(
       this.uploadId,
-      cidToString(cid),
-      decodedData.type,
-      size,
-      Buffer.from(data),
+      row.cid,
+      row.node_type,
+      row.node_size,
+      row.data,
       this.client,
     )
 

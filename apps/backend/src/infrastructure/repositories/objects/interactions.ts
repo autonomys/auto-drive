@@ -1,5 +1,4 @@
-import pg from 'pg'
-import { getDatabase } from '../../drivers/pg.js'
+import { Executor, getDatabase } from '../../drivers/pg.js'
 import { InteractionSource, InteractionType } from '@auto-drive/models'
 
 type DBInteraction = {
@@ -19,9 +18,6 @@ type Interaction = Omit<DBInteraction, 'size' | 'created_at'> & {
   accountId: string
   cid: string | null
 }
-
-// A pool, or a client holding an open transaction.
-type Executor = pg.Pool | pg.PoolClient
 
 const mapRows = (rows: DBInteraction[]): Interaction[] => {
   return rows.map((e) => ({

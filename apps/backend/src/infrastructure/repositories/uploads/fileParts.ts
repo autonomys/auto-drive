@@ -1,8 +1,4 @@
-import pg from 'pg'
-import { getDatabase } from '../../drivers/pg.js'
-
-// A pool, or a client holding an open transaction.
-type Executor = pg.Pool | pg.PoolClient
+import { Executor, getDatabase } from '../../drivers/pg.js'
 
 interface FilePart {
   upload_id: string
