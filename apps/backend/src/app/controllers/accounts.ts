@@ -154,6 +154,28 @@ accountController.get(
   }),
 )
 
+// Admin-only: the history of changes to an account's terms.
+accountController.get(
+  '/admin/:id/terms-changes',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetTermsChanges(user, req.params.id),
+      'Failed to get account terms changes',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
 // Admin-only: one account by account ID, with its members.
 accountController.get(
   '/admin/:id',
@@ -256,6 +278,34 @@ accountController.post(
       return
     }
 
+    // Overrides of the global credit terms; null clears one.
+    const terms = z
+      .object({
+        maxPurchasedBytes: z
+          .number()
+          .int()
+          .positive()
+          .safe()
+          .nullable()
+          .optional(),
+        creditExpiryDays: z
+          .number()
+          .int()
+          .positive()
+          .max(36500)
+          .nullable()
+          .optional(),
+        reason: z.string().trim().max(500).optional(),
+      })
+      .safeParse(req.body)
+    if (!terms.success) {
+      res.status(400).json({
+        error:
+          'Invalid `maxPurchasedBytes`, `creditExpiryDays` or `reason` in body',
+      })
+      return
+    }
+
     const updateResult = await handleInternalErrorResult(
       AccountsUseCases.updateAccount(
         executor,
@@ -263,6 +313,7 @@ accountController.post(
         safeModel.data,
         uploadLimit,
         downloadLimit,
+        terms.data,
       ),
       'Failed to update account',
     )

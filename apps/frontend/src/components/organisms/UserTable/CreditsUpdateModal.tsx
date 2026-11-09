@@ -42,12 +42,20 @@ export const CreditsUpdateModal = ({
     if (accountId && downloadCredits && uploadCredits) {
       const downloadBytes = Number(downloadCredits) * downloadCreditsUnit;
       const uploadBytes = Number(uploadCredits) * uploadCreditsUnit;
-      await network.api.updateAccount(
-        accountId,
-        model,
-        uploadBytes,
-        downloadBytes,
-      );
+      try {
+        await network.api.updateAccount(
+          accountId,
+          model,
+          uploadBytes,
+          downloadBytes,
+        );
+      } catch (error) {
+        // E.g. a partner account, whose upload limit must be 0.
+        toast.error(
+          error instanceof Error ? error.message : 'Failed to update credits',
+        );
+        return;
+      }
       onClose();
       toast.success('Credits updated');
     }
