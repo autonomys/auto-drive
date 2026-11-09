@@ -83,22 +83,38 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
   accountId: string,
   type: InteractionType,
   start: Date,
-  end: Date,
+  end?: Date,
   source?: InteractionSource,
   executor?: Executor,
 ): Promise<Interaction[]> => {
   const db = executor ?? (await getDatabase())
 
+  const conditions = [
+    'account_id = $1',
+    'type = $2',
+    'created_at >= $3',
+  ]
+  const params: unknown[] = [accountId, type, start.toISOString()]
+
+  if (end) {
+    // Since JavaScript Date has millisecond precision, end.toISOString() represents
+    // the start of that millisecond (e.g. .123000 in Postgres microseconds).
+    // Comparing created_at < end + 1ms ensures that all microsecond fractions
+    // within that same millisecond (.123001 - .123999) are included rather than dropped.
+    const endBoundary = new Date(end.getTime() + 1)
+    params.push(endBoundary.toISOString())
+    conditions.push(`created_at < $${params.length}`)
+  }
+
+  if (source) {
+    params.push(source)
+    conditions.push(`source = $${params.length}`)
+  }
+
   const interactions = await db.query<DBInteraction>(
     `SELECT * FROM interactions
-     WHERE account_id = $1
-       AND type = $2
-       AND created_at >= $3
-       AND created_at <= $4
-       ${source ? 'AND source = $5' : ''}`,
-    source
-      ? [accountId, type, start.toISOString(), end.toISOString(), source]
-      : [accountId, type, start.toISOString(), end.toISOString()],
+     WHERE ${conditions.join('\n       AND ')}`,
+    params,
   )
 
   return mapRows(interactions.rows)

@@ -13,7 +13,13 @@ import { interactionsRepository } from '../../../src/infrastructure/repositories
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
 import { config } from '../../../src/config.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
-import { AccountModel, OrganizationRole, UserRole } from '@auto-drive/models'
+import {
+  AccountModel,
+  InteractionSource,
+  InteractionType,
+  OrganizationRole,
+  UserRole,
+} from '@auto-drive/models'
 import { err, ok } from 'neverthrow'
 import {
   BadRequestError,
@@ -930,6 +936,78 @@ describe('AccountsUseCases', () => {
       ])
 
       expect(Object.keys(result._unsafeUnwrap())).toEqual(['pub-a', 'pub-b'])
+    })
+  })
+
+  describe('getPendingCreditsByAccountAndType', () => {
+    it('does not pass upper bound cutoff for OneOff account', async () => {
+      const oneOffAccount = {
+        id: 'acc-oneoff',
+        model: AccountModel.OneOff,
+        uploadLimit: 1000,
+        downloadLimit: 2000,
+      } as any
+      const querySpy = jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      await AccountsUseCases.getPendingCreditsByAccountAndType(
+        oneOffAccount,
+        InteractionType.Upload,
+      )
+
+      expect(querySpy).toHaveBeenCalledWith(
+        'acc-oneoff',
+        InteractionType.Upload,
+        new Date(0),
+        undefined,
+        InteractionSource.FreeTier,
+      )
+    })
+
+    it('passes end-of-month upper bound for Monthly account', async () => {
+      const monthlyAccount = {
+        id: 'acc-monthly',
+        model: AccountModel.Monthly,
+        uploadLimit: 1000,
+        downloadLimit: 2000,
+      } as any
+      const querySpy = jest
+        .spyOn(
+          interactionsRepository,
+          'getInteractionsByAccountIdAndTypeInTimeRange',
+        )
+        .mockResolvedValue([])
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue({ uploadBytesRemaining: 0n } as any)
+
+      await AccountsUseCases.getPendingCreditsByAccountAndType(
+        monthlyAccount,
+        InteractionType.Upload,
+      )
+
+      const call = querySpy.mock.calls[0] as unknown as [
+        string,
+        InteractionType,
+        Date,
+        Date | undefined,
+        InteractionSource,
+      ]
+      expect(call[0]).toBe('acc-monthly')
+      expect(call[1]).toBe(InteractionType.Upload)
+      expect(call[2].getDate()).toBe(1)
+      expect(call[2].getHours()).toBe(0)
+      expect(call[3]).toBeInstanceOf(Date)
+      expect(call[3]?.getHours()).toBe(23)
+      expect(call[3]?.getMinutes()).toBe(59)
+      expect(call[4]).toBe(InteractionSource.FreeTier)
     })
   })
 })
