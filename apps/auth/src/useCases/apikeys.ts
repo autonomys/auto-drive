@@ -1,6 +1,11 @@
 import { v4 } from 'uuid'
 import { apiKeysRepository } from '../repositories/index.js'
-import { User, ApiKey, ApiKeyWithoutSecret } from '@auto-drive/models'
+import {
+  User,
+  ApiKey,
+  ApiKeyName,
+  ApiKeyWithoutSecret,
+} from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
 import {
   ApiKeyValidationError,
@@ -183,9 +188,18 @@ const getApiKeysByUser = async (
   return apiKeys.map(stripSecret)
 }
 
+// Names of the given keys, deleted ones included, for usage reports. Keys
+// that do not exist are left out.
+const getApiKeyNames = async (ids: string[]): Promise<ApiKeyName[]> => {
+  const apiKeys = await apiKeysRepository.getApiKeysByIds(ids)
+
+  return apiKeys.map(({ id, name, deletedAt }) => ({ id, name, deletedAt }))
+}
+
 export const ApiKeysUseCases = {
   createApiKey,
   getApiKeyFromSecret,
   deleteApiKey,
   getApiKeysByUser,
+  getApiKeyNames,
 }

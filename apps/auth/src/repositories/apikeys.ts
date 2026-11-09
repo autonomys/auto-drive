@@ -76,6 +76,17 @@ const getApiKeyById = async (id: string): Promise<ApiKey | null> => {
   return result.rows.map(mapDBApiKeyToApiKey)[0] ?? null
 }
 
+const getApiKeysByIds = async (ids: string[]): Promise<ApiKey[]> => {
+  const db = await getDatabase()
+
+  const result = await db.query<DBApiKey>(
+    'SELECT * FROM users.api_keys WHERE id = ANY($1::text[])',
+    [ids],
+  )
+
+  return result.rows.map(mapDBApiKeyToApiKey)
+}
+
 const deleteApiKey = async (id: string): Promise<void> => {
   const db = await getDatabase()
 
@@ -129,6 +140,7 @@ export const apiKeysRepository = {
   deleteApiKey,
   createApiKey,
   getApiKeyById,
+  getApiKeysByIds,
   getApiKeyBySecret,
   getApiKeysByOAuthUser,
   softDeleteAllByOAuthUser,
