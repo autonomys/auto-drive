@@ -185,6 +185,28 @@ describe('createAccountManager — wallet health and cooldown', () => {
     manager.stop()
   })
 
+  it('falls back to time-based re-admission when balance checks are disabled', async () => {
+    jest.useFakeTimers()
+    const origInterval = config.chain.signerBalanceCheckIntervalMs
+    ;(config.chain as Record<string, unknown>).signerBalanceCheckIntervalMs = 0
+
+    try {
+      const api = makeMockApi()
+      const manager = await createAccountManager(api, () => [alice, bob])
+
+      await manager.markUnfunded(alice.address)
+      await jest.advanceTimersByTimeAsync(config.chain.unfundedCooldownMs + 100)
+
+      // With balance checks disabled, cooldown expiry re-admits Alice directly
+      const r1 = await manager.registerTransaction()
+      expect(r1.account.address).toBe(alice.address)
+
+      manager.stop()
+    } finally {
+      ;(config.chain as Record<string, unknown>).signerBalanceCheckIntervalMs = origInterval
+    }
+  })
+
   it('preserves unfunded status across removeAccount/initAccounts', async () => {
     const api = makeMockApi()
     const manager = await createAccountManager(api, () => [alice, bob])

@@ -164,46 +164,67 @@ export const createAccountManager = async (
     }
   }
 
-  const registerTransaction = () =>
-    uniqueExec(async () => {
-      if (accountStates.size === 0) {
-        logger.warn(
-          'No accounts available, reinitializing before registration',
-        )
-        await initAccounts()
-      }
-
-      const now = Date.now()
-
-      // If any accounts have expired cooldowns, re-admit them to the candidate pool.
-      // Proactive balance checking occurs via refreshBalances in the background,
-      // keeping the registration critical section free of synchronous RPC delays.
-      for (const state of accountStates.values()) {
-        if (state.unfundedUntil !== undefined && state.unfundedUntil <= now) {
-          state.unfundedUntil = undefined
+  const registerTransaction = async () => {
+    let hasExpiredCooldown = false
+    try {
+      return await uniqueExec(async () => {
+        if (accountStates.size === 0) {
+          logger.warn(
+            'No accounts available, reinitializing before registration',
+          )
+          await initAccounts()
         }
-      }
 
-      const eligible = Array.from(accountStates.values()).filter(
-        (s) => s.unfundedUntil === undefined || s.unfundedUntil <= now,
-      )
+        const now = Date.now()
 
-      if (eligible.length === 0) {
-        // Fire alert asynchronously without holding the uniqueExec lock
-        void sendAllUnfundedAlert().catch((err) =>
-          logger.error(err as Error, 'Failed to send all-unfunded alert'),
+        const canQueryBalances =
+          Boolean(api.query?.system?.account) &&
+          config.chain.signerBalanceCheckIntervalMs > 0
+
+        // If any accounts have expired cooldowns, only re-admit immediately if balance reads
+        // aren't supported. Otherwise, trigger refreshBalances outside the lock and leave the
+        // wallet excluded until its balance is confirmed >= minSignerBalance.
+        for (const state of accountStates.values()) {
+          if (state.unfundedUntil !== undefined && state.unfundedUntil <= now) {
+            if (!canQueryBalances) {
+              state.unfundedUntil = undefined
+            } else {
+              hasExpiredCooldown = true
+            }
+          }
+        }
+
+        const eligible = Array.from(accountStates.values()).filter(
+          (s) => s.unfundedUntil === undefined,
         )
-        throw new NoFundedSignerError(
-          `All ${accountStates.size} publisher wallets are unfunded (< ${config.chain.minSignerBalance.toString()} shannons) — publishing paused`,
+
+        if (eligible.length === 0) {
+          // Fire alert asynchronously without holding the uniqueExec lock
+          void sendAllUnfundedAlert().catch((err) =>
+            logger.error(err as Error, 'Failed to send all-unfunded alert'),
+          )
+          throw new NoFundedSignerError(
+            `All ${accountStates.size} publisher wallets are unfunded (< ${config.chain.minSignerBalance.toString()} shannons) — publishing paused`,
+          )
+        }
+
+        const selected = eligible[trxCounter % eligible.length]
+        trxCounter++
+        const nonce = selected.nonce
+        selected.nonce = nonce + 1
+        return { account: selected.pair, nonce }
+      })
+    } finally {
+      if (hasExpiredCooldown) {
+        void refreshBalances().catch((err) =>
+          logger.error(
+            err as Error,
+            'Failed to refresh balances on cooldown expiry',
+          ),
         )
       }
-
-      const selected = eligible[trxCounter % eligible.length]
-      trxCounter++
-      const nonce = selected.nonce
-      selected.nonce = nonce + 1
-      return { account: selected.pair, nonce }
-    })
+    }
+  }
 
   const markUnfunded = (address: string) =>
     uniqueExec(async () => {
@@ -311,10 +332,7 @@ export const createAccountManager = async (
               config.chain.unfundedCooldownMs,
             )
           }
-        } else if (
-          state.unfundedUntil !== undefined &&
-          state.unfundedUntil <= now
-        ) {
+        } else if (state.unfundedUntil !== undefined) {
           logger.info(
             'Signer wallet %s balance recovered (%s) — re-admitting',
             address,
