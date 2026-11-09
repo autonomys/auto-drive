@@ -7,7 +7,7 @@ Auto Drive stores file content on the Autonomys Distributed Storage Network (DSN
 - **The S3 view is editable.** You can delete, rename, move, and overwrite keys. `rclone sync`, `move`, and read-write mounts work.
 - **The stored data is permanent.** A delete only hides a key, and an overwrite adds a new version. No version is ever erased from the DSN.
 
-Versioning is always on. Every version of a key stays readable by its version ID (the content's CID), so nothing you upload is lost.
+Versioning is always on. Earlier versions of a key stay readable by their version ID (the content's CID), and a deleted file can be restored from the Trash in the web app, so nothing you upload is lost.
 
 ## Quickstart
 
@@ -28,7 +28,7 @@ curl https://rclone.org/install.sh | sudo bash
 winget install Rclone.Rclone
 ```
 
-rclone has an `Autonomys` provider from v1.76. Until v1.76 is released, install a beta: `curl https://rclone.org/install.sh | sudo bash -s beta`.
+rclone has an `Autonomys` provider from v1.76.0. Check your version with `rclone version`. `rclone selfupdate` upgrades an install from rclone.org; package managers can lag behind rclone releases.
 
 **3. Configure the Auto Drive remote**
 
@@ -43,7 +43,7 @@ secret_access_key = placeholder
 endpoint = s3.auto-drive.autonomys.xyz
 ```
 
-With rclone v1.75 or earlier, use `provider = Other` and the extra options in the [Setup Guide](setup.md#older-rclone-versions-provider--other).
+With rclone v1.75 or earlier, upgrade, or use `provider = Other` and the extra options in the [Setup Guide](setup.md#older-rclone-versions-provider--other).
 
 **4. Verify the connection**
 
@@ -107,13 +107,13 @@ Every upload is permanent storage and uses credits. Deleting a key does not refu
 
 Because nothing you upload can be erased, try your commands first against the [local test endpoint](setup.md#try-it-locally-first).
 
-For archives you never want to change, add `--immutable`. rclone then refuses to replace a file that already exists at the same key with different content:
+For archives you never want to change, add `--immutable`. rclone then refuses to replace a file that already exists at the same key with different content, so a local file changed by mistake cannot silently become a new, permanent version:
 
 ```bash
 rclone copy ./files/ autodrive:my-archive/ --immutable
 ```
 
-Re-running the same command uploads only the new files. This makes the command safe to repeat and large transfers resumable.
+Re-running the same command uploads only the new files, with or without `--immutable`. This makes the command safe to repeat and large transfers resumable.
 
 ## Documentation
 

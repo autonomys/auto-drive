@@ -288,7 +288,7 @@ ERROR : file.txt: Failed to copy: connection timed out
 
 **What you see:** A file uploaded with `Content-Encoding: gzip` downloads decompressed, with a size or checksum mismatch.
 
-**Why it happens:** Your remote uses the older endpoint `https://public.auto-drive.autonomys.xyz/s3`, which runs through a CDN that decompresses these files.
+**Why it happens:** Your remote uses the older endpoint `https://public.auto-drive.autonomys.xyz/s3`, which runs through a CDN that decompresses these files. The same CDN can also alter HTML files and limits uploads to about 100 MB.
 
 **Solution:** Switch to the dedicated S3 endpoint:
 
@@ -335,7 +335,7 @@ rclone copy ./test-file.txt autodrive:test-bucket/test/ \
 rclone version
 ```
 
-Use a recent rclone release. The `Autonomys` provider needs v1.76 or later (or a beta until v1.76 is released), `--s3-versions` needs v1.59 or later, and `--s3-version-at` needs v1.61 or later.
+Use a recent rclone release. The `Autonomys` provider needs v1.76.0 or later, `--s3-versions` needs v1.59 or later, and `--s3-version-at` needs v1.61 or later.
 
 ### Reproduce without touching your data
 

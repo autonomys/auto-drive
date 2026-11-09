@@ -187,7 +187,7 @@ rclone deletefile autodrive:my-archive/reports/draft.pdf
 **Status:** Supported. The key is hidden behind a delete marker and no longer appears in listings. The content stays on the DSN:
 
 - If no other key in your account points at the same content, the file moves to the Trash in the web app at [ai3.storage](https://ai3.storage). Restoring it there makes the key visible again.
-- Earlier versions of the key stay readable with `--s3-versions`.
+- Earlier versions of the key stay readable with `--s3-versions`. The version that was current when you deleted the file is listed but cannot be read; restore the file from the Trash instead.
 
 ### move / moveto
 
@@ -281,7 +281,17 @@ rclone copy --s3-version-at "2026-09-01 00:00:00" \
 rclone backend versioning autodrive:my-archive
 ```
 
-With `--s3-versions`, older versions appear with a timestamp suffix in the file name (for example `report-v2026-09-01-120000-000.pdf`). You can copy them like any other file.
+With `--s3-versions`, older versions appear with a timestamp suffix in the file name (for example `report-v2026-09-01-120000-000.pdf`). You can download them like any other file.
+
+To copy an older version to a path on Auto Drive, for example to make it the current version again, add `--disable copy`:
+
+```bash
+rclone copyto --s3-versions --disable copy \
+  autodrive:my-archive/reports/report-v2026-09-01-120000-000.pdf \
+  autodrive:my-archive/reports/report.pdf
+```
+
+A server-side copy always copies a file's current version, not the version you named, so without `--disable copy` rclone reports the result as corrupted and deletes it. With the flag, rclone downloads the older version and uploads it again, which uses upload credits.
 
 Versions are permanent. Commands that destroy versions are refused with `403 AccessDenied`:
 

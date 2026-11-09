@@ -14,13 +14,12 @@
 # Anyone who can reach it can read the served bucket.
 #
 # To upload files from the container:
-#   docker compose exec rclone rclone copy /data autodrive:my-archive/ --immutable
+#   docker compose exec rclone rclone copy /data autodrive:my-archive/
 
 services:
   rclone:
-    # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
-    # released, use the beta image.
-    image: rclone/rclone:beta
+    # The Autonomys provider needs rclone v1.76.0 or later.
+    image: rclone/rclone:latest
     container_name: rclone-autodrive
     restart: unless-stopped
     environment:

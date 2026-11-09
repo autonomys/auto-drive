@@ -64,13 +64,13 @@ Distribution packages can be several releases behind. If a command or flag in th
 
 ### rclone version
 
-rclone has an `Autonomys` provider from v1.76. Until v1.76 is released, install a beta:
+rclone has an `Autonomys` provider from v1.76.0. If you installed rclone from [rclone.org](https://rclone.org/downloads/), upgrade it in place with:
 
 ```bash
-curl https://rclone.org/install.sh | sudo bash -s beta
+rclone selfupdate
 ```
 
-Betas for all platforms are also at [beta.rclone.org](https://beta.rclone.org). With v1.75 or earlier, see [Older rclone versions](#older-rclone-versions-provider--other).
+If you installed it with a package manager, upgrade through the package manager and check that it already ships v1.76.0 or later. With v1.75 or earlier, see [Older rclone versions](#older-rclone-versions-provider--other).
 
 ### Windows
 

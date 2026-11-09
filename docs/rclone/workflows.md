@@ -71,7 +71,7 @@ rclone sync ./project/ autodrive:my-archive/project-mirror/ -v
 ```
 
 - New and changed files are uploaded. A changed file becomes a new version of its key.
-- Files you removed locally are deleted at the destination. They disappear from listings, but their content stays on the DSN and earlier versions stay readable.
+- Files you removed locally are deleted at the destination. They disappear from listings, but their content stays on the DSN and you can restore them from the Trash in the web app.
 
 To keep replaced and removed files at a readable path, add a backup directory. rclone moves them there server-side, at no extra cost:
 
@@ -109,14 +109,18 @@ rclone cat autodrive:my-archive/logs/app.log
 
 ## 5. Recover an Overwritten or Deleted File
 
-Every version of every key stays readable, because the DSN never erases data.
+The DSN never erases data, so an overwritten or deleted file can always be recovered.
+
+### Overwritten files
+
+Earlier versions of a key stay readable with `--s3-versions`:
 
 ```bash
-# Show all versions under a prefix, including deleted and overwritten files
+# Show all versions under a prefix
 rclone ls --s3-versions autodrive:my-archive/reports/
 ```
 
-Older versions appear with a timestamp suffix, for example `q1-v2026-09-01-120000-000.pdf`. Copy one back to restore it:
+Older versions appear with a timestamp suffix, for example `q1-v2026-09-01-120000-000.pdf`. Download one to restore it:
 
 ```bash
 rclone copyto --s3-versions \
@@ -124,14 +128,24 @@ rclone copyto --s3-versions \
   ./q1-restored.pdf
 ```
 
-Or restore a whole directory as it was at a point in time:
+To make it the current version again instead, copy it onto the key with `--disable copy`. A server-side copy always copies the current version, so the flag is required (see [Versions](operations.md#versions)):
+
+```bash
+rclone copyto --s3-versions --disable copy \
+  autodrive:my-archive/reports/q1-v2026-09-01-120000-000.pdf \
+  autodrive:my-archive/reports/q1.pdf
+```
+
+Or download a whole directory as it was at a point in time:
 
 ```bash
 rclone copy --s3-version-at "2026-09-01 00:00:00" \
   autodrive:my-archive/reports/ ./reports-2026-09-01/
 ```
 
-A deleted file whose content is not used by any other key is also in the Trash at [ai3.storage](https://ai3.storage). Restoring it there makes the key visible again.
+### Deleted files
+
+A deleted file's last version is listed by `--s3-versions` but cannot be read. Restore the file from the Trash at [ai3.storage](https://ai3.storage) instead, which makes the key visible again. A file is in the Trash when no other key in your account points at the same content; otherwise that content is still readable through the other key.
 
 ---
 
@@ -265,10 +279,9 @@ jobs:
       - name: Build
         run: make build
 
-      # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
-      # released, install a beta: `sudo bash -s beta`.
+      # Installs the latest stable rclone (the Autonomys provider needs v1.76.0 or later)
       - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash -s beta
+        run: curl https://rclone.org/install.sh | sudo bash
 
       - name: Archive build artifacts
         env:
@@ -281,7 +294,6 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           rclone copy ./dist/ \
             "autodrive:ci-builds/${GITHUB_SHA}-${TIMESTAMP}/" \
-            --immutable \
             -v
 ```
 
@@ -292,9 +304,11 @@ The `RCLONE_CONFIG_<REMOTE>_<OPTION>` variables define the remote without writin
 ```yaml
 archive-artifacts:
   stage: deploy
-  # The Autonomys provider needs rclone v1.76 or later. Until v1.76 is
-  # released, use the beta image.
-  image: rclone/rclone:beta
+  image:
+    # The Autonomys provider needs rclone v1.76.0 or later
+    name: rclone/rclone:latest
+    # The image's entrypoint is rclone itself; clear it so GitLab can run the script
+    entrypoint: [""]
   variables:
     RCLONE_CONFIG_AUTODRIVE_TYPE: s3
     RCLONE_CONFIG_AUTODRIVE_PROVIDER: Autonomys
@@ -304,7 +318,7 @@ archive-artifacts:
     # AUTO_DRIVE_API_KEY is a masked CI/CD variable
     - export RCLONE_CONFIG_AUTODRIVE_ACCESS_KEY_ID="${AUTO_DRIVE_API_KEY}"
     - TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-    - rclone copy ./dist/ "autodrive:ci-builds/${CI_COMMIT_SHA}-${TIMESTAMP}/" --immutable -v
+    - rclone copy ./dist/ "autodrive:ci-builds/${CI_COMMIT_SHA}-${TIMESTAMP}/" -v
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 ```

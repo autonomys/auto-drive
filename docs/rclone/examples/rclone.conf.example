@@ -10,7 +10,7 @@
 # Buckets are created on first write and are private to your account.
 # Organize files using key prefixes (the path after the bucket name).
 
-# rclone v1.76 and later (or a beta until v1.76 is released).
+# rclone v1.76.0 and later.
 # The Autonomys provider sets path-style requests, ListObjectsV2 listings,
 # single-request server-side copies, and no bucket checks.
 [autodrive]
