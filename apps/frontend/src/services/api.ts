@@ -3,7 +3,11 @@ import {
   AccountInfo,
   AccountInfoWithUser,
   AccountModel,
+  AccountTermsChange,
   AdminAccountDetails,
+  OrganizationMembershipChange,
+  OrganizationRole,
+  PartnerOrganization,
   Banner,
   BannerCriticality,
   BannerInteractionType,
@@ -247,6 +251,34 @@ const fetchAdminAccount = async (
   return response.json();
 };
 
+// Admin calls whose refusals (400, 404, 409) carry a message meant for the
+// admin, such as why a user cannot be moved into an organization.
+const adminRequest = async <T>(
+  url: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<T> => {
+  const session = await getAuthSession();
+  if (!session?.authProvider || !session.accessToken) {
+    throw new Error('No session');
+  }
+
+  const response = await fetch(url, {
+    method: init.method ?? 'GET',
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      'X-Auth-Provider': session.authProvider,
+      'Content-Type': 'application/json',
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+
+  if (!response.ok) {
+    throw await toApiError(response, `Request failed: ${response.statusText}`);
+  }
+
+  return (response.status === 204 ? undefined : response.json()) as T;
+};
+
 export type Api = ReturnType<typeof createApiService>;
 
 export const createApiService = ({
@@ -487,6 +519,54 @@ export const createApiService = ({
     fetchAdminAccount(
       `${apiBaseUrl}/accounts/admin/by-organization/${encodeURIComponent(organizationId)}`,
     ),
+  /** Admin: partner organizations with their accounts. */
+  listPartnerOrganizations: (): Promise<PartnerOrganization[]> =>
+    adminRequest(`${apiBaseUrl}/organizations/partners`),
+  /** Admin: creates a partner organization and its account. */
+  createPartnerOrganization: (name: string): Promise<PartnerOrganization> =>
+    adminRequest(`${apiBaseUrl}/organizations/partners`, {
+      method: 'POST',
+      body: { name },
+    }),
+  /** Admin: moves a user into a partner organization. */
+  addOrganizationMember: (
+    organizationId: string,
+    publicId: string,
+    role: OrganizationRole,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members`,
+      { method: 'POST', body: { publicId, role } },
+    ),
+  changeOrganizationMemberRole: (
+    organizationId: string,
+    publicId: string,
+    role: OrganizationRole,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
+      { method: 'PUT', body: { role } },
+    ),
+  /** Admin: removes a member, who returns to their personal organization. */
+  removeOrganizationMember: (
+    organizationId: string,
+    publicId: string,
+  ): Promise<{ organizationId: string }> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
+      { method: 'DELETE' },
+    ),
+  getOrganizationMembershipChanges: (
+    organizationId: string,
+  ): Promise<OrganizationMembershipChange[]> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/membership-changes`,
+    ),
+  /** Admin: every change to an account's terms, newest first. */
+  getAccountTermsChanges: (accountId: string): Promise<AccountTermsChange[]> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/terms-changes`,
+    ),
   /** Admin: each user's current account ID, keyed by publicId. */
   adminGetAccountIdsByUsers: async (
     publicIds: string[],
@@ -626,6 +706,12 @@ export const createApiService = ({
     model: AccountModel,
     uploadLimit: number,
     downloadLimit: number,
+    // Credit terms left out are kept; null clears an override.
+    terms: {
+      maxPurchasedBytes?: number | null;
+      creditExpiryDays?: number | null;
+      reason?: string;
+    } = {},
   ): Promise<void> => {
     const session = await getAuthSession();
     if (!session?.authProvider || !session.accessToken) {
@@ -639,6 +725,7 @@ export const createApiService = ({
         uploadLimit,
         downloadLimit,
         accountId,
+        ...terms,
       }),
       headers: {
         Authorization: `Bearer ${session?.accessToken}`,
@@ -648,7 +735,10 @@ export const createApiService = ({
     });
 
     if (!response.ok) {
-      throw new Error(`Network response was not ok: ${response.statusText}`);
+      throw await toApiError(
+        response,
+        `Network response was not ok: ${response.statusText}`,
+      );
     }
   },
   publishObject: async (cid: string): Promise<string> => {

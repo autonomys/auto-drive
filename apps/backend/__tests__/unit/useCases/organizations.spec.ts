@@ -38,6 +38,8 @@ const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   uploadLimit: 0,
   downloadLimit: 0,
   isPartner,
+  maxPurchasedBytes: null,
+  creditExpiryDays: null,
 })
 
 const remaining = (uploadBytesRemaining: bigint) =>
@@ -124,10 +126,10 @@ describe('OrganizationsUseCases', () => {
     expect(create).toHaveBeenCalledWith(
       created.accountId,
       'partner-new',
-      expect.any(String),
+      AccountModel.Monthly,
+      0,
       expect.any(Number),
-      expect.any(Number),
-      true,
+      'admin-pub',
     )
     expect(created).toMatchObject({
       id: 'partner-new',

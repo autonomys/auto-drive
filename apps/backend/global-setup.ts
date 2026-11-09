@@ -7,7 +7,7 @@ import fsPromise from 'fs/promises'
 export default async () => {
   config({ path: '.env.test' })
   const postgresContainer = new PostgreSqlContainer(
-    'postgres:16',
+    'postgres:17.9',
   ).withWaitStrategy(
     Wait.forLogMessage('database system is ready to accept connections'),
   )

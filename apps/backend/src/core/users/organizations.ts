@@ -2,6 +2,7 @@ import { v4 } from 'uuid'
 import { err, ok, Result } from 'neverthrow'
 import {
   Account,
+  AccountModel,
   IntentStatus,
   OrganizationMembershipChange,
   OrganizationRole,
@@ -88,10 +89,12 @@ const createPartnerOrganization = async (
   const account = await accountsRepository.createAccount(
     v4(),
     organization.value.id,
-    config.params.defaultAccount.model,
-    config.params.defaultAccount.uploadLimit,
+    // Monthly so the download allowance resets. No free uploads: a partner
+    // pays for them with purchased credits.
+    AccountModel.Monthly,
+    0,
     config.params.defaultAccount.downloadLimit,
-    true,
+    executor.publicId,
   )
   logger.info('Partner organization created', {
     organizationId: organization.value.id,

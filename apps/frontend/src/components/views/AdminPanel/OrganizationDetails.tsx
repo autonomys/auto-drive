@@ -47,6 +47,8 @@ import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
+import { PartnerMembers } from './PartnerMembers';
+import { PartnerTerms } from './PartnerTerms';
 
 // GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
@@ -151,9 +153,13 @@ export const OrganizationDetails = ({ accountId }: Props) => {
     }
   }, [user, router, network.id]);
 
+  // Bumped after a membership change, to reload the account and its members
+  // without showing the loading state again.
+  const [accountVersion, setAccountVersion] = useState(0);
+
   useEffect(() => {
     if (user?.role !== UserRole.Admin) return;
-    setIsLoading(true);
+    if (accountVersion === 0) setIsLoading(true);
     api
       .adminGetAccount(accountId)
       .then(setAccount)
@@ -162,7 +168,7 @@ export const OrganizationDetails = ({ accountId }: Props) => {
         setAccountError(true);
       })
       .finally(() => setIsLoading(false));
-  }, [api, accountId, user?.role]);
+  }, [api, accountId, user?.role, accountVersion]);
 
   // Selected by the account credited, not by buyer: members can buy for a
   // shared account, and a member's earlier purchases stay on their old one.
@@ -288,6 +294,22 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           <div className='space-y-4'>
             <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
               <div className='rounded-lg border border-gray-200 p-4'>
+                <p className='text-xs text-gray-500'>Organization</p>
+                <p className='mt-1 flex items-center gap-2 font-medium'>
+                  {account.organization?.name ?? '—'}
+                  {account.isPartner && (
+                    <span className='rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800'>
+                      Partner
+                    </span>
+                  )}
+                  {account.organization?.archivedAt && (
+                    <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800'>
+                      Archived
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className='rounded-lg border border-gray-200 p-4'>
                 <p className='text-xs text-gray-500'>Organization ID</p>
                 <CopiableText
                   text={account.organizationId}
@@ -335,48 +357,66 @@ export const OrganizationDetails = ({ accountId }: Props) => {
               </div>
             </div>
 
-            <div className='overflow-hidden rounded-lg border border-gray-200'>
-              <Table className='min-w-full'>
-                <TableHead>
-                  <TableHeadRow>
-                    <TableHeadCell>Public ID</TableHeadCell>
-                    <TableHeadCell>Username</TableHeadCell>
-                    <TableHeadCell>Provider</TableHeadCell>
-                    <TableHeadCell>Role</TableHeadCell>
-                  </TableHeadRow>
-                </TableHead>
-                <TableBody>
-                  {account.members.map((member) => (
-                    <TableBodyRow key={member.publicId}>
-                      <TableBodyCell>
-                        <CopiableText
-                          text={member.publicId!}
-                          className='break-all font-mono text-sm'
-                        />
-                      </TableBodyCell>
-                      <TableBodyCell>
-                        {member.oauthUsername ?? '—'}
-                      </TableBodyCell>
-                      <TableBodyCell>{member.oauthProvider}</TableBodyCell>
-                      <TableBodyCell>{member.role}</TableBodyCell>
-                    </TableBodyRow>
-                  ))}
-                  {account.members.length === 0 && (
-                    <TableBodyRow>
-                      <TableBodyCell
-                        colSpan={4}
-                        className='py-6 text-center text-gray-500'
-                      >
-                        No members
-                      </TableBodyCell>
-                    </TableBodyRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            {/* Partner members are listed, with their roles, below. */}
+            {!(account.isPartner && account.organization) && (
+              <div className='overflow-hidden rounded-lg border border-gray-200'>
+                <Table className='min-w-full'>
+                  <TableHead>
+                    <TableHeadRow>
+                      <TableHeadCell>Public ID</TableHeadCell>
+                      <TableHeadCell>Username</TableHeadCell>
+                      <TableHeadCell>Provider</TableHeadCell>
+                      <TableHeadCell>Role</TableHeadCell>
+                    </TableHeadRow>
+                  </TableHead>
+                  <TableBody>
+                    {account.members.map((member) => (
+                      <TableBodyRow key={member.publicId}>
+                        <TableBodyCell>
+                          <CopiableText
+                            text={member.publicId!}
+                            className='break-all font-mono text-sm'
+                          />
+                        </TableBodyCell>
+                        <TableBodyCell>
+                          {member.oauthUsername ?? '—'}
+                        </TableBodyCell>
+                        <TableBodyCell>{member.oauthProvider}</TableBodyCell>
+                        <TableBodyCell>{member.role}</TableBodyCell>
+                      </TableBodyRow>
+                    ))}
+                    {account.members.length === 0 && (
+                      <TableBodyRow>
+                        <TableBodyCell
+                          colSpan={4}
+                          className='py-6 text-center text-gray-500'
+                        >
+                          No members
+                        </TableBodyCell>
+                      </TableBodyRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {account?.isPartner && (
+        <PartnerTerms
+          account={account}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
+
+      {account?.isPartner && account.organization && (
+        <PartnerMembers
+          account={account}
+          organization={account.organization}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
 
       {/* Purchased Credits */}
       {account && (

@@ -860,11 +860,8 @@ const processMigration = async (uploadId: string): Promise<void> => {
         tags: {
           chain: config.monitoring.metricEnvironmentTag,
         },
-        // uploadId is a field, not a tag, deliberately: it is unbounded
-        // cardinality and would blow up the series count if indexed.
         fields: {
           count: 1,
-          uploadId,
         },
       })
       await uploadsRepository
