@@ -13,10 +13,38 @@ export const DEFAULT_CONNECT_EXPIRY_DAYS = 90;
 
 export type ExtensionBrowser = 'chromium' | 'firefox';
 
+export type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'never';
+
+export const DEFAULT_EXPIRY_PRESET: ExpiryPreset = '90d';
+
+export const expiryPresetToIso = (preset: ExpiryPreset): string | null => {
+  if (preset === 'never') return null;
+  const now = new Date();
+  switch (preset) {
+    case '30d':
+      now.setDate(now.getDate() + 30);
+      return now.toISOString();
+    case '60d':
+      now.setDate(now.getDate() + 60);
+      return now.toISOString();
+    case '90d':
+      now.setDate(now.getDate() + DEFAULT_CONNECT_EXPIRY_DAYS);
+      return now.toISOString();
+    case '1y':
+      now.setFullYear(now.getFullYear() + 1);
+      return now.toISOString();
+  }
+};
+
 export interface ParsedExtensionRedirect {
   redirectUri: string;
   extensionId: string;
   browser: ExtensionBrowser;
+}
+
+export interface ParsedState {
+  valid: boolean;
+  value: string | null;
 }
 
 const CHROMIUM_REDIRECT_HOST = /^([a-z0-9]+)\.chromiumapp\.org$/;
@@ -42,17 +70,22 @@ export const parseConnectAppName = (
 
 export const parseConnectState = (
   raw: string | string[] | null | undefined,
-): string | null => {
+): ParsedState => {
   const value = firstParam(raw);
-  if (!value || value.length > MAX_STATE_LENGTH) return null;
-  return value;
+  if (value === null || value === undefined || value === '') {
+    return { valid: true, value: null };
+  }
+  if (value.length > MAX_STATE_LENGTH) {
+    return { valid: false, value: null };
+  }
+  return { valid: true, value };
 };
 
 export const parseExtensionRedirectUri = (
   raw: string | string[] | null | undefined,
 ): ParsedExtensionRedirect | null => {
   const value = firstParam(raw)?.trim();
-  if (!value) return null;
+  if (!value || value.includes('#')) return null;
 
   let url: URL;
   try {
@@ -65,6 +98,8 @@ export const parseExtensionRedirectUri = (
   if (url.username !== '' || url.password !== '') return null;
   if (url.port !== '') return null;
   if (url.hash !== '') return null;
+
+  url.hash = '';
 
   const host = url.hostname.toLowerCase();
 
@@ -100,11 +135,17 @@ export const buildConnectSuccessRedirect = (
   return `${redirectUri}#${fragment.toString()}`;
 };
 
-export const buildConnectCancelRedirect = (
+export const buildConnectErrorRedirect = (
   redirectUri: string,
+  error: 'access_denied' | 'invalid_request',
   state?: string | null,
 ): string => {
-  const fragment = new URLSearchParams({ error: 'access_denied' });
+  const fragment = new URLSearchParams({ error });
   if (state) fragment.set('state', state);
   return `${redirectUri}#${fragment.toString()}`;
 };
+
+export const buildConnectCancelRedirect = (
+  redirectUri: string,
+  state?: string | null,
+): string => buildConnectErrorRedirect(redirectUri, 'access_denied', state);

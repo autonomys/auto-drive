@@ -15,14 +15,15 @@ const Page = ({
 }) => {
   const appName = parseConnectAppName(searchParams?.app_name);
   const redirectTarget = parseExtensionRedirectUri(searchParams?.redirect_uri);
-  const state = parseConnectState(searchParams?.state);
+  const parsedState = parseConnectState(searchParams?.state);
 
   return (
     <UserProtectedLayout>
       <ConnectApp
         appName={appName}
         redirectTarget={redirectTarget}
-        state={state}
+        state={parsedState.value}
+        isStateValid={parsedState.valid}
       />
     </UserProtectedLayout>
   );

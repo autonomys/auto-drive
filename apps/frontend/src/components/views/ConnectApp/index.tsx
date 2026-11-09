@@ -8,48 +8,33 @@ import { useNetwork } from 'contexts/network';
 import { AuthService } from 'services/auth/auth';
 import {
   DEFAULT_CONNECT_EXPIRY_DAYS,
+  DEFAULT_EXPIRY_PRESET,
+  ExpiryPreset,
   ParsedExtensionRedirect,
   buildConnectCancelRedirect,
+  buildConnectErrorRedirect,
   buildConnectSuccessRedirect,
+  expiryPresetToIso,
 } from 'utils/connectApp';
-
-type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'never';
-
-const expiryPresetToIso = (preset: ExpiryPreset): string | null => {
-  if (preset === 'never') return null;
-  const now = new Date();
-  switch (preset) {
-    case '30d':
-      now.setDate(now.getDate() + 30);
-      return now.toISOString();
-    case '60d':
-      now.setDate(now.getDate() + 60);
-      return now.toISOString();
-    case '90d':
-      now.setDate(now.getDate() + DEFAULT_CONNECT_EXPIRY_DAYS);
-      return now.toISOString();
-    case '1y':
-      now.setFullYear(now.getFullYear() + 1);
-      return now.toISOString();
-  }
-};
 
 export const ConnectApp = ({
   appName,
   redirectTarget,
   state,
+  isStateValid = true,
 }: {
   appName: string | null;
   redirectTarget: ParsedExtensionRedirect | null;
   state: string | null;
+  isStateValid?: boolean;
 }) => {
   const router = useRouter();
   const { network } = useNetwork();
-  const [preset, setPreset] = useState<ExpiryPreset>('90d');
+  const [preset, setPreset] = useState<ExpiryPreset>(DEFAULT_EXPIRY_PRESET);
   const [submitting, setSubmitting] = useState(false);
 
   const handleApprove = useCallback(async () => {
-    if (!appName || !redirectTarget || submitting) return;
+    if (!appName || !redirectTarget || !isStateValid || submitting) return;
 
     setSubmitting(true);
     try {
@@ -70,37 +55,54 @@ export const ConnectApp = ({
       );
       setSubmitting(false);
     }
-  }, [appName, preset, redirectTarget, state, submitting]);
+  }, [appName, isStateValid, preset, redirectTarget, state, submitting]);
 
   const handleCancel = useCallback(() => {
-    if (submitting) return;
-    if (redirectTarget) {
-      window.location.replace(
-        buildConnectCancelRedirect(redirectTarget.redirectUri, state),
-      );
-      return;
-    }
-    router.push(ROUTES.drive(network.id));
-  }, [network.id, redirectTarget, router, state, submitting]);
+    if (submitting || !redirectTarget) return;
+    window.location.replace(
+      buildConnectCancelRedirect(redirectTarget.redirectUri, state),
+    );
+  }, [redirectTarget, state, submitting]);
 
-  if (!appName || !redirectTarget) {
+  if (!appName || !redirectTarget || !isStateValid) {
+    const errorDescription = !redirectTarget
+      ? 'The provided redirect_uri must be a valid HTTPS browser extension redirect URL (*.chromiumapp.org or *.extensions.allizom.org).'
+      : !appName
+        ? 'Missing required app_name parameter.'
+        : 'The state parameter is invalid (must be 512 characters or fewer).';
+
     return (
       <div className='mx-auto mt-12 max-w-md rounded-2xl border border-gray-200 bg-background p-6 shadow-sm'>
         <h1 className='text-lg font-semibold text-foreground'>
           Invalid connection request
         </h1>
         <p className='text-foreground-hover mt-2 text-sm'>
-          {!appName
-            ? 'Missing required app_name parameter.'
-            : 'The provided redirect_uri must be a valid HTTPS browser extension redirect URL (*.chromiumapp.org or *.extensions.allizom.org).'}
+          {errorDescription}
         </p>
-        <div className='mt-6 flex justify-end'>
-          <Button
-            variant='lightAccent'
-            onClick={() => router.push(ROUTES.drive(network.id))}
-          >
-            Back to Auto Drive
-          </Button>
+        <div className='mt-6 flex justify-end gap-3'>
+          {redirectTarget ? (
+            <Button
+              variant='lightDanger'
+              onClick={() =>
+                window.location.replace(
+                  buildConnectErrorRedirect(
+                    redirectTarget.redirectUri,
+                    'invalid_request',
+                    isStateValid ? state : null,
+                  ),
+                )
+              }
+            >
+              Return to app
+            </Button>
+          ) : (
+            <Button
+              variant='lightAccent'
+              onClick={() => router.push(ROUTES.drive(network.id))}
+            >
+              Back to Auto Drive
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -120,7 +122,7 @@ export const ConnectApp = ({
 
       <div className='mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground'>
         The application name above is self-declared by the extension. Verify
-        that the extension ID{' '}
+        that the {redirectTarget.browser === 'firefox' ? 'redirect ID' : 'extension ID'}{' '}
         <code className='font-mono font-semibold'>
           {redirectTarget.extensionId}
         </code>{' '}
@@ -144,7 +146,7 @@ export const ConnectApp = ({
         >
           <option value='30d'>In 30 days</option>
           <option value='60d'>In 60 days</option>
-          <option value='90d'>In 90 days (recommended)</option>
+          <option value='90d'>In {DEFAULT_CONNECT_EXPIRY_DAYS} days (recommended)</option>
           <option value='1y'>In 1 year</option>
           <option value='never'>Never</option>
         </select>

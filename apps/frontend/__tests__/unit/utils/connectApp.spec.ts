@@ -1,8 +1,12 @@
 import {
+  DEFAULT_CONNECT_EXPIRY_DAYS,
+  DEFAULT_EXPIRY_PRESET,
   MAX_APP_NAME_LENGTH,
   MAX_STATE_LENGTH,
   buildConnectCancelRedirect,
+  buildConnectErrorRedirect,
   buildConnectSuccessRedirect,
+  expiryPresetToIso,
   parseConnectAppName,
   parseConnectState,
   parseExtensionRedirectUri,
@@ -32,18 +36,29 @@ describe('connectApp utils', () => {
   });
 
   describe('parseConnectState', () => {
-    it('returns non-empty state strings within length limit', () => {
-      expect(parseConnectState('random-csrf-token-123')).toBe(
-        'random-csrf-token-123',
-      );
-      expect(parseConnectState(['state-1', 'state-2'])).toBe('state-1');
+    it('returns valid state strings within length limit', () => {
+      expect(parseConnectState('random-csrf-token-123')).toEqual({
+        valid: true,
+        value: 'random-csrf-token-123',
+      });
+      expect(parseConnectState(['state-1', 'state-2'])).toEqual({
+        valid: true,
+        value: 'state-1',
+      });
     });
 
-    it('rejects missing, empty, or overly long state values', () => {
-      expect(parseConnectState(null)).toBeNull();
-      expect(parseConnectState(undefined)).toBeNull();
-      expect(parseConnectState('')).toBeNull();
-      expect(parseConnectState('x'.repeat(MAX_STATE_LENGTH + 1))).toBeNull();
+    it('distinguishes absent state from invalid state', () => {
+      expect(parseConnectState(null)).toEqual({ valid: true, value: null });
+      expect(parseConnectState(undefined)).toEqual({
+        valid: true,
+        value: null,
+      });
+      expect(parseConnectState('')).toEqual({ valid: true, value: null });
+
+      expect(parseConnectState('x'.repeat(MAX_STATE_LENGTH + 1))).toEqual({
+        valid: false,
+        value: null,
+      });
     });
   });
 
@@ -98,6 +113,7 @@ describe('connectApp utils', () => {
       'https://user:pass@abc.chromiumapp.org/cb',
       'https://abc.chromiumapp.org:8443/cb',
       'https://abc.chromiumapp.org/cb#existing',
+      'https://abc.chromiumapp.org/cb#',
     ])('rejects disallowed redirect_uri %p', (raw) => {
       expect(parseExtensionRedirectUri(raw)).toBeNull();
     });
@@ -117,14 +133,32 @@ describe('connectApp utils', () => {
       ).toBe(`${redirectUri}#api_key=secret_key_123`);
     });
 
-    it('builds cancel redirect with access_denied error and optional state in fragment', () => {
-      expect(buildConnectCancelRedirect(redirectUri, 'csrf-state')).toBe(
-        `${redirectUri}#error=access_denied&state=csrf-state`,
-      );
+    it('builds error redirect with invalid_request or access_denied and optional state', () => {
+      expect(
+        buildConnectErrorRedirect(redirectUri, 'invalid_request', 'csrf-state'),
+      ).toBe(`${redirectUri}#error=invalid_request&state=csrf-state`);
+
+      expect(
+        buildConnectCancelRedirect(redirectUri, 'csrf-state'),
+      ).toBe(`${redirectUri}#error=access_denied&state=csrf-state`);
 
       expect(buildConnectCancelRedirect(redirectUri, null)).toBe(
         `${redirectUri}#error=access_denied`,
       );
+    });
+  });
+
+  describe('expiryPresetToIso', () => {
+    it('converts presets to ISO dates and respects DEFAULT_CONNECT_EXPIRY_DAYS', () => {
+      expect(expiryPresetToIso('never')).toBeNull();
+      expect(DEFAULT_EXPIRY_PRESET).toBe('90d');
+
+      const iso90 = expiryPresetToIso('90d');
+      expect(iso90).toBeTruthy();
+      const diffDays = Math.round(
+        (new Date(iso90!).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      expect(diffDays).toBe(DEFAULT_CONNECT_EXPIRY_DAYS);
     });
   });
 });
