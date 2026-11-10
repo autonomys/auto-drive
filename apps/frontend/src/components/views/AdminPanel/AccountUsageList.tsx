@@ -26,6 +26,9 @@ import { defaultUsageDays, toUsageRange, UsageDays } from '@/utils/usageReport';
 
 const bytes = (value: string) => formatBytes(Number(value));
 
+// The most rows the backend returns; a full page means the list is cut off.
+const ACCOUNT_LIMIT = 1000;
+
 /** Admin: each account active in a range, most upload bytes first. */
 export const AccountUsageList = () => {
   const { api, network } = useNetwork();
@@ -40,7 +43,12 @@ export const AccountUsageList = () => {
   } = useQuery<AccountUsageSummary[]>({
     queryKey: ['adminAccountUsage', range?.from, range?.to, partnersOnly],
     queryFn: () =>
-      api.adminGetAccountUsage(range!.from, range!.to, partnersOnly),
+      api.adminGetAccountUsage(
+        range!.from,
+        range!.to,
+        partnersOnly,
+        ACCOUNT_LIMIT,
+      ),
     enabled: range !== null,
     staleTime: 60_000,
   });
@@ -126,6 +134,12 @@ export const AccountUsageList = () => {
           </TableBody>
         </Table>
       </div>
+      {accounts?.length === ACCOUNT_LIMIT && (
+        <p className='text-xs text-gray-500'>
+          Showing only the top {ACCOUNT_LIMIT.toLocaleString()} accounts by
+          upload size.
+        </p>
+      )}
     </div>
   );
 };

@@ -618,9 +618,10 @@ export const createApiService = ({
     from: string,
     to: string,
     partnersOnly: boolean,
+    limit: number,
   ): Promise<AccountUsageSummary[]> =>
     adminRequest(
-      `${apiBaseUrl}/accounts/admin/usage?${new URLSearchParams({ from, to, partnersOnly: String(partnersOnly) })}`,
+      `${apiBaseUrl}/accounts/admin/usage?${new URLSearchParams({ from, to, partnersOnly: String(partnersOnly), limit: String(limit) })}`,
     ),
   /** Admin: each user's current account ID, keyed by publicId. */
   adminGetAccountIdsByUsers: async (

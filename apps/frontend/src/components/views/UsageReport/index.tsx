@@ -4,6 +4,7 @@ import { ReactNode, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { Download, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import { UsageByApiKey, UsageReport } from '@auto-drive/models';
@@ -32,7 +33,9 @@ import { UsageDaysPicker } from './UsageDaysPicker';
 
 const bytes = (value: string) => formatBytes(Number(value));
 const ai3 = (shannons: string) => formatAi3(BigInt(shannons));
-const day = (iso: string) => dayjs(iso).format('MMM D, YYYY');
+// Report ranges are whole UTC days, so dates show the UTC calendar day.
+dayjs.extend(utc);
+const day = (iso: string) => dayjs.utc(iso).format('MMM D, YYYY');
 
 const EXPORTS = [
   { label: 'Summary', table: 'summary' },
