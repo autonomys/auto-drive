@@ -1,5 +1,5 @@
 import { MetadataType } from '@autonomys/auto-dag-data'
-import { getDatabase } from '../../drivers/pg.js'
+import { Executor, getDatabase } from '../../drivers/pg.js'
 
 interface BlockstoreEntry {
   upload_id: string
@@ -22,8 +22,9 @@ const addBlockstoreEntry = async (
   nodeType: MetadataType,
   nodeSize: bigint,
   data: Buffer,
+  executor?: Executor,
 ) => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   // ON CONFLICT DO NOTHING makes writing a root node idempotent, which
   // blockstore_root_node_unique_idx alone would not: with only the constraint, a
@@ -43,21 +44,46 @@ const addBlockstoreEntry = async (
   )
 }
 
-const addBatchBlockstoreEntries = async (entries: BlockstoreEntry[]) => {
-  const db = await getDatabase()
+// A chunk node's row, minus the upload it belongs to.
+export type ChunkEntry = Omit<BlockstoreEntry, 'upload_id'>
 
-  await db.query(
-    `INSERT INTO uploads.blockstore (upload_id, cid, node_type, node_size, data) VALUES ${entries
-      .map(
-        (entry) =>
-          `(${entry.upload_id}, ${entry.cid}, ${entry.node_type}, ${entry.node_size}, ${entry.data})`,
-      )
-      .join(',')}`,
-  )
+// Rows per INSERT in addChunkEntries: about 32 MiB of payload at the default
+// chunk size, and 2,001 bind parameters.
+export const CHUNK_ENTRIES_PER_INSERT = 500
+
+// One multi-row INSERT per 500 chunk nodes instead of one statement per node.
+// Chunk nodes only: unlike addBlockstoreEntry there is no ON CONFLICT, because
+// repeated content stores one row per occurrence and chunk rows never
+// conflict. Rows take their sort_id in the order given, which is the order the
+// DAG builder reads them back in.
+const addChunkEntries = async (
+  uploadId: string,
+  entries: ChunkEntry[],
+  executor?: Executor,
+) => {
+  const db = executor ?? (await getDatabase())
+
+  for (let i = 0; i < entries.length; i += CHUNK_ENTRIES_PER_INSERT) {
+    const batch = entries.slice(i, i + CHUNK_ENTRIES_PER_INSERT)
+    const values = batch
+      .map((_, j) => {
+        const p = 4 * j + 2
+        return `($1, $${p}, $${p + 1}, $${p + 2}, $${p + 3})`
+      })
+      .join(', ')
+
+    await db.query(
+      `INSERT INTO uploads.blockstore (upload_id, cid, node_type, node_size, data) VALUES ${values}`,
+      [
+        uploadId,
+        ...batch.flatMap((e) => [e.cid, e.node_type, e.node_size, e.data]),
+      ],
+    )
+  }
 }
 
-const getBlockstoreEntries = async (uploadId: string) => {
-  const db = await getDatabase()
+const getBlockstoreEntries = async (uploadId: string, executor?: Executor) => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<BlockstoreEntry>(
     'SELECT * FROM uploads.blockstore WHERE upload_id = $1 ORDER BY sort_id ASC',
@@ -78,8 +104,11 @@ const getBatchBlockstoreEntries = async (uploadIds: string, cids: string[]) => {
   return result.rows.map(parseEntry)
 }
 
-const getBlockstoreEntriesWithoutData = async (uploadId: string) => {
-  const db = await getDatabase()
+const getBlockstoreEntriesWithoutData = async (
+  uploadId: string,
+  executor?: Executor,
+) => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<BlockstoreEntry>(
     'SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 ORDER BY sort_id ASC',
@@ -89,8 +118,12 @@ const getBlockstoreEntriesWithoutData = async (uploadId: string) => {
   return result.rows.map(parseEntry)
 }
 
-const getByType = async (uploadId: string, nodeType: MetadataType) => {
-  const db = await getDatabase()
+const getByType = async (
+  uploadId: string,
+  nodeType: MetadataType,
+  executor?: Executor,
+) => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<BlockstoreEntry>(
     'SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND node_type = $2 ORDER BY sort_id ASC',
@@ -100,8 +133,8 @@ const getByType = async (uploadId: string, nodeType: MetadataType) => {
   return result.rows.map(parseEntry)
 }
 
-const getByCid = async (uploadId: string, cid: string) => {
-  const db = await getDatabase()
+const getByCid = async (uploadId: string, cid: string, executor?: Executor) => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<BlockstoreEntry>(
     'SELECT * FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC LIMIT 1',
@@ -111,8 +144,12 @@ const getByCid = async (uploadId: string, cid: string) => {
   return result.rows.map(parseEntry).at(0) ?? null
 }
 
-const getByCIDWithoutData = async (uploadId: string, cid: string) => {
-  const db = await getDatabase()
+const getByCIDWithoutData = async (
+  uploadId: string,
+  cid: string,
+  executor?: Executor,
+) => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<BlockstoreEntry>(
     'SELECT upload_id, cid, node_type, node_size FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2 ORDER BY sort_id ASC LIMIT 1',
@@ -122,8 +159,12 @@ const getByCIDWithoutData = async (uploadId: string, cid: string) => {
   return result.rows.map(parseEntry).at(0) ?? null
 }
 
-const hasCid = async (uploadId: string, cid: string): Promise<boolean> => {
-  const db = await getDatabase()
+const hasCid = async (
+  uploadId: string,
+  cid: string,
+  executor?: Executor,
+): Promise<boolean> => {
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query<{ exists: boolean }>(
     'SELECT EXISTS (SELECT 1 FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2) AS exists',
@@ -183,8 +224,12 @@ const getByCIDAndRootUploadId = async (rootUploadId: string, cid: string) => {
   return result.rows.map(parseEntry).at(0) ?? null
 }
 
-const deleteBlockstoreEntry = async (uploadId: string, cid: string) => {
-  const db = await getDatabase()
+const deleteBlockstoreEntry = async (
+  uploadId: string,
+  cid: string,
+  executor?: Executor,
+) => {
+  const db = executor ?? (await getDatabase())
 
   await db.query(
     'DELETE FROM uploads.blockstore WHERE upload_id = $1 AND cid = $2',
@@ -202,7 +247,7 @@ const deleteBlockstoreEntries = async (uploadId: string) => {
 
 export const blockstoreRepository = {
   addBlockstoreEntry,
-  addBatchBlockstoreEntries,
+  addChunkEntries,
   getBlockstoreEntries,
   getBatchBlockstoreEntries,
   getBlockstoreEntriesWithoutData,

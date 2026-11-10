@@ -1,5 +1,5 @@
 import { FileUploadOptions } from '@autonomys/auto-dag-data'
-import { getDatabase } from '../../drivers/pg.js'
+import { Executor, getDatabase } from '../../drivers/pg.js'
 import { FolderTreeFolder, UploadStatus, UploadType } from '@auto-drive/models'
 
 export type UploadEntry = {
@@ -66,8 +66,9 @@ export const createUploadEntry = async (
 
 export const getUploadEntryById = async (
   id: string,
+  executor?: Executor,
 ): Promise<UploadEntry | null> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query('SELECT * FROM uploads.uploads WHERE id = $1', [
     id,

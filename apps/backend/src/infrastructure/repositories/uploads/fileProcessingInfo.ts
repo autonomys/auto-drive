@@ -1,4 +1,5 @@
-import { getDatabase } from '../../drivers/pg.js'
+import pg from 'pg'
+import { Executor, getDatabase } from '../../drivers/pg.js'
 
 export interface FileProcessingInfo {
   upload_id: string
@@ -29,8 +30,9 @@ const addFileProcessingInfo = async (
 
 const updateFileProcessingInfo = async (
   fileProcessingInfo: FileProcessingInfo,
+  executor?: Executor,
 ): Promise<FileProcessingInfo> => {
-  const db = await getDatabase()
+  const db = executor ?? (await getDatabase())
 
   const result = await db.query(
     'UPDATE uploads.file_processing_info SET last_processed_part_index = $1, pending_bytes = $2, updated_at = $3 WHERE upload_id = $4',
@@ -58,6 +60,25 @@ const getFileProcessingInfoByUploadId = async (
   return result.rows[0] ?? null
 }
 
+// Locks the row until the caller's transaction ends. Waits at most 60 s for
+// another transaction's lock, and the limit holds for the rest of the caller's
+// transaction, so a request stuck behind a slow or hung holder gives up
+// (SQLSTATE 55P03) inside the ~120 s Cloudflare puts on a request instead of
+// holding its connection indefinitely.
+const getFileProcessingInfoForUpdate = async (
+  client: pg.PoolClient,
+  uploadId: string,
+): Promise<FileProcessingInfo | null> => {
+  // Milliseconds.
+  await client.query('SET LOCAL lock_timeout = 60000')
+  const result = await client.query(
+    'SELECT * FROM uploads.file_processing_info WHERE upload_id = $1 FOR UPDATE',
+    [uploadId],
+  )
+
+  return result.rows[0] ?? null
+}
+
 const deleteFileProcessingInfo = async (uploadId: string): Promise<void> => {
   const db = await getDatabase()
 
@@ -71,5 +92,6 @@ export const fileProcessingInfoRepository = {
   addFileProcessingInfo,
   updateFileProcessingInfo,
   getFileProcessingInfoByUploadId,
+  getFileProcessingInfoForUpdate,
   deleteFileProcessingInfo,
 }
