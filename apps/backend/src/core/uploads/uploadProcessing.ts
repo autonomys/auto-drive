@@ -23,6 +23,7 @@ import {
 import {
   blockstoreRepository,
   ChunkEntry,
+  CHUNK_ENTRIES_PER_INSERT,
 } from '../../infrastructure/repositories/uploads/blockstore.js'
 import {
   FolderUpload,
@@ -84,16 +85,34 @@ const withFileProcessingLock = async <T>(
     return fn(client, info)
   })
 
-// Keeps a part's chunk nodes in memory, in order, as blockstore rows, so they
-// are written with addChunkEntries inside the part's transaction.
-// processChunksToIPLDFormat only calls put(); anything else rejects
-// (BaseBlockstore's default).
-class ChunkCollector extends BaseBlockstore {
-  readonly rows: ChunkEntry[] = []
+// Writes a part's chunk nodes on the part's transaction client as they are
+// made, one INSERT per CHUNK_ENTRIES_PER_INSERT rows, so only one batch is held
+// in memory rather than the whole part. processChunksToIPLDFormat awaits each
+// put() and calls nothing else; anything else rejects (BaseBlockstore's
+// default).
+class ChunkWriter extends BaseBlockstore {
+  private rows: ChunkEntry[] = []
+
+  constructor(
+    private readonly uploadId: string,
+    private readonly client: pg.PoolClient,
+  ) {
+    super()
+  }
 
   async put(cid: CID, block: Uint8Array): Promise<CID> {
     this.rows.push(toBlockstoreRow(cid, block))
+    if (this.rows.length >= CHUNK_ENTRIES_PER_INSERT) {
+      await this.flush()
+    }
     return cid
+  }
+
+  async flush(): Promise<void> {
+    const rows = this.rows
+    if (rows.length === 0) return
+    this.rows = []
+    await blockstoreRepository.addChunkEntries(this.uploadId, rows, this.client)
   }
 }
 
@@ -113,13 +132,13 @@ const processPart = async (
   const latestPartLeftOver =
     await getUnprocessedChunkFromLatestFilePart(fileProcessingInfo)
 
-  const collector = new ChunkCollector()
+  const writer = new ChunkWriter(uploadId, client)
   const leftOver = await processChunksToIPLDFormat(
-    collector,
+    writer,
     [latestPartLeftOver, data],
     fileBuilders,
   )
-  await blockstoreRepository.addChunkEntries(uploadId, collector.rows, client)
+  await writer.flush()
 
   await fileProcessingInfoRepository.updateFileProcessingInfo(
     {

@@ -49,7 +49,7 @@ export type ChunkEntry = Omit<BlockstoreEntry, 'upload_id'>
 
 // Rows per INSERT in addChunkEntries: about 32 MiB of payload at the default
 // chunk size, and 2,001 bind parameters.
-const CHUNK_ENTRIES_PER_INSERT = 500
+export const CHUNK_ENTRIES_PER_INSERT = 500
 
 // One multi-row INSERT per 500 chunk nodes instead of one statement per node.
 // Chunk nodes only: unlike addBlockstoreEntry there is no ON CONFLICT, because

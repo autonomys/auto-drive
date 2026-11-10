@@ -224,6 +224,16 @@ const drainLoop = async (uploadId: string): Promise<void> => {
   }
 }
 
+// 409 while a completion holds the claim, 400 once the upload is past it.
+const assertAcceptsParts = (uploadId: string, status?: UploadStatus) => {
+  if (status !== UploadStatus.PENDING) {
+    const message = `Upload ${uploadId} is ${status ?? 'gone'} and no longer accepts parts`
+    throw status === UploadStatus.COMPLETING
+      ? new ConflictError(message)
+      : new BadRequestError(message)
+  }
+}
+
 const uploadChunk = async (
   user: UserWithOrganization,
   uploadId: string,
@@ -242,6 +252,10 @@ const uploadChunk = async (
     throw new Error('Upload not found')
   }
   await checkPermissions(upload, user)
+  // Refuses at once a part sent while a completion holds the row lock for its
+  // derivation, instead of after the derivation (or the 60 s lock timeout). The
+  // check under the lock below is the one that counts.
+  assertAcceptsParts(uploadId, upload.status)
 
   // The guards and store run under the upload's row lock, so the status and
   // cursor they check cannot change until the part is stored, whichever process
@@ -254,15 +268,11 @@ const uploadChunk = async (
         // Completion claims the upload before it takes the lock, so a part that
         // waited behind a completion is refused here rather than stored into an
         // upload whose root does not cover it.
-        const status = (
-          await uploadsRepository.getUploadEntryById(uploadId, client)
-        )?.status
-        if (status !== UploadStatus.PENDING) {
-          const message = `Upload ${uploadId} is ${status ?? 'gone'} and no longer accepts parts`
-          throw status === UploadStatus.COMPLETING
-            ? new ConflictError(message)
-            : new BadRequestError(message)
-        }
+        assertAcceptsParts(
+          uploadId,
+          (await uploadsRepository.getUploadEntryById(uploadId, client))
+            ?.status,
+        )
 
         const lastProcessed = info.last_processed_part_index ?? -1
 

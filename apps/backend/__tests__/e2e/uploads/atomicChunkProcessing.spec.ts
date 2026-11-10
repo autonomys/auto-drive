@@ -21,7 +21,9 @@ import {
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { UploadFileProcessingUseCase } from '../../../src/core/uploads/uploadProcessing.js'
 import { AccountsUseCases } from '../../../src/core/index.js'
+import { UploadStatus } from '@auto-drive/models'
 import { blockstoreRepository } from '../../../src/infrastructure/repositories/uploads/index.js'
+import { CHUNK_ENTRIES_PER_INSERT } from '../../../src/infrastructure/repositories/uploads/blockstore.js'
 import { filePartsRepository } from '../../../src/infrastructure/repositories/uploads/fileParts.js'
 import { fileProcessingInfoRepository } from '../../../src/infrastructure/repositories/uploads/fileProcessingInfo.js'
 import { uploadsRepository } from '../../../src/infrastructure/repositories/uploads/uploads.js'
@@ -165,6 +167,32 @@ describe('atomic per-part processing', () => {
     await UploadsUseCases.uploadChunk(user, uploadId, 2, parts[2])
     await expectCleanResult(uploadId, name, file)
   })
+
+  // A part of more nodes than one INSERT takes is written in batches as it is
+  // chunked; a failure in a later batch must also undo the earlier ones.
+  it('rolls back a part written across insert batches when a later batch fails', async () => {
+    const name = 'batched-part.bin'
+    const file = randomBytes(
+      (CHUNK_ENTRIES_PER_INSERT + 10) * DEFAULT_MAX_CHUNK_SIZE + 1234,
+    )
+    const uploadId = await createUpload(name)
+
+    jest
+      .spyOn(blockstoreRepository, 'addChunkEntries')
+      .mockImplementationOnce(realAddChunkEntries)
+      .mockImplementationOnce(async () => {
+        throw new Error('injected failure in the second batch')
+      })
+    await expect(
+      UploadsUseCases.uploadChunk(user, uploadId, 0, file),
+    ).rejects.toThrow('injected failure in the second batch')
+
+    expect(await chunkRows(uploadId)).toBe(0)
+    expect(await cursor(uploadId)).toBeNull()
+
+    await UploadsUseCases.uploadChunk(user, uploadId, 0, file)
+    await expectCleanResult(uploadId, name, file)
+  }, 60_000)
 
   it('rolls a part back when the cursor update fails, and the retry is clean', async () => {
     const name = 'cursor-fails.bin'
@@ -321,6 +349,32 @@ describe('atomic per-part processing', () => {
     expect(await uploadsRepository.claimUploadForCompletion(uploadId, 0)).toBe(
       true,
     )
+
+    // Refused at once while the derivation holds the row lock, not after it.
+    let lockTaken!: () => void
+    const locked = new Promise<void>((resolve) => (lockTaken = resolve))
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    const derivation = UploadFileProcessingUseCase.withFileProcessingLock(
+      uploadId,
+      async () => {
+        lockTaken()
+        await held
+      },
+    )
+    await locked
+    await expect(
+      UploadsUseCases.uploadChunk(user, uploadId, 1, late),
+    ).rejects.toBeInstanceOf(ConflictError)
+    release()
+    await derivation
+
+    // A part that read the upload just before the claim is refused under the
+    // lock.
+    const claimed = await uploadsRepository.getUploadEntryById(uploadId)
+    jest
+      .spyOn(uploadsRepository, 'getUploadEntryById')
+      .mockResolvedValueOnce({ ...claimed!, status: UploadStatus.PENDING })
     await expect(
       UploadsUseCases.uploadChunk(user, uploadId, 1, late),
     ).rejects.toBeInstanceOf(ConflictError)
