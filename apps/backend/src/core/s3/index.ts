@@ -1,4 +1,7 @@
-import { s3ObjectMappingsRepository } from '../../infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../infrastructure/repositories/index.js'
 import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
@@ -133,6 +136,54 @@ const dagNameForKey = (key: string): string => {
   }
   return dagName
 }
+
+// Points the caller's key at `cid` and takes the content out of their Trash in
+// one step, under the lock deleteObject holds while it decides whether a key was
+// the caller's last for that content. A delete then either sees this key, or
+// already moved the content to Trash and this undoes it, so a key whose write
+// succeeded is never left pointing at trashed content.
+const writeMapping = (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+  cid: string,
+  md5: string | null,
+  mtime: string | null,
+  metadata: S3ObjectMetadata | null,
+): Promise<S3KeyMapping> =>
+  s3ObjectMappingsRepository.withContentLock(
+    user.oauthProvider,
+    user.oauthUserId,
+    cid,
+    async (client) => {
+      const mapping = await s3ObjectMappingsRepository.createMapping(
+        user.oauthProvider,
+        user.oauthUserId,
+        bucket,
+        key,
+        cid,
+        md5,
+        mtime,
+        metadata,
+        client,
+      )
+      const restored = await ownershipRepository.restoreIfDeleted(
+        user.oauthProvider,
+        user.oauthUserId,
+        cid,
+        client,
+      )
+      if (restored) {
+        logger.info(
+          'Restored object from Trash on writing an S3 key to it (cid=%s, bucket=%s, key=%s)',
+          cid,
+          bucket,
+          key,
+        )
+      }
+      return mapping
+    },
+  )
 
 // The S3 key namespace is scoped per user: (owner, bucket, key) is the mapping
 // identity, so every read/write below is scoped to the requesting user. There is
@@ -456,9 +507,8 @@ const completeMultipartUpload = async (
     params.UploadId,
   )
 
-  const mapping = await s3ObjectMappingsRepository.createMapping(
-    user.oauthProvider,
-    user.oauthUserId,
+  const mapping = await writeMapping(
+    user,
     params.Bucket,
     params.Key,
     cid,
@@ -511,9 +561,8 @@ const putObject = async (
 
   const cid = await UploadsUseCases.completeUpload(user, upload.id)
 
-  const mapping = await s3ObjectMappingsRepository.createMapping(
-    user.oauthProvider,
-    user.oauthUserId,
+  const mapping = await writeMapping(
+    user,
     params.Bucket,
     params.Key,
     cid,
@@ -540,8 +589,8 @@ const putObject = async (
  * The lookup is scoped to the caller, so a key that isn't theirs simply isn't
  * found (no cross-user authorization needed). When the deleted key was the
  * caller's LAST active mapping for its content, the object is also moved to
- * their web-app Trash (markAsDeleted) so an rclone delete is reflected in the UI
- * and stays recoverable — the "unified with UI Trash" behaviour.
+ * their web-app Trash so an rclone delete is reflected in the UI and stays
+ * recoverable: the "unified with UI Trash" behaviour.
  */
 const deleteObject = async (
   user: UserWithOrganization,
@@ -570,63 +619,61 @@ const deleteObject = async (
     return ok(resolveDeleteMarkerResult(deleted?.deletedAt))
   }
 
-  const trashObject = async () => {
-    const result = await ObjectUseCases.markAsDeleted(user, mapping.cid)
-    if (result.isErr()) {
-      // The mapping is (or will be) hidden regardless; failure to also trash the
-      // object must not fail the delete.
-      logger.warn(
-        'Could not move object to Trash on delete (cid=%s): %s',
-        mapping.cid,
-        result.error.message,
-      )
-    }
-  }
-
-  // Is this the caller's last active key for the content? The count is scoped to
-  // the caller, and includes the still-active mapping being deleted, so <= 1
-  // means it's their last one.
-  const countActive = () =>
-    s3ObjectMappingsRepository.countActiveMappingsByCid(
-      user.oauthProvider,
-      user.oauthUserId,
-      mapping.cid,
-    )
-
-  const activeBefore = await countActive()
-  const isLastKey = activeBefore <= 1
-
-  if (isLastKey) {
-    // Move the object to the web-app Trash BEFORE hiding the mapping, so its
-    // deleted_at is stamped at/after the object's Trash time — restore then
-    // un-hides this key but not earlier, individually-deleted aliases.
-    await trashObject()
-  }
-
-  const softDeleted = await s3ObjectMappingsRepository.softDeleteMapping(
+  // Under the lock writeMapping takes, so no key to this content is written
+  // between counting the caller's remaining keys and moving it to Trash. The
+  // Trash time is this key's deleted_at, which is what lets a restore un-hide it
+  // (restoreMappingsByCid). Conditioning the soft-delete on the cid read above
+  // leaves alone a key rewritten to other content in the meantime.
+  const softDeleted = await s3ObjectMappingsRepository.withContentLock(
     user.oauthProvider,
     user.oauthUserId,
-    bucket,
-    key,
-  )
+    mapping.cid,
+    async (client) => {
+      const hidden = await s3ObjectMappingsRepository.softDeleteMapping(
+        user.oauthProvider,
+        user.oauthUserId,
+        bucket,
+        key,
+        mapping.cid,
+        client,
+      )
+      if (!hidden) return null
 
-  if (!isLastKey) {
-    // Race guard: between the count above and this hide, a concurrent
-    // DeleteObject (same user, e.g. rclone --transfers) may have removed the
-    // sibling last key. Re-check now that ours is hidden; if none of the
-    // caller's keys remain, this delete emptied the content and must move it to
-    // Trash. (If two concurrent deletes both reach here, markAsDeleted is
-    // effectively idempotent: the second is a harmless no-op.)
-    const activeAfter = await countActive()
-    if (activeAfter === 0) {
-      await trashObject()
-    }
-  }
+      const remaining =
+        await s3ObjectMappingsRepository.countActiveMappingsByCid(
+          user.oauthProvider,
+          user.oauthUserId,
+          mapping.cid,
+          client,
+        )
+      if (remaining > 0) return hidden
+
+      const trashed = await ownershipRepository.markAsDeletedIfActive(
+        user.oauthProvider,
+        user.oauthUserId,
+        mapping.cid,
+        hidden.deletedAt,
+        client,
+      )
+      if (trashed) {
+        logger.info(
+          'Moved object to Trash after deleting its last S3 key (cid=%s)',
+          mapping.cid,
+        )
+      } else {
+        logger.warn(
+          'Could not move object to Trash on delete, the caller has no active ownership of it (cid=%s)',
+          mapping.cid,
+        )
+      }
+      return hidden
+    },
+  )
 
   logger.debug('Soft-deleted S3 mapping: bucket=(%s) key=(%s)', bucket, key)
   // A delete marker was created iff this call actually hid an active row. (A
-  // concurrent delete may have hidden it first — softDeleteMapping then returns
-  // null and this call created nothing.)
+  // concurrent delete or overwrite may have changed it first; softDeleteMapping
+  // then returns null and this call created nothing.)
   return ok(resolveDeleteMarkerResult(softDeleted?.deletedAt))
 }
 
@@ -680,9 +727,8 @@ const copyObject = async (
     params.Metadata !== undefined ? params.Metadata : source.metadata
 
   // The destination key is created in the caller's namespace.
-  const mapping = await s3ObjectMappingsRepository.createMapping(
-    user.oauthProvider,
-    user.oauthUserId,
+  const mapping = await writeMapping(
+    user,
     params.Bucket,
     params.Key,
     source.cid,

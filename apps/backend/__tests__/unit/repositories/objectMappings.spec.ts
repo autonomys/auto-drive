@@ -56,7 +56,13 @@ describe('S3 object mappings repository — Last-Modified anchoring', () => {
 
     // Soft-delete + restore each fire the BEFORE UPDATE trigger, bumping
     // object_mappings.updated_at to now without writing a new version.
-    await s3ObjectMappingsRepository.softDeleteMapping(OWNER, USER, bucket, key)
+    await s3ObjectMappingsRepository.softDeleteMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidA',
+    )
     await s3ObjectMappingsRepository.restoreMappingsByCid(OWNER, USER, 'cidA')
 
     // The mapping's updated_at has drifted (trigger) well past the write time...
@@ -105,7 +111,13 @@ describe('S3 object mappings repository — Last-Modified anchoring', () => {
       ),
     ).toBeNull()
 
-    await s3ObjectMappingsRepository.softDeleteMapping(OWNER, USER, bucket, key)
+    await s3ObjectMappingsRepository.softDeleteMapping(
+      OWNER,
+      USER,
+      bucket,
+      key,
+      'cidA',
+    )
 
     // findByKey hides it, but findSoftDeletedByKey surfaces its deleted_at so a
     // repeat DeleteObject can report the current delete marker.
