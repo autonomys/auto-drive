@@ -457,6 +457,30 @@ describe('CreditsUseCases', () => {
       expect(remaining.uploadBytesRemaining).toBe(MB(10))
     })
 
+    it('accounts for every byte of a batch after consumption and a refund', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+      const batch = await seedBatch(account.id, MB(10), 30)
+
+      await AccountsUseCases.registerInteraction(
+        mockUser,
+        InteractionType.Upload,
+        MB(3),
+      )
+      const { row } = await purchasedCreditsRepository.markAsRefunded(
+        batch.id,
+        `0x${'a'.repeat(64)}`,
+      )
+
+      const consumed = (await getConsumption(account.id)).reduce(
+        (sum, c) => sum + BigInt(c.bytes),
+        BigInt(0),
+      )
+      expect(row?.refundedUploadBytes).toBe(MB(7))
+      expect(row!.uploadBytesOriginal - row!.uploadBytesRemaining).toBe(
+        consumed + row!.refundedUploadBytes!,
+      )
+    })
+
     it('records the API key on downloads', async () => {
       const account = await AccountsUseCases.getOrCreateAccount(mockUser)
 
