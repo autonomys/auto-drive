@@ -79,7 +79,6 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
   accountId: string,
   type: InteractionType,
   start: Date,
-  end: Date,
   source?: InteractionSource,
   executor?: Executor,
 ): Promise<Interaction[]> => {
@@ -90,11 +89,10 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
      WHERE account_id = $1
        AND type = $2
        AND created_at >= $3
-       AND created_at <= $4
-       ${source ? 'AND source = $5' : ''}`,
+       ${source ? 'AND source = $4' : ''}`,
     source
-      ? [accountId, type, start.toISOString(), end.toISOString(), source]
-      : [accountId, type, start.toISOString(), end.toISOString()],
+      ? [accountId, type, start.toISOString(), source]
+      : [accountId, type, start.toISOString()],
   )
 
   return mapRows(interactions.rows)
