@@ -174,10 +174,10 @@ const getPendingCreditsByAccountAndType = async (
   account: Account,
   type: InteractionType,
 ): Promise<number> => {
-  const end = new Date()
+  const now = new Date()
   const start =
     account.model === AccountModel.Monthly
-      ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+      ? new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
       : new Date(0)
 
   // Only count free-tier interactions against the free/one-off limit.
@@ -188,7 +188,6 @@ const getPendingCreditsByAccountAndType = async (
       account.id,
       type,
       start,
-      end,
       InteractionSource.FreeTier,
     )
 
@@ -354,10 +353,10 @@ const registerInteraction = async (
     // Guard: a request that only received a partial purchased allocation must
     // not silently overflow into free-tier credits it does not own.
     if (fromFree > BigInt(0)) {
-      const end = new Date()
+      const now = new Date()
       const start =
         account.model === AccountModel.Monthly
-          ? new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0)
+          ? new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
           : new Date(0)
 
       const freeTierInteractions =
@@ -365,7 +364,6 @@ const registerInteraction = async (
           account.id,
           type,
           start,
-          end,
           InteractionSource.FreeTier,
           client,
         )

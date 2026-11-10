@@ -106,6 +106,77 @@ describe('CreditsUseCases', () => {
     expect(initialCredits - pendingCredits).toBe(Number(size).valueOf())
   })
 
+  describe.each([AccountModel.OneOff, AccountModel.Monthly])(
+    'free-tier rows stamped after the app clock (%s)',
+    (model) => {
+      // A row stamped in the same millisecond as the app's clock reading, or
+      // by a database clock running ahead of the app's, looks like this.
+      const insertFutureStampedUpload = async (
+        accountId: string,
+        size: number,
+      ) => {
+        const db = await getDatabase()
+        await db.query(
+          `INSERT INTO interactions (id, account_id, type, size, source, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6::timestamp)`,
+          [
+            uuidv4(),
+            accountId,
+            InteractionType.Upload,
+            size,
+            InteractionSource.FreeTier,
+            new Date(Date.now() + 60_000).toISOString(),
+          ],
+        )
+      }
+
+      let accountId: string
+
+      beforeEach(async () => {
+        const account = await AccountsUseCases.getOrCreateAccount(mockUser)
+        await accountsRepository.updateAccount(
+          account.id,
+          { ...account, model },
+          'admin',
+        )
+        accountId = account.id
+      })
+
+      it('counts them in pending credits', async () => {
+        const initialCredits =
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            mockUser,
+            InteractionType.Upload,
+          )
+
+        await insertFutureStampedUpload(accountId, 1024)
+
+        const pendingCredits =
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            mockUser,
+            InteractionType.Upload,
+          )
+        expect(initialCredits - pendingCredits).toBe(1024)
+      })
+
+      it('counts them in the free-tier guard', async () => {
+        const freeLimit = await AccountsUseCases.getPendingCreditsByUserAndType(
+          mockUser,
+          InteractionType.Upload,
+        )
+        await insertFutureStampedUpload(accountId, freeLimit)
+
+        await expect(
+          AccountsUseCases.registerInteraction(
+            mockUser,
+            InteractionType.Upload,
+            BigInt(1),
+          ),
+        ).rejects.toThrow('Insufficient credits')
+      })
+    },
+  )
+
   it('should create a purchased_credits row when credits are added', async () => {
     jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(mockUser)
     const account = await AccountsUseCases.getOrCreateAccount(mockUser)
@@ -293,13 +364,11 @@ describe('CreditsUseCases', () => {
 
     // Only 90 MB should be recorded as consumed from purchased credits —
     // the second caller's partial deduction was rolled back.
-    const now = new Date()
     const purchasedInteractions =
       await interactionsRepository.getInteractionsByAccountIdAndTypeInTimeRange(
         account.id,
         InteractionType.Upload,
         new Date(0),
-        now,
         InteractionSource.Purchased,
       )
     const totalPurchasedConsumed = purchasedInteractions.reduce(
