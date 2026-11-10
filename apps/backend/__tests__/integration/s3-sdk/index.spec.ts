@@ -2201,6 +2201,43 @@ describe('AWS S3 - SDK', () => {
           name: 'NoSuchKey',
         })
       })
+
+      it('answers 400 InvalidArgument for a version id that is not a CID', async () => {
+        const key = 'versions-test/copy-bad-id.txt'
+        const dst = 'versions-test/copy-bad-id-dst.txt'
+        await putVersion(key, 'bad-id')
+
+        // %01 cannot be echoed into an XML body and Postgres rejects %00.
+        for (const id of ['%01x', '%00', 'abc']) {
+          await expect(copyVersion(key, id, dst)).rejects.toMatchObject({
+            $metadata: { httpStatusCode: 400 },
+            name: 'InvalidArgument',
+          })
+        }
+        await expect(
+          s3Client.send(new HeadObjectCommand({ Bucket, Key: dst })),
+        ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      })
+
+      it('copies the current version by its id when it has no version row', async () => {
+        // Keys written by a pre-#781 pod during that rollout have no row.
+        const key = 'versions-test/copy-no-row.txt'
+        const dst = 'versions-test/copy-no-row-dst.txt'
+        const v = await putVersion(key, 'no-version-row')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'copy-no-row.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+
+        const copy = await copyVersion(key, v.VersionId, dst)
+        expect(copy.VersionId).toBe(v.VersionId)
+        expect(await readBody(dst)).toEqual({
+          body: 'no-version-row',
+          etag: v.ETag,
+        })
+      })
     })
   })
 

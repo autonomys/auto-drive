@@ -6,6 +6,7 @@ import {
   BadRequestError,
   ForbiddenError,
   IllegalContentError,
+  InvalidVersionIdError,
   NotAcceptableError,
   ObjectNotFoundError,
   PaymentRequiredError,
@@ -13,7 +14,7 @@ import {
   VersionNotFoundError,
 } from '../../errors/index.js'
 import { config } from '../../config.js'
-import { OffchainMetadata } from '@autonomys/auto-dag-data'
+import { OffchainMetadata, stringToCid } from '@autonomys/auto-dag-data'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -639,6 +640,7 @@ type CopySource = Pick<S3KeyMapping, 'cid' | 'md5' | 'mtime' | 'metadata'>
 type CopyObjectError =
   | ObjectNotFoundError
   | VersionNotFoundError
+  | InvalidVersionIdError
   | BadRequestError
 
 // Delete markers are synthesised at read time (deleteMarkerVersionId in
@@ -650,7 +652,9 @@ const DELETE_MARKER_VERSION_ID_PREFIX = 'dm-'
  * The content a CopyObject duplicates: the source key's current version, or the
  * version named by SourceVersionId. A named version is looked up in the key's
  * history, so it can be copied even while the key's current state is a delete
- * marker, as S3 allows.
+ * marker, as S3 allows. The exception is the version that was current when the
+ * caller's last key for it was deleted: DeleteObject moved it to the web-app
+ * Trash, so authorizeDownload refuses it and only a Trash restore brings it back.
  */
 const findCopySource = async (
   user: UserWithOrganization,
@@ -681,6 +685,12 @@ const findCopySource = async (
     )
   }
 
+  try {
+    stringToCid(SourceVersionId)
+  } catch {
+    return err(new InvalidVersionIdError('Invalid version id specified'))
+  }
+
   const version = await s3ObjectMappingsRepository.findVersionByCid(
     user.oauthProvider,
     user.oauthUserId,
@@ -688,8 +698,18 @@ const findCopySource = async (
     SourceKey,
     SourceVersionId,
   )
-  return version
-    ? ok(version)
+  if (version) return ok(version)
+
+  // The current cid can lack a version row (see getObjectWriteTime), yet GET and
+  // HEAD still report it as x-amz-version-id, so honour it from the mapping.
+  const current = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    SourceBucket,
+    SourceKey,
+  )
+  return current?.cid === SourceVersionId
+    ? ok(current)
     : err(
         new VersionNotFoundError(
           `Version ${SourceVersionId} of ${SourceBucket}/${SourceKey} not found`,

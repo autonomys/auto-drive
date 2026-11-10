@@ -57,6 +57,16 @@ export class VersionNotFoundError extends HttpError {
   }
 }
 
+// A versionId that is not a CID, so it cannot name any version. Kept apart from
+// BadRequestError because S3 answers it as InvalidArgument, not InvalidRequest.
+export class InvalidVersionIdError extends HttpError {
+  static readonly statusCode = 400
+  constructor(message: string) {
+    super(InvalidVersionIdError.statusCode, message)
+    this.name = 'InvalidVersionIdError'
+  }
+}
+
 /**
  * A Range the object cannot satisfy → 416. Carries the object's real size so the
  * caller can answer with the `Content-Range: bytes * /<size>` S3 requires, which

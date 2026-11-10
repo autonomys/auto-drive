@@ -7,6 +7,7 @@ import {
   ChunkNotFoundError,
   PaymentRequiredError,
   VersionNotFoundError,
+  InvalidVersionIdError,
 } from '../../../errors/index.js'
 import {
   UploadCompletionInProgressError,
@@ -494,8 +495,10 @@ export const applyVerbatimBodyHeaders = (
  * null when the header is missing or malformed.
  *
  * The versionId (a content CID) names the source version to copy; without one
- * the source key's current version is copied. Either way the copy stacks a new
- * version on the destination.
+ * the source key's current version is copied. Because versionId = CID, copying
+ * content the destination key has held before mints no new version id: the copy
+ * appends a row with the same CID, and ListObjectVersions keeps only the newest
+ * row per CID, so that version's history entry moves to the copy's time.
  */
 const parseCopySource = (
   req: Request,
@@ -1411,6 +1414,11 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
         Message: 'The specified version does not exist.',
         Key: source.key,
         VersionId: source.versionId,
+      })
+    } else if (error instanceof InvalidVersionIdError) {
+      sendXML(res.status(400), 'Error', {
+        Code: 'InvalidArgument',
+        Message: 'Invalid version id specified',
       })
     } else if (error instanceof BadRequestError) {
       handleS3Error(error, res)
