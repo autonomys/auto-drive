@@ -557,8 +557,9 @@ export const AdminCredits = () => {
         <p className='mb-3 text-xs text-muted-foreground'>
           Payments confirmed on-chain that could not be converted to credits
           because the account hit the per-account cap. The cap is the server
-          setting MAX_CREDITS_PER_USER, not an account limit: click Reprocess
-          once the account has spent enough credits or the cap is raised.
+          setting MAX_CREDITS_PER_USER unless a partner account&apos;s terms
+          override it: click Reprocess once the account has spent enough
+          credits or its cap is raised.
         </p>
         <OverCapPanel
           intents={overCapIntents}

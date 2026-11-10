@@ -11,7 +11,6 @@ import {
   purchasedCreditsRepository,
 } from '../../infrastructure/repositories/users/purchasedCredits.js'
 import { AccountsUseCases } from './accounts.js'
-import { config } from '../../config.js'
 import {
   BadRequestError,
   ForbiddenError,
@@ -53,8 +52,9 @@ export type CreditSummary = {
   googleVerified: boolean
   /**
    * Number of days after purchase before credits expire.
-   * Driven by the CREDIT_EXPIRY_DAYS environment variable so the frontend
-   * can display the correct duration without a separate API call.
+   * The account's own period if it has one, else the CREDIT_EXPIRY_DAYS
+   * environment variable, so the frontend can display the correct duration
+   * without a separate API call.
    */
   expiryDays: number
 }
@@ -67,7 +67,8 @@ const getSummary = async (
     account.id,
   )
 
-  const cap = config.credits.maxBytesPerAccount
+  const terms = AccountsUseCases.getCreditTerms(account)
+  const cap = terms.maxBytes
 
   // Cap is enforced on upload bytes only. Download credits are not allocated
   // on purchase right now so there is no download cap to check.
@@ -84,7 +85,7 @@ const getSummary = async (
     canPurchase,
     maxPurchasableBytes,
     googleVerified: hasGoogleAuth(user),
-    expiryDays: config.credits.expiryDays,
+    expiryDays: terms.expiryDays,
   }
 }
 

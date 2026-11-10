@@ -9,6 +9,9 @@ export type Account = {
   model: AccountModel;
   // A partner account is shared by the members of a partner organisation.
   isPartner: boolean;
+  // Overrides of the global credit terms. Null means use the global default.
+  maxPurchasedBytes: number | null;
+  creditExpiryDays: number | null;
 };
 
 export type AccountWithTotalSize = Account & {
@@ -34,4 +37,22 @@ export type AdminAccountDetails = AccountInfo & {
   members: User[];
   // Null if the auth service has no such organization.
   organization: OrganizationWithMembers | null;
+  // What a null override means.
+  defaultCreditTerms: {
+    maxPurchasedBytes: number;
+    creditExpiryDays: number;
+  };
+};
+
+/** One change to one account term, for the admin history. */
+export type AccountTermsChange = {
+  id: string;
+  accountId: string;
+  // E.g. max_purchased_bytes, credit_expiry_days, upload_limit, is_partner.
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  changedBy: string;
+  reason: string | null;
+  createdAt: string;
 };

@@ -23,7 +23,7 @@ To use a different access key ID, pass `-e AUTO_DRIVE_TEST_ACCESS_KEY_ID=<key>`.
 
 ## Clients
 
-rclone 1.76 and later (or a current beta) has an Auto Drive provider:
+rclone 1.76.0 and later has an Auto Drive provider:
 
 ```ini
 [autodrive-test]
@@ -34,7 +34,7 @@ access_key_id = 0123456789abcdef0123456789abcdef
 secret_access_key = auto-drive-test
 ```
 
-With earlier rclone versions use `provider = Other` with `force_path_style = true` and `no_check_bucket = true`.
+With earlier rclone versions use `provider = Other` with `no_check_bucket = true`, `list_version = 2` and `list_url_encode = true`. Without `list_version = 2`, listings fail with "directory not found".
 
 AWS CLI:
 
