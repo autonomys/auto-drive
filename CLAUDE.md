@@ -13,7 +13,7 @@ Yarn 4.2.2 monorepo with workspaces in `apps/`, `packages/`, and `submodules/`.
 - **apps/backend** — Express.js API server (ESM, TypeScript). Runs as multiple processes: frontend API, download API, frontend worker, download worker, publish worker (dedicated on-chain publisher).
 - **apps/frontend** — Next.js 14 web app (React 18, Tailwind CSS, Zustand, Apollo Client). Routes are under `src/app/[chain]/`.
 - **apps/auth** — Express.js auth microservice (JWT, OAuth via Google/Discord/GitHub, SIWE for Web3). Deployable as AWS Lambda.
-- **apps/hasura** - Hasura GraphQL engine config (metadata only; schema changes are backend migrations).
+- **apps/hasura** — Hasura GraphQL engine config (metadata only; schema changes are backend migrations).
 - **apps/landing** — Next.js landing page.
 - **packages/models** — Shared TypeScript types and schemas (`@auto-drive/models`).
 - **packages/s3** — S3-compatible DTOs (`@auto-drive/s3`).
