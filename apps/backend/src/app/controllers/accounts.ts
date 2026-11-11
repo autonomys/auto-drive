@@ -18,19 +18,37 @@ import { z } from 'zod'
 
 const logger = createLogger('http:controllers:accounts')
 
+// `new Date` rolls an impossible day over (2026-02-30 is 2 March), so the day
+// is checked on its own.
+const isCalendarDay = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
 // A UTC instant: a date, or a date and time with Z or an offset.
 const instant = z
   .string()
   .regex(
-    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2}))?$/,
+    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2}))?$/,
+    'must be an ISO 8601 date, or a date and time with Z or an offset',
   )
-  .transform((value) => new Date(value))
-  .refine((date) => !Number.isNaN(date.getTime()))
+  .transform((value, ctx) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime()) || !isCalendarDay(value)) {
+      ctx.addIssue({ code: 'custom', message: 'is not a valid date' })
+      return z.NEVER
+    }
+    return date
+  })
 
 const reportRange = z.object({ from: instant, to: instant })
 
-const REPORT_RANGE_ERROR =
-  '`from` and `to` must be ISO 8601 dates, or dates and times with Z or an offset'
+// Names each invalid parameter, e.g. "from: is not a valid date".
+const queryError = (error: z.ZodError) =>
+  error.issues
+    .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+    .join('; ')
 
 const reportFileName = (
   report: { accountId: string; from: Date | string; to: Date | string },
@@ -41,8 +59,10 @@ const reportFileName = (
 }
 
 // Writes a chunk, waiting while the client is slow so a large export is not
-// buffered in memory, or until it has gone.
+// buffered in memory, or until it has gone. Once it has gone, 'close' has
+// already fired, so there is nothing to wait for.
 const write = async (res: Response, chunk: string) => {
+  if (res.destroyed) return
   if (res.write(chunk)) return
   await new Promise<void>((resolve) => {
     const done = () => {
@@ -236,7 +256,7 @@ accountController.get(
       })
       .safeParse(req.query)
     if (!query.success) {
-      res.status(400).json({ error: REPORT_RANGE_ERROR })
+      res.status(400).json({ error: queryError(query.error) })
       return
     }
 
@@ -296,12 +316,13 @@ accountController.get(
         format: z.enum(['json', 'csv']).default('json'),
         table: z.enum(USAGE_REPORT_TABLES).optional(),
       })
-      .refine((q) => q.format === 'json' || !!q.table)
+      .refine((q) => q.format === 'json' || !!q.table, {
+        message: `format=csv needs one of ${USAGE_REPORT_TABLES.join('|')}`,
+        path: ['table'],
+      })
       .safeParse(req.query)
     if (!query.success) {
-      res.status(400).json({
-        error: `${REPORT_RANGE_ERROR}; format=csv needs table=${USAGE_REPORT_TABLES.join('|')}`,
-      })
+      res.status(400).json({ error: queryError(query.error) })
       return
     }
 
@@ -343,7 +364,7 @@ accountController.get(
       .extend({ format: z.enum(['json', 'csv']).default('json') })
       .safeParse(req.query)
     if (!query.success) {
-      res.status(400).json({ error: REPORT_RANGE_ERROR })
+      res.status(400).json({ error: queryError(query.error) })
       return
     }
 

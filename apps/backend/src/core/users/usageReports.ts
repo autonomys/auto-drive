@@ -28,6 +28,9 @@ import {
 } from '../../infrastructure/repositories/users/usageReports.js'
 import { AI3_DECIMALS, USDC_DECIMALS } from '../../shared/utils/pricing.js'
 import { CsvValue, csvRow, toCsv } from '../../shared/utils/csv.js'
+import { createLogger } from '../../infrastructure/drivers/logger.js'
+
+const logger = createLogger('core:users:usageReports')
 
 export type ReportRange = { from: Date; to: Date }
 
@@ -73,10 +76,26 @@ const getReadableAccount = async (
 const sum = (values: string[]): string =>
   values.reduce((total, value) => total + BigInt(value), BigInt(0)).toString()
 
+// Names come from auth and are a convenience: when it can't give them, the
+// report goes without them rather than failing.
+const namesOrNone = async <T>(
+  what: string,
+  lookup: () => Promise<T[]>,
+): Promise<T[]> => {
+  try {
+    return await lookup()
+  } catch (error) {
+    logger.warn(error, `Usage report without ${what}`)
+    return []
+  }
+}
+
 const getKeyNames = async (
   ids: string[],
 ): Promise<Map<string, { name: string | null; deleted: boolean }>> => {
-  const keys = await AuthManager.getApiKeyNames([...new Set(ids)])
+  const keys = await namesOrNone('API key names', () =>
+    AuthManager.getApiKeyNames([...new Set(ids)]),
+  )
   return new Map(
     keys.map((key) => [key.id, { name: key.name, deleted: !!key.deletedAt }]),
   )
@@ -292,15 +311,17 @@ const adminGetAccountUsageSummaries = async (
     limit,
   )
 
-  // Names are a convenience: an account is listed without one rather than the
-  // list failing.
   const organizationIds = [...new Set(rows.map((r) => r.organization_id))]
   const names = new Map<string, string>()
   for (let i = 0; i < organizationIds.length; i += 100) {
-    const summaries = await AuthManager.getOrganizationSummaries(
-      organizationIds.slice(i, i + 100),
+    const summaries = await namesOrNone('organization names', async () =>
+      (
+        await AuthManager.getOrganizationSummaries(
+          organizationIds.slice(i, i + 100),
+        )
+      ).unwrapOr([]),
     )
-    for (const { id, name } of summaries.unwrapOr([])) names.set(id, name)
+    for (const { id, name } of summaries) names.set(id, name)
   }
 
   return ok(
