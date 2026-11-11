@@ -102,6 +102,23 @@ export const optionalTrimmedEnv = (raw?: string): string | undefined =>
   raw?.trim() || undefined
 
 /**
+ * An optional date variable, in any format `Date` parses (ISO 8601 with an
+ * offset is the unambiguous one). Unset or blank means null. A value that is
+ * not a date stops the process: a misread date would silently change reports.
+ */
+export const optionalDateEnv = (name: string, raw?: string): Date | null => {
+  const trimmed = optionalTrimmedEnv(raw)
+  if (!trimmed) {
+    return null
+  }
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Environment variable ${name} is not a date: ${trimmed}`)
+  }
+  return date
+}
+
+/**
  * A comma-separated list of raw address strings, trimmed, empties dropped.
  *
  * Deliberately NOT validated here, unlike `addressEnv`. Its consumer — the
@@ -694,6 +711,16 @@ export const config = {
     // rate; only the amount the user pays includes this margin. Applied in
     // createIntent (USDC path). Default: 5 (%).
     usdQuoteMarginPercent: Number(env('USD_QUOTE_MARGIN', '5')),
+  },
+  usageReports: {
+    // When attribution went live (#894): from then on every upload records its
+    // API key and the credit batches it drew from (#891). Reports show earlier
+    // usage as unattributed and have no credit balance for ranges starting
+    // before it. Unset means attribution has not gone live.
+    attributionStart: optionalDateEnv(
+      'ATTRIBUTION_START',
+      process.env.ATTRIBUTION_START,
+    ),
   },
   deletion: {
     gracePeriodDays: Number(env('DELETION_GRACE_PERIOD_DAYS', '30')),

@@ -278,7 +278,6 @@ files.map((file, index) => {
             id,
             InteractionType.Download,
             new Date(0),
-            new Date(),
           )
 
         expect(interactions).toHaveLength(1)

@@ -56,6 +56,7 @@ export const ROUTES = {
   trash: (networkId: NetworkId) => `/${networkId}/drive/trash`,
   profile: (networkId: NetworkId) => `/${networkId}/drive/profile`,
   developers: (networkId: NetworkId) => `/${networkId}/drive/developers`,
+  usage: (networkId: NetworkId) => `/${networkId}/drive/usage`,
   purchase: (networkId: NetworkId) => `/${networkId}/drive/purchase`,
   admin: (networkId: NetworkId) => `/${networkId}/drive/admin`,
   adminBanners: (networkId: NetworkId) => `/${networkId}/drive/admin/banners`,
