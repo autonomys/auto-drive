@@ -33,3 +33,6 @@ export type CreateApiKeyInput = {
   /** ISO-8601 string. `null`/omitted = never expires. */
   expiresAt?: string | null
 }
+
+/** What a usage report shows of a key: enough to name it, never its secret. */
+export type ApiKeyName = Pick<ApiKey, 'id' | 'name' | 'deletedAt'>

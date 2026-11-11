@@ -30,6 +30,7 @@ import type {
 import Link from 'next/link';
 import { CopiableText } from '../../atoms/CopiableText';
 import { UsdcPaymentsCard } from './UsdcPaymentsCard';
+import { AccountUsageList } from './AccountUsageList';
 
 // ---------------------------------------------------------------------------
 // Economics summary card
@@ -539,6 +540,14 @@ export const AdminCredits = () => {
             </p>
           )
         )}
+      </div>
+
+      {/* Usage by account, linking to each account's full report */}
+      <div>
+        <h3 className='mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+          Account Usage
+        </h3>
+        <AccountUsageList />
       </div>
 
       {/* OVER_CAP intents */}

@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { AccountsUseCases } from '../../core/users/accounts.js'
+import {
+  USAGE_INTERACTIONS_CSV_HEADER,
+  USAGE_REPORT_TABLES,
+  UsageReportsUseCases,
+} from '../../core/users/usageReports.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import {
@@ -12,6 +17,63 @@ import { AccountModel } from '@auto-drive/models'
 import { z } from 'zod'
 
 const logger = createLogger('http:controllers:accounts')
+
+// `new Date` rolls an impossible day over (2026-02-30 is 2 March), so the day
+// is checked on its own.
+const isCalendarDay = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+// A UTC instant: a date, or a date and time with Z or an offset.
+const instant = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2}))?$/,
+    'must be an ISO 8601 date, or a date and time with Z or an offset',
+  )
+  .transform((value, ctx) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime()) || !isCalendarDay(value)) {
+      ctx.addIssue({ code: 'custom', message: 'is not a valid date' })
+      return z.NEVER
+    }
+    return date
+  })
+
+const reportRange = z.object({ from: instant, to: instant })
+
+// Names each invalid parameter, e.g. "from: is not a valid date".
+const queryError = (error: z.ZodError) =>
+  error.issues
+    .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+    .join('; ')
+
+const reportFileName = (
+  report: { accountId: string; from: Date | string; to: Date | string },
+  table: string,
+) => {
+  const day = (time: Date | string) => new Date(time).toISOString().slice(0, 10)
+  return `usage-${report.accountId}-${day(report.from)}-${day(report.to)}-${table}.csv`
+}
+
+// Writes a chunk, waiting while the client is slow so a large export is not
+// buffered in memory, or until it has gone. Once it has gone, 'close' has
+// already fired, so there is nothing to wait for.
+const write = async (res: Response, chunk: string) => {
+  if (res.destroyed) return
+  if (res.write(chunk)) return
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      res.off('drain', done)
+      res.off('close', done)
+      resolve()
+    }
+    res.on('drain', done)
+    res.on('close', done)
+  })
+}
 
 export const accountController = Router()
 
@@ -176,6 +238,46 @@ accountController.get(
   }),
 )
 
+// Admin-only: headline usage figures for each account with activity in
+// [from, to), most upload bytes first. `partnersOnly=true` lists partner
+// accounts only.
+accountController.get(
+  '/admin/usage',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = reportRange
+      .extend({
+        partnersOnly: z.enum(['true', 'false']).default('false'),
+        limit: z.coerce.number().int().min(1).max(1000).default(100),
+      })
+      .safeParse(req.query)
+    if (!query.success) {
+      res.status(400).json({ error: queryError(query.error) })
+      return
+    }
+
+    const { from, to, partnersOnly, limit } = query.data
+    const result = await handleInternalErrorResult(
+      UsageReportsUseCases.adminGetAccountUsageSummaries(
+        user,
+        { from, to },
+        { partnersOnly: partnersOnly === 'true', limit },
+      ),
+      'Failed to get account usage',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
 // Admin-only: one account by account ID, with its members.
 accountController.get(
   '/admin/:id',
@@ -195,6 +297,122 @@ accountController.get(
     }
 
     res.json(result.value)
+  }),
+)
+
+// The account's usage over [from, to), for members of its organisation and
+// Auto Drive admins: JSON, or one of its tables as CSV
+// (`format=csv&table=summary|apiKeys|purchases`).
+accountController.get(
+  '/:accountId/usage-report',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = reportRange
+      .extend({
+        format: z.enum(['json', 'csv']).default('json'),
+        table: z.enum(USAGE_REPORT_TABLES).optional(),
+      })
+      .refine((q) => q.format === 'json' || !!q.table, {
+        message: `format=csv needs one of ${USAGE_REPORT_TABLES.join('|')}`,
+        path: ['table'],
+      })
+      .safeParse(req.query)
+    if (!query.success) {
+      res.status(400).json({ error: queryError(query.error) })
+      return
+    }
+
+    const { from, to, format, table } = query.data
+    const result = await handleInternalErrorResult(
+      UsageReportsUseCases.getUsageReport(user, req.params.accountId, {
+        from,
+        to,
+      }),
+      'Failed to get usage report',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    if (format === 'json' || !table) {
+      res.json(result.value)
+      return
+    }
+    res
+      .type('text/csv')
+      .attachment(reportFileName(result.value, table))
+      .send(UsageReportsUseCases.usageReportCsv(result.value, table))
+  }),
+)
+
+// Every interaction behind the usage report, oldest first, streamed as JSON
+// (an array) or CSV (`format=csv`).
+accountController.get(
+  '/:accountId/usage-report/interactions',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = reportRange
+      .extend({ format: z.enum(['json', 'csv']).default('json') })
+      .safeParse(req.query)
+    if (!query.success) {
+      res.status(400).json({ error: queryError(query.error) })
+      return
+    }
+
+    const { from, to, format } = query.data
+    const result = await handleInternalErrorResult(
+      UsageReportsUseCases.getUsageInteractions(user, req.params.accountId, {
+        from,
+        to,
+      }),
+      'Failed to get usage interactions',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    const csv = format === 'csv'
+    if (csv) {
+      res
+        .type('text/csv')
+        .attachment(
+          reportFileName(
+            { accountId: req.params.accountId, ...result.value },
+            'interactions',
+          ),
+        )
+    } else {
+      res.type('application/json')
+    }
+
+    // Headers are sent with the first write, so a failure after it can only
+    // cut the response short.
+    try {
+      await write(res, csv ? USAGE_INTERACTIONS_CSV_HEADER : '[')
+      let first = true
+      for await (const page of result.value.pages) {
+        if (res.destroyed) return
+        const chunk = csv
+          ? UsageReportsUseCases.usageInteractionsCsv(page)
+          : page.map((i) => JSON.stringify(i)).join(',')
+        await write(res, first || csv ? chunk : `,${chunk}`)
+        first = false
+      }
+      res.end(csv ? undefined : ']')
+    } catch (error) {
+      logger.error(error, 'Failed to stream usage interactions')
+      res.destroy(error as Error)
+    }
   }),
 )
 
