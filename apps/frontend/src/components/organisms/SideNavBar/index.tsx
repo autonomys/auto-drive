@@ -72,7 +72,12 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
       return isAdmin;
     }
     return true;
-  });
+  }).map((section) => ({
+    ...section,
+    items: section.items.filter(
+      (item) => !item.onlyPartner || account?.isPartner,
+    ),
+  }));
 
   // Pay with AI3 is gated solely by the `buyCredits` feature flag — it is
   // available to both OneOff and Monthly accounts. The flag itself enforces

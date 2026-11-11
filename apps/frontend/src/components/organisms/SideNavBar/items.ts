@@ -10,6 +10,7 @@ import {
   FileTextIcon,
   UserXIcon,
   FlagIcon,
+  ChartColumnIcon,
 } from 'lucide-react';
 import { NetworkId, ROUTES } from '@auto-drive/ui';
 import { SidebarSection } from './SideNavBarContent';
@@ -62,6 +63,13 @@ export const SIDEBAR_DEFINITION: SidebarSection[] = [
         icon: CodeXmlIcon,
         label: 'Developers',
         requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.usage(networkId),
+        icon: ChartColumnIcon,
+        label: 'Usage',
+        requiresSession: true,
+        onlyPartner: true,
       },
     ],
   },
