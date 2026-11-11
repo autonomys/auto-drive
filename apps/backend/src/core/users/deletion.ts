@@ -112,9 +112,12 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
       }
     }
 
+    // The batches end now, so expires_at is brought forward: usage reports
+    // date an expiry by it.
     await db.query(
       `UPDATE purchased_credits
-      SET expired = TRUE, updated_at = NOW()
+      SET expired = TRUE, expires_at = LEAST(expires_at, NOW()),
+          updated_at = NOW()
       WHERE account_id = $1 AND expired = FALSE`,
       [forfeitedAccountId],
     )

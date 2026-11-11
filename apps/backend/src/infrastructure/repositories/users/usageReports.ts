@@ -6,7 +6,7 @@ import { getDatabase } from '../../drivers/pg.js'
 //
 // interactions.created_at is a `timestamp` holding the session's local time,
 // so instants are converted to that in SQL. Comparing it as timestamptz instead
-// would also keep the (type, account_id, created_at) index from being used.
+// would also keep its indexes from being used.
 const local = (param: string) => `${param}::timestamptz::timestamp`
 
 // The bytes an interaction drew from purchased batches, and their AI3 value at
@@ -134,8 +134,9 @@ const getPurchases = async (
 // A batch's leftover is what was never consumed: its remaining bytes, or what a
 // refund took back. It leaves the balance when the batch ends: at its expiry
 // (consumeUpTo stops drawing on it then, whether or not the expiry job has run
-// yet), or at its refund if that came first. A refund after expiry moves no
-// bytes, since they had already expired.
+// yet; an account deletion that forfeits it brings the expiry forward), or at
+// its refund if that came first. A refund after expiry moves no bytes, since
+// they had already expired.
 //
 // A batch refunded before refunds recorded their bytes has its leftover taken
 // as everything not in its consumption rows, which is exact only if it was
@@ -209,7 +210,9 @@ export type InteractionRow = {
 }
 
 // One page of the account's interactions in the range, in time order, after
-// the interaction `after` (a previous page's last row).
+// the interaction `after` (a previous page's last row). The (account_id,
+// created_at, id) index returns the rows in this order, so a page reads only
+// its own rows.
 const getInteractionsPage = async (
   accountId: string,
   from: Date,

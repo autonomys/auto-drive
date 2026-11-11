@@ -1,6 +1,7 @@
 import {
   AccountModel,
   CreditBalance,
+  DeletionRequest,
   IntentStatus,
   PaymentMethod,
   UsageInteraction,
@@ -9,16 +10,17 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { jest } from '@jest/globals'
-import { ok } from 'neverthrow'
 import { v4 as uuidv4 } from 'uuid'
 import { config } from '../../../src/config.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { createMockUser, unmockMethods } from '../../utils/mocks.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { UsageReportsUseCases } from '../../../src/core/users/usageReports.js'
+import { DeletionUseCases } from '../../../src/core/users/deletion.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
+import { usageReportsRepository } from '../../../src/infrastructure/repositories/users/usageReports.js'
 import {
   BadRequestError,
   ForbiddenError,
@@ -315,6 +317,54 @@ describe('Usage reports', () => {
     expect(balance?.closing).toBe(remaining.uploadBytesRemaining.toString())
   })
 
+  it('expires the credits an account deletion forfeits when it happens', async () => {
+    const personal = await createAccount(false)
+    const user = personal.member()
+    const id = personal.account.id
+    const batch = await grant(id, {
+      buyer: user.publicId,
+      bytes: 1000,
+      shannonsPerByte: 1,
+      at: day(20),
+      expiresAt: NOW,
+    })
+    await interact(id, { at: day(30), bytes: 100, from: [[batch, 100]] })
+    const request = {
+      id: uuidv4(),
+      userPublicId: user.publicId,
+      oauthProvider: user.oauthProvider,
+      oauthUserId: user.oauthUserId,
+    } as DeletionRequest
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(user)
+    jest
+      .spyOn(AuthManager, 'markDeletionAsProcessing')
+      .mockResolvedValue(request)
+    jest
+      .spyOn(AuthManager, 'executeAuthAnonymisation')
+      .mockResolvedValue(undefined)
+    jest
+      .spyOn(AuthManager, 'markDeletionAsCompleted')
+      .mockResolvedValue(request)
+
+    await DeletionUseCases.processAnonymisation(request)
+
+    const { balance } = await report(admin, id, day(10), NOW)
+    expect(balance).toEqual({
+      opening: '0',
+      granted: '1000',
+      consumed: '100',
+      expired: '900',
+      refunded: '0',
+      closing: '0',
+    })
+    const remaining = await purchasedCreditsRepository.getRemainingCredits(id)
+    expect(balance?.closing).toBe(remaining.uploadBytesRemaining.toString())
+    // Held until the deletion, not before.
+    expect((await report(admin, id, day(10), day(79))).balance?.closing).toBe(
+      '900',
+    )
+  })
+
   it('keeps the balance identity for any range from attribution on', async () => {
     const { account } = await seedPartner()
     const days = [10, 11, 12, 13, 20, 21, 26, 30, 31, 40, 41, 45, 46, 50, 79]
@@ -394,6 +444,40 @@ describe('Usage reports', () => {
     expect(total('uploadBytes')).toBe(BigInt(uploads.bytes))
     expect(total('ai3Value')).toBe(BigInt(uploads.ai3Value))
     expect(total('downloadBytes')).toBe(BigInt(downloads.bytes))
+  })
+
+  it('leaves keys unnamed when auth cannot name them', async () => {
+    const { account } = await seedPartner()
+    jest
+      .spyOn(AuthManager, 'getApiKeyNames')
+      .mockRejectedValue(new Error('auth is down'))
+    const range = { from: day(0), to: NOW }
+
+    const { apiKeys } = await report(admin, account.id, range.from, range.to)
+    const result = (
+      await UsageReportsUseCases.getUsageInteractions(admin, account.id, range)
+    )._unsafeUnwrap()
+    const interactions: UsageInteraction[] = []
+    for await (const page of result.pages) interactions.push(...page)
+
+    expect(
+      apiKeys
+        .filter((key) => key.kind === 'apiKey')
+        .map((key) => [key.apiKeyId, key.name]),
+    ).toEqual([
+      ['key-2', null],
+      ['key-1', null],
+    ])
+    expect(
+      interactions
+        .filter((i) => i.apiKeyId)
+        .map((i) => [i.apiKeyId, i.apiKeyName]),
+    ).toEqual([
+      ['key-1', null],
+      ['key-2', null],
+      ['key-1', null],
+      ['key-1', null],
+    ])
   })
 
   it('lists the purchases of every member, and only those', async () => {
@@ -515,6 +599,62 @@ describe('Usage reports', () => {
     })
   })
 
+  // Whether the planner picks an index depends on the table's size, so the
+  // plans are taken with sequential scans and sorts made as costly as they go.
+  // Each export page is then read in order from its index rather than sorting
+  // the rest of the range, and the admin list reads only the range.
+  it('has indexes for the export pages and the admin list', async () => {
+    const { account } = await seedPartner()
+    const db = await getDatabase()
+    const capture = async (run: () => Promise<unknown>) => {
+      const spy = jest.spyOn(db, 'query')
+      try {
+        await run()
+        return spy.mock.calls[0] as unknown as [string, unknown[]]
+      } finally {
+        spy.mockRestore()
+      }
+    }
+    const plan = async ([text, values]: [string, unknown[]]) => {
+      const client = await db.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query('SET LOCAL enable_seqscan = off')
+        await client.query('SET LOCAL enable_sort = off')
+        const { rows } = await client.query(`EXPLAIN ${text}`, values)
+        return rows
+          .map((r: Record<string, string>) => r['QUERY PLAN'])
+          .join('\n')
+      } finally {
+        await client.query('ROLLBACK')
+        client.release()
+      }
+    }
+
+    const page = await plan(
+      await capture(() =>
+        usageReportsRepository.getInteractionsPage(
+          account.id,
+          day(0),
+          NOW,
+          { cursor: '2026-01-01 00:00:00', id: 'x' },
+          5000,
+        ),
+      ),
+    )
+    const list = await plan(
+      await capture(() =>
+        usageReportsRepository.getAccountSummaries(day(0), NOW, false, 100),
+      ),
+    )
+
+    expect(page).toMatch(
+      /Index Scan using idx_interactions_account_created_at_id/,
+    )
+    expect(page).not.toMatch(/Sort/)
+    expect(list).toMatch(/idx_interactions_created_at\b/)
+  })
+
   it('lists headline figures per account for admins only', async () => {
     const { account } = await seedPartner()
     const personal = await createAccount(false)
@@ -525,9 +665,10 @@ describe('Usage reports', () => {
       at: day(1),
       expiresAt: day(90),
     })
+    // Accounts are listed without their names when auth can't give them.
     jest
       .spyOn(AuthManager, 'getOrganizationSummaries')
-      .mockResolvedValue(ok([]))
+      .mockRejectedValue(new Error('auth is down'))
     const range = { from: day(0), to: NOW }
 
     const all = (
