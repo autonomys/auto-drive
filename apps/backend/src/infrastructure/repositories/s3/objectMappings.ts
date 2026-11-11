@@ -182,8 +182,8 @@ const createMapping = async (
       ),
       versioned AS (
         INSERT INTO "S3".object_versions
-          (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, statement_timestamp())
       )
       SELECT * FROM upserted
     `,
@@ -426,9 +426,9 @@ const findSoftDeletedByKey = async (
  * still points at `cid`. Sets deleted_at so the key is hidden from every read
  * path; the underlying content is never removed from the DSN. Idempotent:
  * deleting an already-deleted or non-existent key is a no-op (S3 DeleteObject
- * succeeds regardless). Returns the cid and deleted_at of the row it just
- * soft-deleted, or null if there was no such active row: the caller uses
- * deleted_at as the created delete marker's timestamp and as the Trash time.
+ * succeeds regardless). Returns the deleted_at of the row it just soft-deleted,
+ * or null if there was no such active row: the caller uses it as the created
+ * delete marker's timestamp and as the Trash time.
  */
 const softDeleteMapping = async (
   ownerOauthProvider: string,
@@ -437,22 +437,21 @@ const softDeleteMapping = async (
   s3Key: string,
   cid: string,
   client?: pg.PoolClient,
-): Promise<{ cid: string; deletedAt: Date } | null> => {
+): Promise<Date | null> => {
   const db = client ?? (await getDatabase())
 
-  const result = await db.query<{ cid: string; deleted_at: Date }>({
+  const result = await db.query<{ deleted_at: Date }>({
     text: `
       UPDATE "S3".object_mappings
       SET deleted_at = statement_timestamp(), updated_at = NOW()
       WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
         AND bucket = $3 AND "key" = $4 AND cid = $5 AND deleted_at IS NULL
-      RETURNING cid, deleted_at
+      RETURNING deleted_at
     `,
     values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key, cid],
   })
 
-  const row = result.rows[0]
-  return row ? { cid: row.cid, deletedAt: row.deleted_at } : null
+  return result.rows[0]?.deleted_at ?? null
 }
 
 /**
@@ -472,8 +471,9 @@ const restoreMappingsByCid = async (
   ownerOauthUserId: string,
   cid: string,
   since: Date | null = null,
+  client?: pg.PoolClient,
 ): Promise<void> => {
-  const db = await getDatabase()
+  const db = client ?? (await getDatabase())
 
   const base = `
     UPDATE "S3".object_mappings
@@ -526,15 +526,19 @@ const countActiveMappingsByCid = async (
 
 /**
  * Run `fn` in one transaction holding a lock on the caller's keys to `cid`, so
- * that writes of keys to that content and the DeleteObject "last key" decision
- * happen one at a time. `fn` must run every query on the client it is given: a
- * query on the pool from inside it deadlocks once every pool connection is held
- * by a request waiting for this lock.
+ * that the DeleteObject "last key" decision never interleaves with a write of a
+ * key to that content or a restore of it from Trash. Deletes take the lock
+ * `exclusive`; writes and restores take it `shared`, as they only add keys and
+ * take the content out of Trash, which is safe to do concurrently. `fn` must run
+ * every query on the client it is given: a query on the pool from inside it
+ * deadlocks once every pool connection is held by a request waiting for this
+ * lock.
  */
 const withContentLock = async <T>(
   ownerOauthProvider: string,
   ownerOauthUserId: string,
   cid: string,
+  mode: 'shared' | 'exclusive',
   fn: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> => {
   const lockKey = JSON.stringify([
@@ -547,10 +551,13 @@ const withContentLock = async <T>(
   const client = await db.connect()
   try {
     await client.query('BEGIN')
-    await client.query(
-      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [lockKey],
-    )
+    const lockFunction =
+      mode === 'shared'
+        ? 'pg_advisory_xact_lock_shared'
+        : 'pg_advisory_xact_lock'
+    await client.query(`SELECT ${lockFunction}(hashtextextended($1, 0))`, [
+      lockKey,
+    ])
     const result = await fn(client)
     await client.query('COMMIT')
     return result

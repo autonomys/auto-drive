@@ -1,4 +1,5 @@
 import { User, Owner, OwnerRole, isAdminUser } from '@auto-drive/models'
+import pg from 'pg'
 import { ownershipRepository } from '../../infrastructure/repositories/index.js'
 
 const setUserAsOwner = async (user: User, cid: string) => {
@@ -26,12 +27,17 @@ const setObjectAsDeleted = async (user: User, cid: string) => {
   )
 }
 
-const restoreObject = async (user: User, cid: string) => {
+const restoreObject = async (
+  user: User,
+  cid: string,
+  client?: pg.PoolClient,
+) => {
   await ownershipRepository.updateDeletedAt(
     user.oauthProvider,
     user.oauthUserId,
     cid,
     null,
+    client,
   )
 }
 

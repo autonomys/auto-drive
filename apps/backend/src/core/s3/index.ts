@@ -155,6 +155,7 @@ const writeMapping = (
     user.oauthProvider,
     user.oauthUserId,
     cid,
+    'shared',
     async (client) => {
       const mapping = await s3ObjectMappingsRepository.createMapping(
         user.oauthProvider,
@@ -619,17 +620,19 @@ const deleteObject = async (
     return ok(resolveDeleteMarkerResult(deleted?.deletedAt))
   }
 
-  // Under the lock writeMapping takes, so no key to this content is written
-  // between counting the caller's remaining keys and moving it to Trash. The
-  // Trash time is this key's deleted_at, which is what lets a restore un-hide it
-  // (restoreMappingsByCid). Conditioning the soft-delete on the cid read above
-  // leaves alone a key rewritten to other content in the meantime.
-  const softDeleted = await s3ObjectMappingsRepository.withContentLock(
+  // Holding the content lock exclusively, so no key to this content is written
+  // and no restore of it runs between counting the caller's remaining keys and
+  // moving it to Trash. The Trash time is this key's deleted_at, which is what
+  // lets a restore un-hide it (restoreMappingsByCid). Conditioning the
+  // soft-delete on the cid read above leaves alone a key rewritten to other
+  // content in the meantime.
+  const deletedAt = await s3ObjectMappingsRepository.withContentLock(
     user.oauthProvider,
     user.oauthUserId,
     mapping.cid,
+    'exclusive',
     async (client) => {
-      const hidden = await s3ObjectMappingsRepository.softDeleteMapping(
+      const hiddenAt = await s3ObjectMappingsRepository.softDeleteMapping(
         user.oauthProvider,
         user.oauthUserId,
         bucket,
@@ -637,7 +640,7 @@ const deleteObject = async (
         mapping.cid,
         client,
       )
-      if (!hidden) return null
+      if (!hiddenAt) return null
 
       const remaining =
         await s3ObjectMappingsRepository.countActiveMappingsByCid(
@@ -646,13 +649,13 @@ const deleteObject = async (
           mapping.cid,
           client,
         )
-      if (remaining > 0) return hidden
+      if (remaining > 0) return hiddenAt
 
       const trashed = await ownershipRepository.markAsDeletedIfActive(
         user.oauthProvider,
         user.oauthUserId,
         mapping.cid,
-        hidden.deletedAt,
+        hiddenAt,
         client,
       )
       if (trashed) {
@@ -666,7 +669,7 @@ const deleteObject = async (
           mapping.cid,
         )
       }
-      return hidden
+      return hiddenAt
     },
   )
 
@@ -674,7 +677,7 @@ const deleteObject = async (
   // A delete marker was created iff this call actually hid an active row. (A
   // concurrent delete or overwrite may have changed it first; softDeleteMapping
   // then returns null and this call created nothing.)
-  return ok(resolveDeleteMarkerResult(softDeleted?.deletedAt))
+  return ok(resolveDeleteMarkerResult(deletedAt))
 }
 
 /**

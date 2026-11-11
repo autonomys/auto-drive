@@ -4,7 +4,10 @@ import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { S3UseCases } from '../../../src/core/s3/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
-import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../../src/infrastructure/repositories/index.js'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import { createMockUser, mockRabbitPublish } from '../../utils/mocks.js'
 
@@ -46,6 +49,14 @@ const waitingAdvisoryLocks = async () => {
      WHERE locktype = 'advisory' AND NOT granted`,
   )
   return result.rows[0].count
+}
+
+const databaseNow = async () => {
+  const db = await getDatabase()
+  const result = await db.query<{ now: Date }>(
+    'SELECT clock_timestamp()::timestamp AS now',
+  )
+  return result.rows[0].now
 }
 
 // Resolves once `operation` has either finished or is queued behind a lock, so
@@ -162,6 +173,53 @@ describe('S3 DeleteObject racing a write of the same content', () => {
     expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(false)
   })
 
+  it('dates a write that waited for a delete from when it ran, not from when it began waiting', async () => {
+    const content = 'waited-then-written'
+    const { Cid: cid } = await put(KEY_A, content)
+
+    const hold = holdAfter(
+      s3ObjectMappingsRepository,
+      'countActiveMappingsByCid',
+    )
+    const deleting = remove(KEY_A)
+    await hold.reached
+
+    const writing = put(KEY_B, content)
+    await settledOrBlocked(writing)
+    const waitingSince = await databaseNow()
+    hold.release()
+    await Promise.all([deleting, writing])
+
+    const version = await s3ObjectMappingsRepository.findVersionByCid(
+      user.oauthProvider,
+      user.oauthUserId,
+      BUCKET,
+      KEY_B,
+      cid,
+    )
+    expect(version!.createdAt.getTime()).toBeGreaterThan(waitingSince.getTime())
+  })
+
+  it('lets two writes of the same content run at the same time', async () => {
+    const content = 'written-twice-at-once'
+    const hold = holdAfter(s3ObjectMappingsRepository, 'createMapping')
+    const first = put(KEY_A, content)
+    await hold.reached
+
+    const second = put(KEY_B, content)
+    try {
+      await settledOrBlocked(second)
+      expect(await waitingAdvisoryLocks()).toBe(0)
+    } finally {
+      hold.release()
+    }
+
+    const [a, b] = await Promise.all([first, second])
+    expect(b.Cid).toBe(a.Cid)
+    expect(await readable(KEY_A)).toBe(true)
+    expect(await readable(KEY_B)).toBe(true)
+  })
+
   it('CopyObject stays readable when a delete of its source trashes the content mid-copy', async () => {
     const content = 'copied-while-deleted'
     const { Cid: cid } = await put(KEY_A, content)
@@ -216,5 +274,27 @@ describe('S3 DeleteObject racing a write of the same content', () => {
 
     expect((await ObjectUseCases.restoreObject(user, cid)).isOk()).toBe(true)
     expect(await readable(KEY_A)).toBe(true)
+  })
+
+  it('a delete during a restore from Trash does not leave the deleted key to come back on a later write', async () => {
+    const content = 'restored-while-deleted'
+    const { Cid: cid } = await put(KEY_A, content)
+    expect((await ObjectUseCases.markAsDeleted(user, cid)).isOk()).toBe(true)
+
+    const hold = holdAfter(ownershipRepository, 'updateDeletedAt')
+    const restoring = ObjectUseCases.restoreObject(user, cid)
+    await hold.reached
+
+    const deleting = remove(KEY_A)
+    await settledOrBlocked(deleting)
+    hold.release()
+    await Promise.all([restoring, deleting])
+
+    expect(await readable(KEY_A)).toBe(false)
+    expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(true)
+
+    await put(KEY_B, content)
+    expect(await readable(KEY_B)).toBe(true)
+    expect(await readable(KEY_A)).toBe(false)
   })
 })

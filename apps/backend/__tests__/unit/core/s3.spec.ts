@@ -62,8 +62,13 @@ describe('S3UseCases', () => {
     jest.clearAllMocks()
     jest
       .spyOn(s3ObjectMappingsRepository, 'withContentLock')
-      .mockImplementation(((_p: string, _u: string, _c: string, fn: any) =>
-        fn(lockClient)) as any)
+      .mockImplementation(((
+        _p: string,
+        _u: string,
+        _c: string,
+        _mode: string,
+        fn: any,
+      ) => fn(lockClient)) as any)
     jest.spyOn(ownershipRepository, 'restoreIfDeleted').mockResolvedValue(false)
   })
 
@@ -890,7 +895,7 @@ describe('S3UseCases', () => {
     const hideKey = () =>
       jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+        .mockResolvedValue(new Date(5000))
     const remainingKeys = (count: number) =>
       jest
         .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
@@ -925,6 +930,7 @@ describe('S3UseCases', () => {
         'google',
         'user1',
         'cid123',
+        'exclusive',
         expect.any(Function),
       )
       expect(softDeleteSpy).toHaveBeenCalledWith(
