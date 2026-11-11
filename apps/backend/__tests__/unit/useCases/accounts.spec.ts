@@ -11,10 +11,12 @@ import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../../src/infrastructure/repositories/objects/interactions.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
+import { config } from '../../../src/config.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { AccountModel, OrganizationRole, UserRole } from '@auto-drive/models'
 import { err, ok } from 'neverthrow'
 import {
+  BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -69,6 +71,8 @@ describe('AccountsUseCases', () => {
         organizationId: 'org123',
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
@@ -93,10 +97,96 @@ describe('AccountsUseCases', () => {
       expect(userLookup).not.toHaveBeenCalled()
       expect(updateSpy).toHaveBeenCalledWith(
         'acc123',
-        AccountModel.Monthly,
-        5000,
-        5000,
+        {
+          model: AccountModel.Monthly,
+          uploadLimit: 5000,
+          downloadLimit: 5000,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
+        },
+        'pub1',
+        undefined,
       )
+    })
+
+    // Undefined keeps an override, null clears it.
+    it('should keep, set and clear credit term overrides', async () => {
+      const account = {
+        id: 'acc123',
+        organizationId: 'org123',
+        model: AccountModel.OneOff,
+        isPartner: false,
+        uploadLimit: 1000,
+        downloadLimit: 1000,
+        maxPurchasedBytes: 5000,
+        creditExpiryDays: 30,
+      }
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
+      const updateSpy = jest
+        .spyOn(accountsRepository, 'updateAccount')
+        .mockResolvedValue(account)
+
+      await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.OneOff,
+        1000,
+        1000,
+        { maxPurchasedBytes: 9000, creditExpiryDays: null, reason: 'deal' },
+      )
+      await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.OneOff,
+        1000,
+        1000,
+      )
+
+      expect(updateSpy).toHaveBeenNthCalledWith(
+        1,
+        'acc123',
+        expect.objectContaining({
+          maxPurchasedBytes: 9000,
+          creditExpiryDays: null,
+        }),
+        'pub1',
+        'deal',
+      )
+      expect(updateSpy).toHaveBeenNthCalledWith(
+        2,
+        'acc123',
+        expect.objectContaining({
+          maxPurchasedBytes: 5000,
+          creditExpiryDays: 30,
+        }),
+        'pub1',
+        undefined,
+      )
+    })
+
+    it('should reject a free upload allowance on a partner account', async () => {
+      jest.spyOn(accountsRepository, 'getById').mockResolvedValue({
+        id: 'acc123',
+        organizationId: 'org123',
+        model: AccountModel.Monthly,
+        isPartner: true,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
+        uploadLimit: 0,
+        downloadLimit: 1000,
+      })
+      const updateSpy = jest.spyOn(accountsRepository, 'updateAccount')
+
+      const result = await AccountsUseCases.updateAccount(
+        admin,
+        'acc123',
+        AccountModel.Monthly,
+        1,
+        1000,
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(BadRequestError)
+      expect(updateSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -125,6 +215,8 @@ describe('AccountsUseCases', () => {
         organizationId: 'org123',
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       jest
@@ -152,6 +244,8 @@ describe('AccountsUseCases', () => {
         organizationId: 'org123',
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       const initSpy = jest
@@ -180,6 +274,8 @@ describe('AccountsUseCases', () => {
         organizationId: 'org123',
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
 
       const initSpy = jest
@@ -199,6 +295,8 @@ describe('AccountsUseCases', () => {
       organizationId: 'org123',
       model: AccountModel.OneOff,
       isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
       uploadLimit: 1000,
       downloadLimit: 1000,
     }
@@ -297,6 +395,9 @@ describe('AccountsUseCases', () => {
     // intent; the credits still go to the account it was created for.
     it('should credit the account of the intent, not the current one of the buyer', async () => {
       const { ok: neverthrowOk } = await import('neverthrow')
+      jest
+        .spyOn(accountsRepository, 'getById')
+        .mockResolvedValue({ ...account, id: 'acc-at-creation' })
       const createSpy = jest
         .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
         .mockResolvedValue(neverthrowOk({} as any))
@@ -313,6 +414,30 @@ describe('AccountsUseCases', () => {
       )
       expect(AuthManager.getUserFromPublicId).not.toHaveBeenCalled()
       expect(AccountsUseCases.getOrCreateAccount).not.toHaveBeenCalled()
+    })
+
+    it('should use the cap and expiry overrides of the account', async () => {
+      const { ok: neverthrowOk } = await import('neverthrow')
+      jest.spyOn(AccountsUseCases, 'getOrCreateAccount').mockResolvedValue({
+        ...account,
+        maxPurchasedBytes: 7000,
+        creditExpiryDays: 1000,
+      })
+      const createSpy = jest
+        .spyOn(purchasedCreditsRepository, 'createPurchasedCreditWithCapCheck')
+        .mockResolvedValue(neverthrowOk({} as any))
+
+      const before = Date.now()
+      await AccountsUseCases.addCreditsToAccount(
+        { id: 'intent-partner', userPublicId: 'pub1' },
+        BigInt(500),
+      )
+
+      const [params, cap] = createSpy.mock.calls[0]
+      expect(cap).toBe(7000n)
+      expect(params.expiresAt.getTime() - before).toBeGreaterThanOrEqual(
+        1000 * 24 * 60 * 60 * 1000,
+      )
     })
   })
 
@@ -360,6 +485,8 @@ describe('AccountsUseCases', () => {
         downloadLimit: 10,
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
       const member = {
         publicId: 'pub1',
@@ -401,6 +528,8 @@ describe('AccountsUseCases', () => {
         downloadLimit: 10,
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
@@ -457,6 +586,8 @@ describe('AccountsUseCases', () => {
       downloadLimit: 10,
       model: AccountModel.OneOff,
       isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
     }
 
     beforeEach(() => {
@@ -498,6 +629,10 @@ describe('AccountsUseCases', () => {
         pendingDownloadCredits: 10,
         members: [],
         organization: null,
+        defaultCreditTerms: {
+          maxPurchasedBytes: Number(config.credits.maxBytesPerAccount),
+          creditExpiryDays: config.credits.expiryDays,
+        },
       })
     })
 
@@ -543,6 +678,8 @@ describe('AccountsUseCases', () => {
       downloadLimit: 10,
       model: AccountModel.OneOff,
       isPartner: false,
+      maxPurchasedBytes: null,
+      creditExpiryDays: null,
     }
 
     beforeEach(() => {
@@ -635,6 +772,8 @@ describe('AccountsUseCases', () => {
                 downloadLimit: 10,
                 model: AccountModel.OneOff,
                 isPartner: false,
+                maxPurchasedBytes: null,
+                creditExpiryDays: null,
               }
             : null,
         )
@@ -681,6 +820,8 @@ describe('AccountsUseCases', () => {
         downloadLimit: 50,
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       })
       jest
         .spyOn(
@@ -705,6 +846,8 @@ describe('AccountsUseCases', () => {
           downloadLimit: 50,
           model: AccountModel.OneOff,
           isPartner: false,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
           pendingUploadCredits: 100,
           pendingDownloadCredits: 50,
         },
@@ -719,6 +862,8 @@ describe('AccountsUseCases', () => {
         downloadLimit: 50,
         model: AccountModel.OneOff,
         isPartner: false,
+        maxPurchasedBytes: null,
+        creditExpiryDays: null,
       }
       jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
         { publicId: 'pub1', organizationId: 'org1' },
@@ -766,6 +911,8 @@ describe('AccountsUseCases', () => {
           downloadLimit: 50,
           model: AccountModel.OneOff,
           isPartner: false,
+          maxPurchasedBytes: null,
+          creditExpiryDays: null,
         }))
       jest
         .spyOn(

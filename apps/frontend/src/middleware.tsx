@@ -50,6 +50,7 @@ const PROTECTED_DRIVE_SECTIONS = new Set([
   'profile',
   'search',
   'shared',
+  'usage',
 ]);
 
 const DRIVE_PATH = /^\/([^/]+)\/drive(?:\/([^/]+))?/;

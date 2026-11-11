@@ -38,6 +38,7 @@ const serializeCredit = (credit: PurchasedCredit) => ({
   uploadBytesRemaining: credit.uploadBytesRemaining.toString(),
   downloadBytesOriginal: credit.downloadBytesOriginal.toString(),
   downloadBytesRemaining: credit.downloadBytesRemaining.toString(),
+  refundedUploadBytes: credit.refundedUploadBytes?.toString() ?? null,
 })
 
 // ---------------------------------------------------------------------------

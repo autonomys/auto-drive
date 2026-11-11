@@ -184,6 +184,7 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       expect(first.found).toBe(true)
       expect(first.row).not.toBeNull()
       expect(first.row?.uploadBytesRemaining).toBe(0n)
+      expect(first.row?.refundedUploadBytes).toBe(400n)
       expect(first.row?.refundTxHash).toBe(TX_HASH)
 
       // Retry: remaining is now 0 because of the refund itself — must be an
@@ -239,7 +240,7 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       const usdcId = await createBatch({
         intentId: 'combined-usdc',
         uploadOriginal: 1000n,
-        uploadRemaining: 1000n,
+        uploadRemaining: 600n,
         expiresAt: pastDate,
         paymentMethod: PaymentMethod.USDC_ETH,
         fromAddress: WALLET,
@@ -259,6 +260,11 @@ describe('PurchasedCredits Repository — markExpiredCredits', () => {
       expect(
         result.refundedRows.every((row) => row.uploadBytesRemaining === 0n),
       ).toBe(true)
+      expect(
+        Object.fromEntries(
+          result.refundedRows.map((row) => [row.id, row.refundedUploadBytes]),
+        ),
+      ).toEqual({ [ai3Id]: 1000n, [usdcId]: 600n })
 
       const db = await getDatabase()
       const check = await db.query<{ refunded_at: Date | null }>(

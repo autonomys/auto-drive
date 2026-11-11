@@ -71,6 +71,7 @@ const makeCreditRow = (
   expired: false,
   refundedAt: null,
   refundTxHash: null,
+  refundedUploadBytes: null,
   createdAt: now,
   updatedAt: now,
   ...overrides,

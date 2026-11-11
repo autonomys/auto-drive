@@ -1,5 +1,6 @@
 import { config } from '../../../config.js'
 import {
+  ApiKeyName,
   DeletionRequest,
   MaybeUserWithOrganization,
   Organization,
@@ -167,6 +168,29 @@ const getUsersFromPublicIds = async (
   }
 
   return response.json()
+}
+
+/** Names of API keys, deleted ones included, for usage reports. */
+const getApiKeyNames = async (ids: string[]): Promise<ApiKeyName[]> => {
+  const names: ApiKeyName[] = []
+  // The auth service takes up to 100 IDs at a time.
+  for (let i = 0; i < ids.length; i += 100) {
+    const response = await fetch(`${config.authService.url}/users/apiKeys/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.authService.token}`,
+      },
+      body: JSON.stringify({ ids: ids.slice(i, i + 100) }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch API key names (${response.status})`)
+    }
+
+    names.push(...((await response.json()) as ApiKeyName[]))
+  }
+  return names
 }
 
 /**
@@ -396,6 +420,7 @@ const removeOrganizationMember = (
   )
 
 export const AuthManager = {
+  getApiKeyNames,
   createOrganization,
   getOrganizationSummaries,
   getOrganization,
