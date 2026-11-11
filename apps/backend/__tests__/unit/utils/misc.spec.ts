@@ -66,6 +66,13 @@ describe('positiveBigIntEnv', () => {
     expect(positiveBigIntEnv(BIGINT_KEY, 100n)).toBe(1n)
   })
 
+  it('falls back on decimals and scientific values below 1 instead of flooring to 0n', () => {
+    process.env[BIGINT_KEY] = '0.5'
+    expect(positiveBigIntEnv(BIGINT_KEY, 100n)).toBe(100n)
+    process.env[BIGINT_KEY] = '1e-5'
+    expect(positiveBigIntEnv(BIGINT_KEY, 100n)).toBe(100n)
+  })
+
   it('falls back on non-numeric or invalid string without throwing', () => {
     process.env[BIGINT_KEY] = 'invalid-bigint-literal'
     expect(positiveBigIntEnv(BIGINT_KEY, 100n)).toBe(100n)

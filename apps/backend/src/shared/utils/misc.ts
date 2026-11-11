@@ -46,8 +46,9 @@ export const nonNegativeIntEnv = (key: string, fallback: number): number => {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback
 }
 
-// Parse a positive-BigInt env var, falling back to `fallback` for missing,
-// non-numeric, decimal, scientific notation, or non-positive (<= 0n) values.
+// Parse a positive-BigInt env var. Decimal and scientific values (`1.5`,
+// `1e18`) are floored; anything missing, non-numeric, or below 1 falls back to
+// `fallback`, so a fractional value can never floor to 0n.
 // Logs a console warning on parse failure so typos do not crash service startup.
 export const positiveBigIntEnv = (key: string, fallback: bigint): bigint => {
   const raw = env(key, fallback.toString())
@@ -57,7 +58,7 @@ export const positiveBigIntEnv = (key: string, fallback: bigint): bigint => {
       /^[0-9]+\.[0-9]+$/.test(raw)
     ) {
       const num = Number(raw)
-      if (Number.isFinite(num) && num > 0) {
+      if (Number.isFinite(num) && num >= 1) {
         return BigInt(Math.floor(num))
       }
     }

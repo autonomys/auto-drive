@@ -296,7 +296,17 @@ export const createAccountManager = async (
       }
     })
 
-  const refreshBalances = async () => {
+  // Concurrent callers (each registration that sees an expired cooldown, plus
+  // the interval) share one in-flight query instead of each starting their own
+  let refreshInFlight: Promise<void> | undefined
+  const refreshBalances = () => {
+    refreshInFlight ??= fetchBalances().finally(() => {
+      refreshInFlight = undefined
+    })
+    return refreshInFlight
+  }
+
+  const fetchBalances = async () => {
     if (accountStates.size === 0) return
     if (!api.query?.system?.account) return
 

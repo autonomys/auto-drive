@@ -165,6 +165,58 @@ describe('createAccountManager — wallet health and cooldown', () => {
     manager.stop()
   })
 
+  it('shares one in-flight balance refresh across concurrent registrations', async () => {
+    jest.useFakeTimers()
+    // A cooldown shorter than the balance interval, so only registrations
+    // trigger the refresh
+    const origCooldown = config.chain.unfundedCooldownMs
+    ;(config.chain as Record<string, unknown>).unfundedCooldownMs = 1_000
+
+    try {
+      const api = makeMockApi()
+      const manager = await createAccountManager(api, () => [alice, bob])
+
+      await manager.markUnfunded(alice.address)
+      balances[alice.address] = 0n
+      await jest.advanceTimersByTimeAsync(1_100)
+
+      // Hold the balance query open so every registration sees the expired cooldown
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const accountQuery = api.query.system.account as unknown as jest.Mock<
+        (addr: string) => Promise<unknown>
+      >
+      const queryBalance = accountQuery.getMockImplementation()!
+      accountQuery.mockClear()
+      accountQuery.mockImplementation(async (addr) => {
+        await gate
+        return queryBalance(addr)
+      })
+
+      const registrations = await Promise.all(
+        Array.from({ length: 5 }, () => manager.registerTransaction()),
+      )
+      expect(registrations.map((r) => r.account.address)).toEqual(
+        Array(5).fill(bob.address),
+      )
+
+      // An explicit refresh joins the in-flight one too
+      const pending = manager.refreshBalances()
+      release()
+      await pending
+
+      // One refresh queries each wallet once, not once per registration
+      expect(accountQuery).toHaveBeenCalledTimes(2)
+
+      manager.stop()
+    } finally {
+      ;(config.chain as Record<string, unknown>).unfundedCooldownMs =
+        origCooldown
+    }
+  })
+
   it('throws NoFundedSignerError immediately when all wallets are unfunded and sends Slack alert', async () => {
     const api = makeMockApi()
     balances[alice.address] = 0n
