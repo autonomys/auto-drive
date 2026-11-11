@@ -229,6 +229,15 @@ export const config = {
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
   },
+  reclaim: {
+    batchSize: positiveIntEnv('RECLAIM_BATCH_SIZE', 50),
+    probeTimeoutMs: positiveIntEnv('FILES_GATEWAY_PROBE_TIMEOUT_MS', 10000),
+    sweepTimeoutMs: positiveIntEnv('RECLAIM_SWEEP_TIMEOUT_MS', 60000),
+    maxConsecutiveProbeFailures: positiveIntEnv(
+      'RECLAIM_MAX_CONSECUTIVE_FAILURES',
+      3,
+    ),
+  },
   publishing: {
     // Backstop timeout for a single on-chain publishing task (publish-nodes /
     // ensure-object-published) on the publish-manager worker. The per-transaction
