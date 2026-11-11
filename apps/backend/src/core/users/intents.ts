@@ -1644,7 +1644,27 @@ const cleanupExpiredIntents = async (): Promise<void> => {
 }
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
-const SHANNONS_PER_AI3 = 1e18
+const BYTES_PER_GB_BIGINT = BigInt(BYTES_PER_GB)
+const SHANNONS_PER_AI3_BIGINT = BigInt(1e18)
+
+/**
+ * Calculates pricePerGB (denominated in AI3) rounded to two decimal places.
+ *
+ * Uses BigInt arithmetic to prevent IEEE-754 precision loss when `price * BYTES_PER_GB`
+ * exceeds Number.MAX_SAFE_INTEGER (e.g. realistic chain fees of 250 Gshannons/byte yield ~2.68e20).
+ */
+const computePricePerGB = (price: number): number => {
+  if (!Number.isSafeInteger(price) || price <= 0) {
+    return 0
+  }
+
+  const shannonsPerGb = BigInt(price) * BYTES_PER_GB_BIGINT
+  // Round to two decimal places (cents of AI3) using integer arithmetic with half-up rounding:
+  const pricePerGBCents =
+    (shannonsPerGb * 100n + SHANNONS_PER_AI3_BIGINT / 2n) / SHANNONS_PER_AI3_BIGINT
+
+  return Number(pricePerGBCents) / 100
+}
 
 const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
   const api = await getPriceApi()
@@ -1656,8 +1676,7 @@ const getPrice = async (): Promise<{ price: number; pricePerGB: number }> => {
 
   return {
     price,
-    pricePerGB:
-      Math.round(((price * BYTES_PER_GB) / SHANNONS_PER_AI3) * 100) / 100,
+    pricePerGB: computePricePerGB(price),
   }
 }
 
@@ -1751,7 +1770,7 @@ const getStoragePrice = async (): Promise<StoragePrice> => {
   // 1e20, past 2^53, so multiplying those two numbers as floats would lose
   // integer precision before the USD rate is even applied — and then round
   // again on the way out. One conversion at the end beats two.
-  const shannonsPerGb = BigInt(chain.price) * BigInt(BYTES_PER_GB)
+  const shannonsPerGb = BigInt(chain.price) * BYTES_PER_GB_BIGINT
   const usdPerGbScaled = (shannonsPerGb * rate.value.usdPerAi3) / USD_RATE_SCALE
 
   return {
@@ -1800,6 +1819,7 @@ export const IntentsUseCases = {
   getPendingWithTxHash,
   reprocessOverCapIntent,
   getIntentCredits,
+  computePricePerGB,
   getPrice,
   getStoragePrice,
   cleanupExpiredIntents,

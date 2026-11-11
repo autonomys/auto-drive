@@ -3241,9 +3241,33 @@ describe('IntentsUseCases', () => {
   const mockChainPrice = (price = REALISTIC_SHANNONS_PER_BYTE) =>
     jest.spyOn(IntentsUseCases, 'getPrice').mockResolvedValue({
       price,
-      pricePerGB:
-        Math.round(((price * 1024 ** 3) / 10 ** 18) * 100) / 100,
+      pricePerGB: IntentsUseCases.computePricePerGB(price),
     })
+
+  describe('computePricePerGB (#642)', () => {
+    it('computes exact pricePerGB for realistic shannon prices without float precision loss', () => {
+      // 250e9 shannons/byte * 1073741824 bytes/GB = 2.68435456e20 shannons/GB = 268.435456 AI3/GB -> 268.44
+      expect(IntentsUseCases.computePricePerGB(250_000_000_000)).toBe(268.44)
+    })
+
+    it('handles values where price * BYTES_PER_GB exceeds Number.MAX_SAFE_INTEGER (~9e15)', () => {
+      // 10_000_000_000 * 1073741824 = 10_737_418_240_000_000_000 > MAX_SAFE_INTEGER
+      // In AI3: 10.73741824 -> rounds to 10.74
+      expect(IntentsUseCases.computePricePerGB(10_000_000_000)).toBe(10.74)
+    })
+
+    it('rounds half-up properly at boundary cent values', () => {
+      // 936_267_582 * 1073741824 = 1_005_300_000_622_449_328 shannons/GB (~1.0053 AI3) -> rounds to 1.01
+      expect(IntentsUseCases.computePricePerGB(936_267_582)).toBe(1.01)
+    })
+
+    it('returns 0 for zero, negative, or invalid prices', () => {
+      expect(IntentsUseCases.computePricePerGB(0)).toBe(0)
+      expect(IntentsUseCases.computePricePerGB(-100)).toBe(0)
+      expect(IntentsUseCases.computePricePerGB(NaN)).toBe(0)
+      expect(IntentsUseCases.computePricePerGB(Infinity)).toBe(0)
+    })
+  })
 
   it('getStoragePrice converts the chain price at the oracle rate', async () => {
     mockChainPrice()
