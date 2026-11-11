@@ -3,15 +3,18 @@ import { DownloadUseCase } from '../downloads/index.js'
 import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
 import {
+  BadRequestError,
   ForbiddenError,
   IllegalContentError,
+  InvalidVersionIdError,
   NotAcceptableError,
   ObjectNotFoundError,
   PaymentRequiredError,
   RangeNotSatisfiableError,
+  VersionNotFoundError,
 } from '../../errors/index.js'
 import { config } from '../../config.js'
-import { OffchainMetadata } from '@autonomys/auto-dag-data'
+import { OffchainMetadata, stringToCid } from '@autonomys/auto-dag-data'
 import {
   CompleteMultipartUploadCommandParams,
   CompleteMultipartUploadCommandResult,
@@ -89,6 +92,8 @@ type CreateMultipartUploadParams = CreateMultipartUploadCommandParams & {
 type CopyObjectParams = {
   SourceBucket: string
   SourceKey: string
+  /** The source version (its CID) to copy. Absent means the current version. */
+  SourceVersionId?: string
   Bucket: string
   Key: string
   /** When set, overrides the source mtime on the destination (metadata REPLACE). */
@@ -630,11 +635,94 @@ const deleteObject = async (
   return ok(resolveDeleteMarkerResult(softDeleted?.deletedAt))
 }
 
+type CopySource = Pick<S3KeyMapping, 'cid' | 'md5' | 'mtime' | 'metadata'>
+
+type CopyObjectError =
+  | ObjectNotFoundError
+  | VersionNotFoundError
+  | InvalidVersionIdError
+  | BadRequestError
+
+// Delete markers are synthesised at read time (deleteMarkerVersionId in
+// @autonomys/file-server), never stored, so a marker id cannot be looked up. The
+// prefix alone identifies one: a CID never contains a hyphen.
+const DELETE_MARKER_VERSION_ID_PREFIX = 'dm-'
+
 /**
- * S3 CopyObject — copy the caller's source (bucket, key) to a destination key.
- * In content-addressed storage this is a cheap remap: the destination mapping
- * points at the source's cid, with no data transfer. This is what makes rclone
- * server-side copy and move work (rclone implements Move as Copy + Remove).
+ * The content a CopyObject duplicates: the source key's current version, or the
+ * version named by SourceVersionId. A named version is looked up in the key's
+ * history, so it can be copied even while the key's current state is a delete
+ * marker, as S3 allows. The exception is the version that was current when the
+ * caller's last key for it was deleted: DeleteObject moved it to the web-app
+ * Trash, so authorizeDownload refuses it and only a Trash restore brings it back.
+ */
+const findCopySource = async (
+  user: UserWithOrganization,
+  params: CopyObjectParams,
+): Promise<Result<CopySource, CopyObjectError>> => {
+  const { SourceBucket, SourceKey, SourceVersionId } = params
+  if (SourceVersionId === undefined) {
+    const mapping = await s3ObjectMappingsRepository.findByKey(
+      user.oauthProvider,
+      user.oauthUserId,
+      SourceBucket,
+      SourceKey,
+    )
+    return mapping
+      ? ok(mapping)
+      : err(
+          new ObjectNotFoundError(
+            `Object ${SourceBucket}/${SourceKey} not found`,
+          ),
+        )
+  }
+
+  if (SourceVersionId.startsWith(DELETE_MARKER_VERSION_ID_PREFIX)) {
+    return err(
+      new BadRequestError(
+        'The source of a copy request may not specifically refer to a delete marker by version id.',
+      ),
+    )
+  }
+
+  try {
+    stringToCid(SourceVersionId)
+  } catch {
+    return err(new InvalidVersionIdError('Invalid version id specified'))
+  }
+
+  const version = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    SourceBucket,
+    SourceKey,
+    SourceVersionId,
+  )
+  if (version) return ok(version)
+
+  // The current cid can lack a version row (see getObjectWriteTime), yet GET and
+  // HEAD still report it as x-amz-version-id, so honour it from the mapping.
+  const current = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    SourceBucket,
+    SourceKey,
+  )
+  return current?.cid === SourceVersionId
+    ? ok(current)
+    : err(
+        new VersionNotFoundError(
+          `Version ${SourceVersionId} of ${SourceBucket}/${SourceKey} not found`,
+        ),
+      )
+}
+
+/**
+ * S3 CopyObject — copy the caller's source (bucket, key), or one version of it,
+ * to a destination key. In content-addressed storage this is a cheap remap: the
+ * destination mapping points at the source's cid, with no data transfer. This
+ * is what makes rclone server-side copy and move work (rclone implements Move as
+ * Copy + Remove), and copying an older version onto its own key restores it.
  *
  * The source lookup is scoped to the caller, so you can only copy your own keys.
  * mtime: with the default COPY metadata directive the destination inherits the
@@ -644,20 +732,10 @@ const deleteObject = async (
 const copyObject = async (
   user: UserWithOrganization,
   params: CopyObjectParams,
-): Promise<Result<CopyObjectResult, ObjectNotFoundError>> => {
-  const source = await s3ObjectMappingsRepository.findByKey(
-    user.oauthProvider,
-    user.oauthUserId,
-    params.SourceBucket,
-    params.SourceKey,
-  )
-  if (!source) {
-    return err(
-      new ObjectNotFoundError(
-        `Object ${params.SourceBucket}/${params.SourceKey} not found`,
-      ),
-    )
-  }
+): Promise<Result<CopyObjectResult, CopyObjectError>> => {
+  const found = await findCopySource(user, params)
+  if (found.isErr()) return err(found.error)
+  const source = found.value
 
   // Don't copy a source that isn't actually readable (owner-removed via the web
   // app, banned, or otherwise blocked) into a new key that would then 404/451 on
@@ -692,9 +770,10 @@ const copyObject = async (
   )
 
   logger.debug(
-    'Copied S3 mapping: %s/%s -> %s/%s (cid=%s)',
+    'Copied S3 mapping: %s/%s (versionId=%s) -> %s/%s (cid=%s)',
     params.SourceBucket,
     params.SourceKey,
+    params.SourceVersionId ?? 'current',
     params.Bucket,
     params.Key,
     source.cid,

@@ -207,7 +207,9 @@ uploadController.post(
     }
 
     index = parseInt(index)
-    if (isNaN(index)) {
+    // A negative index reads as an already-processed part, which uploadChunk
+    // skips, so it would be answered 200 without being stored.
+    if (isNaN(index) || index < 0) {
       logger.error('Invalid index', {
         index,
       })

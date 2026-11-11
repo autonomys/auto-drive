@@ -8,6 +8,7 @@ import {
 } from '@autonomys/auto-dag-data'
 import { blockstoreRepository } from '../../infrastructure/repositories/uploads/index.js'
 import { CID } from 'multiformats'
+import pg from 'pg'
 import {
   FolderUpload,
   Upload,
@@ -53,10 +54,12 @@ const logger = createLogger('useCases:uploads:blockstore')
 const getRootNodeCID = async (
   uploadId: string,
   nodeType: MetadataType.File | MetadataType.Folder,
+  client?: pg.PoolClient,
 ): Promise<CID> => {
   const blockstoreEntry = await blockstoreRepository.getByType(
     uploadId,
     nodeType,
+    client,
   )
   const distinctCids = new Set(blockstoreEntry.map((e) => e.cid))
 
@@ -88,10 +91,13 @@ const getRootNodeCID = async (
   return stringToCid(cid)
 }
 
-const getFileUploadIdCID = async (uploadId: string): Promise<CID> => {
+const getFileUploadIdCID = async (
+  uploadId: string,
+  client?: pg.PoolClient,
+): Promise<CID> => {
   logger.debug('getFileUploadIdCID invoked (uploadId=%s)', uploadId)
 
-  return getRootNodeCID(uploadId, MetadataType.File)
+  return getRootNodeCID(uploadId, MetadataType.File, client)
 }
 
 const getFolderUploadIdCID = async (uploadId: string): Promise<CID> => {
