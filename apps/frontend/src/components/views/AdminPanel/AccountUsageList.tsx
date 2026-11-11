@@ -22,7 +22,13 @@ import { UsageDaysPicker } from '@/components/views/UsageReport/UsageDaysPicker'
 import { formatBytes } from '@/utils/number';
 import { formatCid } from '@/utils/table';
 import { formatAi3 } from '@/utils/credits';
-import { defaultUsageDays, toUsageRange, UsageDays } from '@/utils/usageReport';
+import { useDebounce } from '@/hooks/useDebounce';
+import {
+  defaultUsageDays,
+  toUsageRange,
+  USAGE_DAYS_DEBOUNCE_MS,
+  UsageDays,
+} from '@/utils/usageReport';
 
 const bytes = (value: string) => formatBytes(Number(value));
 
@@ -34,7 +40,9 @@ export const AccountUsageList = () => {
   const { api, network } = useNetwork();
   const [days, setDays] = useState<UsageDays>(defaultUsageDays);
   const [partnersOnly, setPartnersOnly] = useState(true);
-  const range = useMemo(() => toUsageRange(days), [days]);
+  // See UsageReportView: wait for a typed year to settle before requesting.
+  const settledDays = useDebounce(days, USAGE_DAYS_DEBOUNCE_MS);
+  const range = useMemo(() => toUsageRange(settledDays), [settledDays]);
 
   const {
     data: accounts,

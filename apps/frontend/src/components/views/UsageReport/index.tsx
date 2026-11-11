@@ -23,10 +23,12 @@ import {
 import { formatBytes } from '@/utils/number';
 import { formatCid } from '@/utils/table';
 import { describePayment, formatAi3 } from '@/utils/credits';
+import { useDebounce } from '@/hooks/useDebounce';
 import {
   defaultUsageDays,
   firstDayFrom,
   toUsageRange,
+  USAGE_DAYS_DEBOUNCE_MS,
   UsageDays,
 } from '@/utils/usageReport';
 import { UsageDaysPicker } from './UsageDaysPicker';
@@ -234,7 +236,10 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
 export const UsageReportView = ({ accountId }: { accountId: string }) => {
   const { api } = useNetwork();
   const [days, setDays] = useState<UsageDays>(defaultUsageDays);
-  const range = useMemo(() => toUsageRange(days), [days]);
+  // A date input emits each partial year while one is typed (0002, 0020…),
+  // so only a range that has settled is requested.
+  const settledDays = useDebounce(days, USAGE_DAYS_DEBOUNCE_MS);
+  const range = useMemo(() => toUsageRange(settledDays), [settledDays]);
   const [exporting, setExporting] = useState<ExportTable | null>(null);
 
   const {
@@ -250,7 +255,7 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
 
   const download = async (table: ExportTable) => {
     if (!range) return;
-    const name = `usage-${days.from}-to-${days.through}-${table}`;
+    const name = `usage-${accountId}-${settledDays.from}-to-${settledDays.through}-${table}`;
     setExporting(table);
     try {
       if (table === 'interactions') {
