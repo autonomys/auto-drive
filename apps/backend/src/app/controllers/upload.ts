@@ -1,17 +1,69 @@
-import { Router, Request, Response } from 'express'
+import { NextFunction, Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
-import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
+import {
+  FolderTreeFolderSchema,
+  uploadOptionsSchema,
+  UserWithOrganization,
+} from '@auto-drive/models'
 import { z } from 'zod'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { config } from '../../config.js'
 
 const logger = createLogger('http:controllers:upload')
 
 const uploadController = Router()
+
+// Authenticates before the route reads the request body. The user is left on
+// res.locals for the handler.
+const authenticate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+    res.locals.user = user
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
+
+const chunkParser = multer({
+  limits: {
+    // The parser rejects a file that reaches fileSize, so a part of exactly the
+    // maximum needs one byte more.
+    fileSize: config.express.uploadChunkMaxBytes + 1,
+    files: 1,
+    fields: 4,
+    fieldSize: 1024,
+  },
+}).single('file')
+
+// Reads the multipart chunk body, answering a body outside the limits itself:
+// 413 for a part that is too large, 400 for any other malformed form.
+const parseChunk = (req: Request, res: Response, next: NextFunction) => {
+  chunkParser(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      const tooLarge = err.code === 'LIMIT_FILE_SIZE'
+      res.status(tooLarge ? 413 : 400).json({
+        error: tooLarge
+          ? `Chunk exceeds the ${config.express.uploadChunkMaxBytes} byte limit`
+          : `Invalid chunk form: ${err.message}`,
+      })
+      return
+    }
+    next(err)
+  })
+}
 
 uploadController.post(
   '/file',
@@ -186,12 +238,10 @@ uploadController.post(
 
 uploadController.post(
   '/file/:uploadId/chunk',
-  multer().single('file'),
+  authenticate,
+  parseChunk,
   asyncSafeHandler(async (req: Request, res: Response) => {
-    const user = await handleAuth(req, res)
-    if (!user) {
-      return
-    }
+    const user: UserWithOrganization = res.locals.user
     const { uploadId } = req.params
     const chunk = req.file?.buffer
     let { index } = req.body

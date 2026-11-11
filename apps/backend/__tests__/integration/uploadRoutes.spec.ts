@@ -5,7 +5,10 @@ import { config } from '../../src/config.js'
 import { AccountsUseCases } from '../../src/core/users/accounts.js'
 import { UploadsUseCases } from '../../src/core/uploads/uploads.js'
 import { uploadsRepository } from '../../src/infrastructure/repositories/uploads/uploads.js'
-import { AuthManager } from '../../src/infrastructure/services/auth/index.js'
+import {
+  AuthLookupError,
+  AuthManager,
+} from '../../src/infrastructure/services/auth/index.js'
 import { dbMigration } from '../utils/dbMigrate.js'
 import { createMockUser, mockRabbitPublish } from '../utils/mocks.js'
 
@@ -15,6 +18,9 @@ describe('Upload routes answer client errors with their own status', () => {
   const user = createMockUser()
   const userWithoutCredits = createMockUser()
   const portDefault = config.express.port
+  const chunkLimitDefault = config.express.uploadChunkMaxBytes
+  // Read when the API is imported below; small so the tests can exceed it.
+  const CHUNK_LIMIT = 64 * 1024
   let base: string
 
   // The API binds config.express.port at import, and another suite in the same
@@ -76,6 +82,7 @@ describe('Upload routes answer client errors with their own status', () => {
 
     const port = await freePort()
     config.express.port = port
+    config.express.uploadChunkMaxBytes = CHUNK_LIMIT
     base = `http://localhost:${port}`
 
     await import('../../src/app/apis/frontend.js')
@@ -99,6 +106,7 @@ describe('Upload routes answer client errors with their own status', () => {
 
   afterAll(async () => {
     config.express.port = portDefault
+    config.express.uploadChunkMaxBytes = chunkLimitDefault
     await dbMigration.down()
   })
 
@@ -186,6 +194,46 @@ describe('Upload routes answer client errors with their own status', () => {
       expect(await response.json()).toEqual({
         error: 'Cannot replace already-processed part 0 with different content',
       })
+    })
+  })
+
+  describe('POST /uploads/file/:uploadId/chunk limits', () => {
+    it('answers 413 for a part over the size limit and stores nothing', async () => {
+      const upload = await createUpload()
+      const uploadChunk = jest.spyOn(UploadsUseCases, 'uploadChunk')
+
+      const response = await postChunk(
+        upload.id,
+        0,
+        Buffer.alloc(CHUNK_LIMIT + 1),
+      )
+      expect(response.status).toBe(413)
+      expect(await response.json()).toEqual({
+        error: `Chunk exceeds the ${CHUNK_LIMIT} byte limit`,
+      })
+      expect(uploadChunk).not.toHaveBeenCalled()
+    })
+
+    it('accepts a part of exactly the size limit', async () => {
+      const upload = await createUpload()
+      const response = await postChunk(upload.id, 0, Buffer.alloc(CHUNK_LIMIT))
+      expect(response.status).toBe(200)
+    })
+
+    // An oversized part is only answered 413 once its body has been read, so
+    // a 401 here shows the credentials were checked first.
+    it('answers 401 before reading the body', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('rejected', true, 401))
+      const upload = await createUpload()
+
+      const response = await postChunk(
+        upload.id,
+        0,
+        Buffer.alloc(CHUNK_LIMIT + 1),
+      )
+      expect(response.status).toBe(401)
     })
   })
 
