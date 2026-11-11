@@ -191,6 +191,22 @@ describe('EventRouter Processors', () => {
       )
     })
 
+    it('should handle reclaim-archived-data task', async () => {
+      const reclaimSpy = jest
+        .spyOn(ObjectUseCases, 'reclaimArchivedNodeData')
+        .mockResolvedValue(undefined)
+
+      const task = {
+        id: 'reclaim-archived-data',
+        params: {},
+        retriesLeft: 3,
+      }
+
+      await processFrontendTask(task)
+
+      expect(reclaimSpy).toHaveBeenCalledWith(expect.any(AbortSignal))
+    })
+
     it('should throw error for unknown task', async () => {
       const task = {
         id: 'unknown-task',

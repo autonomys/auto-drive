@@ -33,6 +33,7 @@ import { consumeStream } from '../../shared/utils/misc.js'
 import { DownloadUseCase } from '../../core/downloads/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { FileGateway } from '../../infrastructure/services/dsn/fileGateway/index.js'
+import { config } from '../../config.js'
 import {
   ForbiddenError,
   IllegalContentError,
@@ -425,6 +426,28 @@ const isArchived = async (cid: string) => {
   return metadata.is_archived
 }
 
+const hasAllNodeData = async (
+  metadata: OffchainMetadata,
+): Promise<boolean> => {
+  if (metadata.type === 'file') {
+    const uniqueChunkCids = [
+      ...new Set(metadata.chunks.map((chunk) => chunk.cid)),
+    ]
+    if (uniqueChunkCids.length === 0) {
+      return true
+    }
+    const count = await nodesRepository.countCidsWithData(uniqueChunkCids)
+    return count === uniqueChunkCids.length
+  }
+
+  const areNodesEncoded = await Promise.all(
+    metadata.children.map((child) =>
+      ObjectUseCases.isReconstructable(child.cid),
+    ),
+  )
+  return areNodesEncoded.every((e) => e)
+}
+
 // to remove: this will not be used after we process data with no duplicates handling
 const isReconstructable = async (cid: string): Promise<boolean> => {
   const metadata = await metadataRepository.getMetadata(cid)
@@ -433,22 +456,7 @@ const isReconstructable = async (cid: string): Promise<boolean> => {
     return false
   }
 
-  const metadataType = metadata.metadata.type
-  if (metadataType === 'file') {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.chunks.map((child) =>
-        nodesRepository.hasEncodedNode(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  } else {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.children.map((child) =>
-        ObjectUseCases.isReconstructable(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  }
+  return ObjectUseCases.hasAllNodeData(metadata.metadata)
 }
 
 const hasAllNodesArchived = async (cid: string) => {
@@ -517,16 +525,98 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
   if (signal?.aborted) return
 
   await metadataRepository.markAsArchived(cid)
+  // Stripping now belongs to the reclaim sweep, which strips only what the
+  // gateway has confirmed it can serve. piece_index proves the data reached
+  // the chain; it does not prove any reader can fetch it for ~3 days yet.
+}
 
-  if (signal?.aborted) {
-    logger.warn(
-      'Archival aborted after marking metadata, before stripping node data (cid=%s)',
-      cid,
-    )
+let reclaimCursorCid: string | null = null
+let isReclaimRunning = false
+
+const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
+  if (isReclaimRunning) {
+    logger.warn('Previous reclaim sweep is still running, skipping interval')
     return
   }
+  isReclaimRunning = true
 
-  await nodesRepository.removeNodeDataByRootCid(cid)
+  try {
+    const batchSize = config.reclaim.batchSize
+    const deadline = Date.now() + config.reclaim.sweepTimeoutMs
+    const maxConsecutiveFailures = config.reclaim.maxConsecutiveProbeFailures
+
+    let cids = await nodesRepository.getArchivedRootCidsWithData(
+      batchSize,
+      reclaimCursorCid,
+    )
+    if (cids.length === 0 && reclaimCursorCid !== null) {
+      reclaimCursorCid = null
+      cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
+    }
+    logger.info(
+      'Reclaim sweep: %d object(s) still holding node data',
+      cids.length,
+    )
+
+    let consecutiveFailures = 0
+
+    for (const cid of cids) {
+      if (signal?.aborted) return
+      if (Date.now() > deadline) {
+        logger.warn(
+          'Reclaim sweep reached wall-clock budget (%dms), stopping batch',
+          config.reclaim.sweepTimeoutMs,
+        )
+        break
+      }
+
+      reclaimCursorCid = cid
+
+      const meta = await metadataRepository.getMetadata(cid)
+      if (!meta || meta.metadata?.totalSize === undefined) {
+        continue
+      }
+      if (meta.metadata?.type === 'folder') {
+        // Skip folder roots in the sweep for now to safely preserve descendant data
+        continue
+      }
+
+      const totalSize = BigInt(meta.metadata.totalSize)
+
+      try {
+        const isRetrievable = await FileGateway.isRetrievableFromGateway(
+          cid,
+          totalSize,
+        )
+
+        if (!isRetrievable) {
+          // Unindexed object (404/normal indexing lag) — skip without tripping breaker
+          continue
+        }
+
+        consecutiveFailures = 0
+        await nodesRepository.removeNodeDataByRootCid(cid)
+        logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
+      } catch (error) {
+        // Gateway network, timeout, or 5xx outage
+        logger.warn(error as Error, 'Gateway probe failed (cid=%s)', cid)
+        consecutiveFailures++
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          logger.warn(
+            'Reclaim sweep encountered %d consecutive probe failures, stopping batch',
+            consecutiveFailures,
+          )
+          break
+        }
+      }
+    }
+
+    if (cids.length < batchSize) {
+      reclaimCursorCid = null
+    }
+  } finally {
+    isReclaimRunning = false
+  }
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -915,5 +1005,8 @@ export const ObjectUseCases = {
   authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
+  hasAllNodeData,
   isReconstructable,
+  reclaimArchivedNodeData,
 }
+

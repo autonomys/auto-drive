@@ -1,5 +1,7 @@
 'use client';
 
+import { expiryPresetToIso } from 'utils/connectApp';
+
 import {
   Transition,
   Dialog,
@@ -23,36 +25,20 @@ import { AuthService } from 'services/auth/auth';
 type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'custom' | 'never';
 
 const presetToIso = (preset: ExpiryPreset, custom: string): string | null => {
-  const now = new Date();
-  switch (preset) {
-    case 'never':
-      return null;
-    case '30d':
-      now.setDate(now.getDate() + 30);
-      return now.toISOString();
-    case '60d':
-      now.setDate(now.getDate() + 60);
-      return now.toISOString();
-    case '90d':
-      now.setDate(now.getDate() + 90);
-      return now.toISOString();
-    case '1y':
-      now.setFullYear(now.getFullYear() + 1);
-      return now.toISOString();
-    case 'custom': {
-      if (!custom) {
-        throw new Error('Please select an expiry date');
-      }
-      const d = new Date(`${custom}T23:59:59`);
-      if (Number.isNaN(d.getTime())) {
-        throw new Error('Invalid expiry date');
-      }
-      if (d.getTime() <= Date.now()) {
-        throw new Error('Expiry date must be in the future');
-      }
-      return d.toISOString();
+  if (preset === 'custom') {
+    if (!custom) {
+      throw new Error('Please select an expiry date');
     }
+    const d = new Date(`${custom}T23:59:59`);
+    if (Number.isNaN(d.getTime())) {
+      throw new Error('Invalid expiry date');
+    }
+    if (d.getTime() <= Date.now()) {
+      throw new Error('Expiry date must be in the future');
+    }
+    return d.toISOString();
   }
+  return expiryPresetToIso(preset);
 };
 
 const todayPlus = (days: number): string => {
