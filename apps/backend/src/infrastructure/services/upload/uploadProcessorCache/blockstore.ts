@@ -33,14 +33,14 @@ export class MultiUploadBlockstore implements BaseBlockstore {
   ) {}
 
   async *getFilteredMany(nodeType: MetadataType): AwaitIterable<CID> {
-    const blockstore = await blockstoreRepository.getByType(
+    const cids = await blockstoreRepository.getCidsByType(
       this.uploadId,
       nodeType,
       this.client,
     )
 
-    for (const entry of blockstore) {
-      yield stringToCid(entry.cid)
+    for (const cid of cids) {
+      yield stringToCid(cid)
     }
   }
 
