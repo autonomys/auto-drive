@@ -2180,16 +2180,24 @@ describe('AWS S3 - SDK', () => {
       })
 
       it('answers 404 NoSuchVersion for a key that XML cannot carry', async () => {
-        const key = 'versions-test/get-ctl-\x01.txt'
-        await putVersion(key, 'get-ctl-content')
         const other = await putVersion(
           'versions-test/get-ctl-other.txt',
           'get-ctl-other-content',
         )
 
-        expect(
-          await rejection(getVersion(key, other.VersionId!)),
-        ).toMatchObject({ status: 404, name: 'NoSuchVersion' })
+        for (const char of ['\x01', '\uFFFE', '\uFFFF']) {
+          const key = `versions-test/get-ctl-${char}.txt`
+          await putVersion(key, 'get-ctl-content')
+          expect({
+            char,
+            ...(await rejection(getVersion(key, other.VersionId!))),
+          }).toMatchObject({
+            char,
+            status: 404,
+            name: 'NoSuchVersion',
+            Key: 'get-ctl-\uFFFD.txt',
+          })
+        }
       })
 
       it('answers 405 for the delete marker of a key with no version row', async () => {

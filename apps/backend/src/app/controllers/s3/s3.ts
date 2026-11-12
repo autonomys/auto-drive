@@ -24,12 +24,7 @@ import {
 import { pipeline, Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { NextFunction, Request, Response } from 'express'
-import {
-  encodeS3Key,
-  hasXmlIllegalChars,
-  planListingEncoding,
-  sendXML,
-} from './utils.js'
+import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
 import { UploadOptions } from '@auto-drive/models'
@@ -382,8 +377,7 @@ const sendNoSuchVersion = (
   sendXML(res.status(404), 'Error', {
     Code: 'NoSuchVersion',
     Message: 'The specified version does not exist.',
-    // A key may hold characters XML 1.0 cannot represent at all.
-    ...(hasXmlIllegalChars(key) ? {} : { Key: key }),
+    Key: key,
     VersionId: versionId,
   })
 }
