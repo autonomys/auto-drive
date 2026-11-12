@@ -5,6 +5,7 @@ import {
   ForbiddenError,
   RangeNotSatisfiableError,
   ChunkNotFoundError,
+  DeleteMarkerVersionError,
   PaymentRequiredError,
   VersionNotFoundError,
   InvalidVersionIdError,
@@ -368,15 +369,69 @@ const sendRangeNotSatisfiable = (
   })
 }
 
+const sendNoSuchVersion = (
+  res: Response,
+  key: string,
+  versionId: string | undefined,
+) => {
+  sendXML(res.status(404), 'Error', {
+    Code: 'NoSuchVersion',
+    Message: 'The specified version does not exist.',
+    Key: key,
+    VersionId: versionId,
+  })
+}
+
+// The id is not echoed: it may hold characters XML cannot carry.
+const sendInvalidVersionId = (res: Response) => {
+  sendXML(res.status(400), 'Error', {
+    Code: 'InvalidArgument',
+    Message: 'Invalid version id specified',
+  })
+}
+
+const sendDeleteMarkerNotReadable = (
+  req: Request,
+  res: Response,
+  error: DeleteMarkerVersionError,
+) => {
+  res.set('x-amz-delete-marker', 'true')
+  res.set('x-amz-version-id', error.versionId)
+  res.set('Last-Modified', error.lastModified.toUTCString())
+  sendXML(res.status(405), 'Error', {
+    Code: 'MethodNotAllowed',
+    Message: 'The specified method is not allowed against this resource.',
+    Method: req.method,
+    ResourceType: 'DeleteMarker',
+  })
+}
+
 /**
- * Answer a GET/HEAD failure. Split from handleS3Error because a 416 is the one
- * failure that has to describe the object it refused: the use case resolves a
- * suffix range against the cid it settled on and reports the size it could not
- * satisfy, and that size is what tells the client what to ask for instead.
+ * Answer a GET/HEAD failure. Split from handleS3Error because these failures
+ * have to describe what was refused: a 416 reports the size of the cid the use
+ * case resolved a suffix range against, which tells the client what to ask for
+ * instead, and a versioned read names the version that does not exist or the
+ * delete marker it hit.
  */
 const handleReadError = (req: Request, res: Response, error: Error) => {
   if (error instanceof RangeNotSatisfiableError) {
     sendRangeNotSatisfiable(req, res, error.objectSize)
+    return
+  }
+  if (error instanceof InvalidVersionIdError) {
+    sendInvalidVersionId(res)
+    return
+  }
+  if (error instanceof VersionNotFoundError) {
+    sendNoSuchVersion(
+      res,
+      parseBucketAndKey(req.params.key).key,
+      getVersionId(req),
+    )
+    return
+  }
+  if (error instanceof DeleteMarkerVersionError) {
+    sendDeleteMarkerNotReadable(req, res, error)
     return
   }
   handleS3Error(error, res)
@@ -1409,17 +1464,9 @@ export const copyObjectHandler = async (req: Request, res: Response) => {
   if (result.isErr()) {
     const { error } = result
     if (error instanceof VersionNotFoundError) {
-      sendXML(res.status(404), 'Error', {
-        Code: 'NoSuchVersion',
-        Message: 'The specified version does not exist.',
-        Key: source.key,
-        VersionId: source.versionId,
-      })
+      sendNoSuchVersion(res, source.key, source.versionId)
     } else if (error instanceof InvalidVersionIdError) {
-      sendXML(res.status(400), 'Error', {
-        Code: 'InvalidArgument',
-        Message: 'Invalid version id specified',
-      })
+      sendInvalidVersionId(res)
     } else if (error instanceof BadRequestError) {
       handleS3Error(error, res)
     } else {

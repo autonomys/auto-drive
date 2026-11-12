@@ -16,11 +16,21 @@ import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
-import { ObjectNotFoundError, ForbiddenError } from '../../../src/errors/index.js'
+import {
+  DeleteMarkerVersionError,
+  ObjectNotFoundError,
+  ForbiddenError,
+  InvalidVersionIdError,
+  VersionNotFoundError,
+} from '../../../src/errors/index.js'
 import { config } from '../../../src/config.js'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
+/** Version ids must parse as CIDs before any lookup runs. */
+const OLD_CID = 'bafkr6ic6xpbslpbhdq46t4jck3dx4gdjr6lrddkbqo3xur4jnf44vb2poa'
+const UNKNOWN_CID =
+  'bafkr6ihn4xsh3jvcw5p2dnmqgrsqpq3rvnmf2rbj4mfzmi5fjaw4m4osdu'
 /** Composite multipart ETag: `"<32 hex chars>-<N>"` */
 const MULTIPART_ETAG_RE = /^"[a-f0-9]{32}-\d+"$/
 /** Multipart MD5 as stored in the DB (no outer quotes): `<32 hex chars>-<N>` */
@@ -239,7 +249,7 @@ describe('S3UseCases', () => {
       const version = {
         bucket: 'my-bucket',
         key: 'file.txt',
-        cid: 'oldcid',
+        cid: OLD_CID,
         md5: 'abc123def456abc123def456abc123de',
         mtime: '111.5',
         metadata: { contentType: 'text/csv' },
@@ -256,12 +266,12 @@ describe('S3UseCases', () => {
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
-        VersionId: 'oldcid',
+        VersionId: OLD_CID,
       } as any)
 
       expect(result.isOk()).toBe(true)
       const value = result._unsafeUnwrap()
-      expect(value.cid).toBe('oldcid')
+      expect(value.cid).toBe(OLD_CID)
       expect(value.mtime).toBe('111.5')
       expect(value.objectMetadata).toEqual({ contentType: 'text/csv' })
       expect(value.lastModified).toEqual(new Date(5000))
@@ -272,26 +282,127 @@ describe('S3UseCases', () => {
         'user1',
         'my-bucket',
         'file.txt',
-        'oldcid',
+        OLD_CID,
       )
-      expect(downloadSpy).toHaveBeenCalledWith('oldcid', expect.any(Object))
+      expect(downloadSpy).toHaveBeenCalledWith(OLD_CID, expect.any(Object))
       expect(findByKeySpy).not.toHaveBeenCalled()
     })
 
-    it('returns not-found for an unknown versionId', async () => {
+    it('returns version-not-found for an unknown versionId', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
         .mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ cid: OLD_CID } as any)
 
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
-        VersionId: 'nope',
+        VersionId: UNKNOWN_CID,
       } as any)
 
       expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(VersionNotFoundError)
     })
+
+    it('serves the current cid by its id when it has no version row', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(null)
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
+        cid: OLD_CID,
+        md5: null,
+        mtime: '222.5',
+        metadata: null,
+        updatedAt: new Date(7000),
+      } as any)
+      const downloadSpy = jest
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: OLD_CID,
+      } as any)
+
+      expect(result._unsafeUnwrap()).toMatchObject({
+        cid: OLD_CID,
+        mtime: '222.5',
+        lastModified: new Date(7000),
+      })
+      expect(downloadSpy).toHaveBeenCalledWith(OLD_CID, expect.any(Object))
+    })
+
+    it.each(['\x01x', '\x00', 'abc', 'dm-', 'dm-1x'])(
+      'refuses version id %j as invalid before any lookup',
+      async (versionId) => {
+        const findVersionSpy = jest.spyOn(
+          s3ObjectMappingsRepository,
+          'findVersionByCid',
+        )
+        const findMarkerSpy = jest.spyOn(
+          s3ObjectMappingsRepository,
+          'findDeleteMarkerTime',
+        )
+
+        const result = await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          VersionId: versionId,
+        } as any)
+
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(InvalidVersionIdError)
+        expect(findVersionSpy).not.toHaveBeenCalled()
+        expect(findMarkerSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it('refuses the current delete marker id of the key as a delete marker', async () => {
+      const markerTime = new Date('2026-11-09T12:00:00.123Z')
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findDeleteMarkerTime')
+        .mockResolvedValue(markerTime)
+      const findVersionSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'findVersionByCid',
+      )
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: `dm-${markerTime.getTime()}`,
+      } as any)
+
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(DeleteMarkerVersionError)
+      expect(error).toMatchObject({
+        versionId: `dm-${markerTime.getTime()}`,
+        lastModified: markerTime,
+      })
+      expect(findVersionSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['a key with no delete marker', null],
+      ['a key whose marker is a different one', new Date(1_000)],
+    ])(
+      'returns version-not-found for a delete marker id on %s',
+      async (_, markerTime) => {
+        jest
+          .spyOn(s3ObjectMappingsRepository, 'findDeleteMarkerTime')
+          .mockResolvedValue(markerTime)
+
+        const result = await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          VersionId: 'dm-2000',
+        } as any)
+
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(VersionNotFoundError)
+      },
+    )
 
     describe('picks the download path by object size', () => {
       const cap = config.params.maxAnonymousDownloadSize
@@ -363,7 +474,7 @@ describe('S3UseCases', () => {
           .mockResolvedValue({
             bucket: 'my-bucket',
             key: 'file.txt',
-            cid: 'oldcid',
+            cid: OLD_CID,
             md5: null,
             mtime: null,
             metadata: null,
@@ -375,11 +486,11 @@ describe('S3UseCases', () => {
         await S3UseCases.getObject(mockUser, {
           Bucket: 'my-bucket',
           Key: 'file.txt',
-          VersionId: 'oldcid',
+          VersionId: OLD_CID,
         } as any)
 
-        expect(getMetadata).toHaveBeenCalledWith('oldcid')
-        expect(byUser).toHaveBeenCalledWith(mockUser, 'oldcid', {
+        expect(getMetadata).toHaveBeenCalledWith(OLD_CID)
+        expect(byUser).toHaveBeenCalledWith(mockUser, OLD_CID, {
           byteRange: undefined,
         })
         expect(anonymous).not.toHaveBeenCalled()

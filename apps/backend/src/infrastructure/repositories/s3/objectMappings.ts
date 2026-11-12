@@ -250,6 +250,56 @@ const findVersionByCid = async (
 }
 
 /**
+ * When the key's current delete marker was written, or null when the key's
+ * current state is not a delete marker. Scoped to the caller's namespace.
+ *
+ * Mirrors the marker buildListVersionsResult synthesises from listObjectVersions
+ * rows: a key has one when its pointer is soft-deleted (dated by deleted_at) or
+ * its newest version's content is owner-removed (dated by that version's write
+ * time). A key with no version row still has the first kind, because
+ * DeleteObject reports it.
+ */
+const findDeleteMarkerTime = async (
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
+  bucket: string,
+  s3Key: string,
+): Promise<Date | null> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    deleted_at: Date | null
+    newest_version_at: Date | null
+    owner_removed: boolean
+  }>({
+    text: `
+      SELECT
+        om.deleted_at,
+        ov.created_at AS newest_version_at,
+        NOT (${ownershipSQL.notRemovedByOwnerSQL('ov.cid')}) AS owner_removed
+      FROM "S3".object_mappings om
+      LEFT JOIN LATERAL (
+        SELECT v.cid, v.created_at
+        FROM "S3".object_versions v
+        WHERE v.owner_oauth_provider = om.owner_oauth_provider
+          AND v.owner_oauth_user_id = om.owner_oauth_user_id
+          AND v.bucket = om.bucket
+          AND v.key = om.key
+        ORDER BY v.id DESC
+        LIMIT 1
+      ) ov ON true
+      WHERE om.owner_oauth_provider = $1 AND om.owner_oauth_user_id = $2
+        AND om.bucket = $3 AND om."key" = $4
+    `,
+    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key],
+  })
+
+  const row = result.rows[0]
+  if (!row) return null
+  if (row.deleted_at) return row.deleted_at
+  return row.owner_removed ? row.newest_version_at : null
+}
+
+/**
  * List the version history for a bucket/prefix (ListObjectVersions), scoped to
  * the caller. Each content version is joined with its key's current-pointer
  * delete state so the caller can flag IsLatest and synthesise a delete marker
@@ -708,6 +758,7 @@ export const s3ObjectMappingsRepository = {
   findByKey,
   findSoftDeletedByKey,
   findVersionByCid,
+  findDeleteMarkerTime,
   listObjectVersions,
   softDeleteMapping,
   countActiveMappingsByCid,

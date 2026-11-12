@@ -7,6 +7,7 @@ import { ObjectUseCases } from '../objects/object.js'
 import { err, ok, Result } from 'neverthrow'
 import {
   BadRequestError,
+  DeleteMarkerVersionError,
   ForbiddenError,
   IllegalContentError,
   InvalidVersionIdError,
@@ -35,6 +36,7 @@ import {
   ByteRange,
   computeListObjectsDbLimit,
   computeListObjectVersionsDbLimit,
+  deleteMarkerVersionId,
   DeleteObjectResult,
   finalizeListObjects,
   formatETag,
@@ -330,36 +332,137 @@ const openRead = async (
     : DownloadUseCase.downloadObjectByAnonymous(cid, options)
 }
 
+// Delete markers are synthesised at read time (deleteMarkerVersionId in
+// @autonomys/file-server), never stored, so a marker id cannot be looked up. The
+// prefix alone identifies one: a CID never contains a hyphen.
+const DELETE_MARKER_VERSION_ID_PREFIX = 'dm-'
+const DELETE_MARKER_VERSION_ID = /^dm-\d+$/
+
+/** A content version of a key, as GET, HEAD and CopyObject read it. */
+type ContentVersion = Pick<
+  S3KeyMapping,
+  'cid' | 'md5' | 'mtime' | 'metadata'
+> & {
+  lastModified: Date
+}
+
+/**
+ * The content version a versionId (a CID) names in the key's history, looked up
+ * even while the key's current state is a delete marker.
+ */
+const findContentVersion = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+  versionId: string,
+): Promise<
+  Result<ContentVersion, InvalidVersionIdError | VersionNotFoundError>
+> => {
+  try {
+    stringToCid(versionId)
+  } catch {
+    return err(new InvalidVersionIdError('Invalid version id specified'))
+  }
+
+  const version = await s3ObjectMappingsRepository.findVersionByCid(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+    versionId,
+  )
+  if (version) return ok({ ...version, lastModified: version.createdAt })
+
+  // The current cid can lack a version row (see getObjectWriteTime), yet GET and
+  // HEAD still report it as x-amz-version-id, so honour it from the mapping.
+  const current = await s3ObjectMappingsRepository.findByKey(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
+  return current?.cid === versionId
+    ? ok({ ...current, lastModified: current.updatedAt })
+    : err(
+        new VersionNotFoundError(
+          `Version ${versionId} of ${bucket}/${key} not found`,
+        ),
+      )
+}
+
+/**
+ * Why a read of a delete marker id fails: the key's current delete marker is a
+ * version with no content (405), and any other marker id names no version of
+ * the key, since only the current marker is kept.
+ */
+const refuseDeleteMarkerRead = async (
+  user: UserWithOrganization,
+  bucket: string,
+  key: string,
+  versionId: string,
+): Promise<
+  DeleteMarkerVersionError | VersionNotFoundError | InvalidVersionIdError
+> => {
+  if (!DELETE_MARKER_VERSION_ID.test(versionId)) {
+    return new InvalidVersionIdError('Invalid version id specified')
+  }
+  const markerTime = await s3ObjectMappingsRepository.findDeleteMarkerTime(
+    user.oauthProvider,
+    user.oauthUserId,
+    bucket,
+    key,
+  )
+  return markerTime && deleteMarkerVersionId(markerTime) === versionId
+    ? new DeleteMarkerVersionError(
+        `Version ${versionId} of ${bucket}/${key} is a delete marker`,
+        versionId,
+        markerTime,
+      )
+    : new VersionNotFoundError(
+        `Version ${versionId} of ${bucket}/${key} not found`,
+      )
+}
+
+type GetObjectError =
+  | ReadError
+  | InvalidVersionIdError
+  | VersionNotFoundError
+  | DeleteMarkerVersionError
+
 const getObject = async (
   user: UserWithOrganization,
   params: GetObjectParams,
-): Promise<Result<GetObjectUseCaseResult, ReadError>> => {
+): Promise<Result<GetObjectUseCaseResult, GetObjectError>> => {
   // Versioned read (GET/HEAD ?versionId=<cid>): fetch the specific version's
   // content by CID rather than the current pointer. The version must belong to
   // this key in the caller's namespace; the download itself still runs the
   // moderation/ban checks (authorizeDownload, on either download path), so a
   // removed/banned version is not retrievable even though it is retained.
   if (params.VersionId) {
-    const version = await s3ObjectMappingsRepository.findVersionByCid(
-      user.oauthProvider,
-      user.oauthUserId,
+    if (params.VersionId.startsWith(DELETE_MARKER_VERSION_ID_PREFIX)) {
+      return err(
+        await refuseDeleteMarkerRead(
+          user,
+          params.Bucket,
+          params.Key,
+          params.VersionId,
+        ),
+      )
+    }
+    const found = await findContentVersion(
+      user,
       params.Bucket,
       params.Key,
       params.VersionId,
     )
-    if (!version) {
-      return err(
-        new ObjectNotFoundError(
-          `Version ${params.VersionId} of ${params.Bucket}/${params.Key} not found`,
-        ),
-      )
-    }
+    if (found.isErr()) return err(found.error)
+    const version = found.value
     const versionedDownload = await openRead(user, version.cid, params)
     return versionedDownload.map((dl) => ({
       ...dl,
       cid: version.cid,
       etag: version.md5 ? formatETag(version.md5) : null,
-      lastModified: version.createdAt,
+      lastModified: version.lastModified,
       mtime: version.mtime,
       objectMetadata: version.metadata,
     }))
@@ -691,11 +794,6 @@ type CopyObjectError =
   | InvalidVersionIdError
   | BadRequestError
 
-// Delete markers are synthesised at read time (deleteMarkerVersionId in
-// @autonomys/file-server), never stored, so a marker id cannot be looked up. The
-// prefix alone identifies one: a CID never contains a hyphen.
-const DELETE_MARKER_VERSION_ID_PREFIX = 'dm-'
-
 /**
  * The content a CopyObject duplicates: the source key's current version, or the
  * version named by SourceVersionId. A named version is looked up in the key's
@@ -733,36 +831,7 @@ const findCopySource = async (
     )
   }
 
-  try {
-    stringToCid(SourceVersionId)
-  } catch {
-    return err(new InvalidVersionIdError('Invalid version id specified'))
-  }
-
-  const version = await s3ObjectMappingsRepository.findVersionByCid(
-    user.oauthProvider,
-    user.oauthUserId,
-    SourceBucket,
-    SourceKey,
-    SourceVersionId,
-  )
-  if (version) return ok(version)
-
-  // The current cid can lack a version row (see getObjectWriteTime), yet GET and
-  // HEAD still report it as x-amz-version-id, so honour it from the mapping.
-  const current = await s3ObjectMappingsRepository.findByKey(
-    user.oauthProvider,
-    user.oauthUserId,
-    SourceBucket,
-    SourceKey,
-  )
-  return current?.cid === SourceVersionId
-    ? ok(current)
-    : err(
-        new VersionNotFoundError(
-          `Version ${SourceVersionId} of ${SourceBucket}/${SourceKey} not found`,
-        ),
-      )
+  return findContentVersion(user, SourceBucket, SourceKey, SourceVersionId)
 }
 
 /**
