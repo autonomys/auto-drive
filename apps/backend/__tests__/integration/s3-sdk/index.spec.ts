@@ -2507,6 +2507,122 @@ describe('AWS S3 - SDK', () => {
       expect(res.headers.get('content-type')).toContain('application/xml')
       expect(await res.text()).toContain('<Code>NoSuchKey</Code>')
     })
+
+    // \x19 is a control character XML 1.0 cannot represent, and the error
+    // document echoes the key.
+    const ControlCharKey = `missing-ctl\x19key-${Date.now()}.txt`
+
+    it('GetObject on a missing key with an XML-illegal character returns 404 NoSuchKey', async () => {
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: ControlCharKey })),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
+      })
+    })
+
+    it('HeadObject on a missing key with an XML-illegal character returns 404', async () => {
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: ControlCharKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+
+    it('echoes an XML-illegal character in the key as U+FFFD', async () => {
+      const res = await fetch(
+        `${BASE_PATH}/s3/default/${encodeURIComponent(ControlCharKey)}`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(404)
+      const body = await res.text()
+      expect(body).toContain('<Code>NoSuchKey</Code>')
+      expect(body).toContain(ControlCharKey.replace('\x19', '\uFFFD'))
+    })
+  })
+
+  describe('Error documents echoing an XML-illegal character', () => {
+    it.each<{
+      op: string
+      method: string
+      path: string
+      headers?: Record<string, string>
+      status: number
+      code: string
+    }>([
+      {
+        op: 'GetObjectRetention of a missing key',
+        method: 'GET',
+        path: '/default/missing-ctl%19key?retention',
+        status: 404,
+        code: 'NoSuchKey',
+      },
+      {
+        op: 'CopyObject from a missing source',
+        method: 'PUT',
+        path: '/default/copy-ctl-dst.txt',
+        headers: { 'x-amz-copy-source': '/default/missing-ctl%19key' },
+        status: 404,
+        code: 'NoSuchKey',
+      },
+      {
+        op: 'UploadPart with an unparsable partNumber',
+        method: 'PUT',
+        path: '/default/part-ctl.bin?uploadId=probe&partNumber=%19',
+        status: 400,
+        code: 'InvalidArgument',
+      },
+      {
+        op: 'AbortMultipartUpload of an unknown upload id',
+        method: 'DELETE',
+        path: '/default/part-ctl.bin?uploadId=%19',
+        status: 404,
+        code: 'NoSuchUpload',
+      },
+    ])(
+      '$op answers $status $code',
+      async ({ method, path, headers, status, code }) => {
+        const res = await fetch(`${BASE_PATH}/s3${path}`, {
+          method,
+          headers: { Authorization: PROBE_AUTH, ...headers },
+        })
+        expect(res.status).toBe(status)
+        expect(await res.text()).toContain(`<Code>${code}</Code>`)
+      },
+    )
+  })
+
+  describe('Listing a key that contains U+FFFF', () => {
+    beforeAll(async () => {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: 'nonchar-list/k\uFFFF',
+          Body: Buffer.from('x'),
+        }),
+      )
+    })
+
+    it.each([
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ])(
+      '$op without encoding-type answers 400 InvalidArgument',
+      async ({ query }) => {
+        const res = await fetch(`${BASE_PATH}/s3/nonchar-list?${query}`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+      },
+    )
+
+    it('ListObjectsV2 with encoding-type=url returns the key encoded', async () => {
+      const res = await fetch(
+        `${BASE_PATH}/s3/nonchar-list?list-type=2&encoding-type=url`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('<Key>k%EF%BF%BF</Key>')
+    })
   })
 
   // These remain unimplemented and must return 501, never reach a write handler.

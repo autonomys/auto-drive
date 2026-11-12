@@ -44,6 +44,7 @@ const getUserFromSession = async (session: JWT) => {
 const PROTECTED_DRIVE_SECTIONS = new Set([
   '',
   'admin',
+  'connect',
   'credits',
   'developers',
   'fs',
