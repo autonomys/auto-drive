@@ -1,3 +1,22 @@
+-- Hasura's own SQL migrations used to create these objects, so databases set
+-- up before this migration already have them. The view is only created where
+-- it is missing: replacing it takes an ACCESS EXCLUSIVE lock on a view the
+-- explorer reads constantly, and existing copies already match.
+DO $$
+BEGIN
+  IF to_regclass('public.metadata_roots') IS NULL THEN
+    CREATE VIEW public.metadata_roots AS
+    SELECT *
+    FROM public.metadata
+    WHERE head_cid = root_cid;
+  END IF;
+END
+$$;
+
+-- Left behind where a migration that briefly lived on #916's branch ran.
+-- Nothing uses it, and while it exists the view cannot be dropped.
+DROP FUNCTION IF EXISTS public.metadata_roots_has_active_owner(public.metadata_roots);
+
 -- Whether an object has been removed: it has an admin owner, and every admin
 -- owner has removed it. Removal is tracked on the root's ownership rows.
 -- Exposed as the `is_removed` computed field on metadata_roots and metadata.

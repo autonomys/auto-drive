@@ -1,0 +1,31 @@
+name: Hasura
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/hasura/**"
+      - ".github/workflows/hasura.yml"
+  pull_request:
+    paths:
+      - "apps/hasura/**"
+      - ".github/workflows/hasura.yml"
+
+jobs:
+  metadata-only:
+    name: Hasura applies metadata only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check for Hasura SQL migrations
+        run: |
+          if [ -e apps/hasura/migrations ]; then
+            echo "::error::apps/hasura/migrations exists. Schema changes, including views and functions Hasura's metadata relies on, go in apps/backend/migrations."
+            exit 1
+          fi

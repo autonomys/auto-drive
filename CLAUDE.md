@@ -13,7 +13,7 @@ Yarn 4.2.2 monorepo with workspaces in `apps/`, `packages/`, and `submodules/`.
 - **apps/backend** — Express.js API server (ESM, TypeScript). Runs as multiple processes: frontend API, download API, frontend worker, download worker, publish worker (dedicated on-chain publisher).
 - **apps/frontend** — Next.js 14 web app (React 18, Tailwind CSS, Zustand, Apollo Client). Routes are under `src/app/[chain]/`.
 - **apps/auth** — Express.js auth microservice (JWT, OAuth via Google/Discord/GitHub, SIWE for Web3). Deployable as AWS Lambda.
-- **apps/hasura** — Hasura GraphQL engine config (migrations and metadata).
+- **apps/hasura** — Hasura GraphQL engine config (metadata only; schema changes are backend migrations).
 - **apps/landing** — Next.js landing page.
 - **packages/models** — Shared TypeScript types and schemas (`@auto-drive/models`).
 - **packages/s3** — S3-compatible DTOs (`@auto-drive/s3`).
@@ -63,7 +63,7 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
 # Run database migrations
 yarn backend db-migrate up
 yarn auth db-migrate up
-cd apps/hasura && hasura migrate apply --admin-secret myadminsecretkey && hasura metadata apply --admin-secret myadminsecretkey && cd -
+cd apps/hasura && hasura metadata apply --admin-secret myadminsecretkey && cd -
 
 # Start services (each in separate terminal)
 yarn frontend dev          # Next.js on port 8080
@@ -157,7 +157,7 @@ Backend uses `neverthrow` for typed errors in core logic. Functions return `Resu
 
 ### Database
 
-PostgreSQL with `db-migrate` for migrations. Migration SQL files live in `apps/backend/migrations/sqls/` and `apps/auth/migrations/sqls/`. Key tables: `metadata`, `nodes`, `object_ownership`, `subscriptions`, `interactions`, `intents`, `uploads.*`.
+PostgreSQL with `db-migrate` for migrations. Migration SQL files live in `apps/backend/migrations/sqls/` and `apps/auth/migrations/sqls/`. db-migrate is the only tool that changes the schema: views and functions that Hasura's metadata relies on, such as computed-field functions, are backend migrations too, and `apps/hasura` holds metadata only. Key tables: `metadata`, `nodes`, `object_ownership`, `subscriptions`, `interactions`, `intents`, `uploads.*`.
 
 ### Message Queue
 

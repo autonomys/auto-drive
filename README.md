@@ -33,7 +33,6 @@ yarn
 yarn backend db-migrate up
 yarn auth db-migrate up
 cd apps/hasura
-hasura migrate apply --admin-secret myadminsecretkey
 hasura metadata apply --admin-secret myadminsecretkey
 cd -
 ```

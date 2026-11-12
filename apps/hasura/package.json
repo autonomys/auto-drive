@@ -5,8 +5,7 @@
   "scripts": {
     "console": "hasura console",
     "metadata": "hasura metadata apply --skip-update-check",
-    "migrate": "hasura migrate apply --database-name default",
-    "start": "yarn migrate && yarn metadata && yarn console"
+    "start": "yarn metadata && yarn console"
   },
   "license": "MIT",
   "author": {
