@@ -246,7 +246,7 @@ rclone copyto ./report.pdf autodrive:my-archive/reports/report-v2.pdf
 **Possible causes:**
 
 1. **A different API key.** Buckets are private to the account. Keys from another account see a different set of buckets, even with the same bucket name.
-2. **The files were deleted.** Deleted files are hidden from listings. Check with `rclone ls --s3-versions autodrive:my-archive/`. If a deleted file is in the Trash at [ai3.storage](https://ai3.storage), you can restore it there.
+2. **The files were deleted.** Deleted files are hidden from listings. Check with `rclone ls --s3-versions autodrive:my-archive/`. If a deleted file is in the Trash at [ai3.storage](https://ai3.storage), restore it there, then copy its last version back onto the key (see [Deleted files](workflows.md#deleted-files)).
 3. **Legacy keys.** Objects uploaded with a key that has no `/` are in the `default` bucket: `rclone ls autodrive:default/`.
 
 ---

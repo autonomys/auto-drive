@@ -263,7 +263,7 @@ describe('S3 DeleteObject racing a write of the same content', () => {
     expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(true)
   })
 
-  it('moves the content to Trash on deleting its last key, and restoring brings the key back', async () => {
+  it('moves the content to Trash on deleting its last key; restoring brings the content back but not the key', async () => {
     const content = 'trash-and-restore'
     const { Cid: cid } = await put(KEY_A, content)
 
@@ -273,7 +273,58 @@ describe('S3 DeleteObject racing a write of the same content', () => {
     expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(true)
 
     expect((await ObjectUseCases.restoreObject(user, cid)).isOk()).toBe(true)
+    expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(false)
+    expect(await readable(KEY_A)).toBe(false)
+
+    const copied = await S3UseCases.copyObject(user, {
+      SourceBucket: BUCKET,
+      SourceKey: KEY_A,
+      SourceVersionId: cid,
+      Bucket: BUCKET,
+      Key: KEY_A,
+    })
+    expect(copied.isOk()).toBe(true)
     expect(await readable(KEY_A)).toBe(true)
+  })
+
+  // The web-app Trash is stamped by the app clock and a DeleteObject by the
+  // database clock. Moving the Trash time a minute back puts the delete after
+  // it whatever the skew between the two.
+  const backdateTrash = async (cid: string) => {
+    const db = await getDatabase()
+    await db.query({
+      text: `UPDATE object_ownership
+             SET marked_as_deleted = marked_as_deleted - interval '1 minute'
+             WHERE cid = $1 AND oauth_provider = $2 AND oauth_user_id = $3`,
+      values: [cid, user.oauthProvider, user.oauthUserId],
+    })
+  }
+
+  it('restoring from Trash leaves hidden a key deleted while its content was in Trash', async () => {
+    const content = 'deleted-while-trashed'
+    const { Cid: cid } = await put(KEY_A, content)
+    expect((await ObjectUseCases.markAsDeleted(user, cid)).isOk()).toBe(true)
+    await backdateTrash(cid)
+
+    expect((await remove(KEY_A))._unsafeUnwrap().deleteMarker).toBe(true)
+    expect((await ObjectUseCases.restoreObject(user, cid)).isOk()).toBe(true)
+
+    expect(await ObjectUseCases.isObjectDeleted(cid)).toBe(false)
+    expect(await readable(KEY_A)).toBe(false)
+  })
+
+  it('restoring from Trash brings back the other keys but not one deleted while in Trash', async () => {
+    const content = 'one-of-two-deleted-while-trashed'
+    const { Cid: cid } = await put(KEY_A, content)
+    await put(KEY_B, content)
+    expect((await ObjectUseCases.markAsDeleted(user, cid)).isOk()).toBe(true)
+    await backdateTrash(cid)
+
+    expect((await remove(KEY_A))._unsafeUnwrap().deleteMarker).toBe(true)
+    expect((await ObjectUseCases.restoreObject(user, cid)).isOk()).toBe(true)
+
+    expect(await readable(KEY_B)).toBe(true)
+    expect(await readable(KEY_A)).toBe(false)
   })
 
   it('a delete during a restore from Trash does not leave the deleted key to come back on a later write', async () => {

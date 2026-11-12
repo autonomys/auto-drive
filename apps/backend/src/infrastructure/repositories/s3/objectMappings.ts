@@ -455,48 +455,6 @@ const softDeleteMapping = async (
 }
 
 /**
- * Clear the soft-delete flag on the caller's mappings pointing at a cid. Called
- * when the underlying object is restored from the web-app Trash so that S3 keys
- * hidden by a DeleteObject reappear too — the reverse of deleteObject's
- * propagation to the Trash, keeping the S3 namespace and the UI in sync.
- *
- * When `since` is given, only keys soft-deleted at/after that instant are
- * restored. deleteObject stamps the object's Trash time (ownership) with the
- * deleted_at of the key whose delete emptied it, so that key matches, while
- * keys the owner had individually deleted earlier stay hidden. Restore brings
- * back what this trash removed, not every alias that ever pointed here.
- */
-const restoreMappingsByCid = async (
-  ownerOauthProvider: string,
-  ownerOauthUserId: string,
-  cid: string,
-  since: Date | null = null,
-  client?: pg.PoolClient,
-): Promise<void> => {
-  const db = client ?? (await getDatabase())
-
-  const base = `
-    UPDATE "S3".object_mappings
-    SET deleted_at = NULL, updated_at = NOW()
-    WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
-      AND cid = $3 AND deleted_at IS NOT NULL
-  `
-
-  if (since) {
-    await db.query({
-      text: base + ' AND deleted_at >= $4',
-      values: [ownerOauthProvider, ownerOauthUserId, cid, since],
-    })
-    return
-  }
-
-  await db.query({
-    text: base,
-    values: [ownerOauthProvider, ownerOauthUserId, cid],
-  })
-}
-
-/**
  * Count the caller's active (non-soft-deleted) mappings pointing at a cid. Used
  * after a DeleteObject to decide whether any of the owner's S3 keys still
  * references the content before moving the object to their Trash. Scoped to the
@@ -527,12 +485,11 @@ const countActiveMappingsByCid = async (
 /**
  * Run `fn` in one transaction holding a lock on the caller's keys to `cid`, so
  * that the DeleteObject "last key" decision never interleaves with a write of a
- * key to that content or a restore of it from Trash. Deletes take the lock
- * `exclusive`; writes and restores take it `shared`, as they only add keys and
- * take the content out of Trash, which is safe to do concurrently. `fn` must run
- * every query on the client it is given: a query on the pool from inside it
- * deadlocks once every pool connection is held by a request waiting for this
- * lock.
+ * key to that content. Deletes take the lock `exclusive`; writes take it
+ * `shared`, as they only add keys and take the content out of Trash, which is
+ * safe to do concurrently. `fn` must run every query on the client it is
+ * given: a query on the pool from inside it deadlocks once every pool
+ * connection is held by a request waiting for this lock.
  */
 const withContentLock = async <T>(
   ownerOauthProvider: string,
@@ -753,7 +710,6 @@ export const s3ObjectMappingsRepository = {
   findVersionByCid,
   listObjectVersions,
   softDeleteMapping,
-  restoreMappingsByCid,
   countActiveMappingsByCid,
   withContentLock,
   setMultipartMeta,

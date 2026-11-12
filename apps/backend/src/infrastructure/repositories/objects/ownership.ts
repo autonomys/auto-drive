@@ -40,9 +40,8 @@ const updateDeletedAt = async (
   userId: string,
   cid: string,
   markedAsDeleted: Date | null,
-  client?: pg.PoolClient,
 ): Promise<void> => {
-  const db = client ?? (await getDatabase())
+  const db = await getDatabase()
 
   await db.query({
     text: 'UPDATE object_ownership SET marked_as_deleted = $1 WHERE cid = $2 AND oauth_provider = $3 AND oauth_user_id = $4',

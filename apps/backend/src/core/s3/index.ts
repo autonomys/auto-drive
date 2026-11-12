@@ -626,11 +626,9 @@ const deleteObject = async (
   }
 
   // Holding the content lock exclusively, so no key to this content is written
-  // and no restore of it runs between counting the caller's remaining keys and
-  // moving it to Trash. The Trash time is this key's deleted_at, which is what
-  // lets a restore un-hide it (restoreMappingsByCid). Conditioning the
-  // soft-delete on the cid read above leaves alone a key rewritten to other
-  // content in the meantime.
+  // between counting the caller's remaining keys and moving it to Trash.
+  // Conditioning the soft-delete on the cid read above leaves alone a key
+  // rewritten to other content in the meantime.
   const deletedAt = await s3ObjectMappingsRepository.withContentLock(
     user.oauthProvider,
     user.oauthUserId,
@@ -891,10 +889,10 @@ const objectExists = async (
 // needs this rather than a bare existence check.
 //
 // Anchored to the current version's object_versions.created_at, NOT the mapping's
-// updated_at: a soft-delete or Trash restore (restoreMappingsByCid) bumps
-// updated_at to now WITHOUT writing a new version, which would drift the
-// RetainUntilDate to the restore instant. The version row's created_at is stamped
-// once at write and never moves.
+// updated_at: the BEFORE UPDATE trigger bumps updated_at to now on any update of
+// the row (a soft-delete, for one) WITHOUT writing a new version, which would
+// drift the RetainUntilDate. The version row's created_at is stamped once at
+// write and never moves.
 //
 // The fallback to updated_at is for a mapping whose CURRENT cid has no version
 // row. The #781 backfill covered every mapping that existed (no WHERE clause),
