@@ -5,6 +5,8 @@ import {
   optionalBoolEnvironmentVariable,
   env,
   positiveIntEnv,
+  nonNegativeIntEnv,
+  positiveBigIntEnv,
 } from './shared/utils/misc.js'
 import { getAddress, isAddress } from 'viem'
 
@@ -102,6 +104,23 @@ export const optionalTrimmedEnv = (raw?: string): string | undefined =>
   raw?.trim() || undefined
 
 /**
+ * An optional date variable, in any format `Date` parses (ISO 8601 with an
+ * offset is the unambiguous one). Unset or blank means null. A value that is
+ * not a date stops the process: a misread date would silently change reports.
+ */
+export const optionalDateEnv = (name: string, raw?: string): Date | null => {
+  const trimmed = optionalTrimmedEnv(raw)
+  if (!trimmed) {
+    return null
+  }
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Environment variable ${name} is not a date: ${trimmed}`)
+  }
+  return date
+}
+
+/**
  * A comma-separated list of raw address strings, trimmed, empties dropped.
  *
  * Deliberately NOT validated here, unlike `addressEnv`. Its consumer — the
@@ -172,6 +191,28 @@ export const config = {
       'CHAIN_CONFIRMATION_POLL_INTERVAL_MS',
       6000,
     ),
+    // Minimum free balance (in shannons) required for a publisher signer wallet.
+    // Wallets falling below this threshold are marked unfunded and excluded from
+    // transaction registration until topped up. Default: 1 AI3 (10^18 shannons).
+    minSignerBalance: positiveBigIntEnv(
+      'MIN_SIGNER_BALANCE',
+      10n ** 18n,
+    ),
+    // Early-warning alert threshold for publisher signer balances (in shannons).
+    // Default: 100 AI3 (100 * 10^18 shannons).
+    lowSignerBalanceWarn: positiveBigIntEnv(
+      'LOW_SIGNER_BALANCE_WARN',
+      100n * 10n ** 18n,
+    ),
+    // Cooldown duration (in ms) during which an unfunded signer wallet is excluded
+    // from rotation before its balance is re-checked for re-admission. Default: 60s.
+    unfundedCooldownMs: positiveIntEnv('UNFUNDED_COOLDOWN_MS', 60000),
+    // Cadence (in ms) for proactive background checking of publisher signer balances.
+    // Default: 60s. Set to 0 to disable background interval.
+    signerBalanceCheckIntervalMs: nonNegativeIntEnv(
+      'SIGNER_BALANCE_CHECK_INTERVAL_MS',
+      60000,
+    ),
   },
   memoryDownloadCache: {
     maxCacheSize: Number(
@@ -187,6 +228,15 @@ export const config = {
   },
   reconciliation: {
     intervalMs: Number(env('RECONCILIATION_INTERVAL_MS', '300000')), // 5 minutes
+  },
+  reclaim: {
+    batchSize: positiveIntEnv('RECLAIM_BATCH_SIZE', 50),
+    probeTimeoutMs: positiveIntEnv('FILES_GATEWAY_PROBE_TIMEOUT_MS', 10000),
+    sweepTimeoutMs: positiveIntEnv('RECLAIM_SWEEP_TIMEOUT_MS', 60000),
+    maxConsecutiveProbeFailures: positiveIntEnv(
+      'RECLAIM_MAX_CONSECUTIVE_FAILURES',
+      3,
+    ),
   },
   publishing: {
     // Backstop timeout for a single on-chain publishing task (publish-nodes /
@@ -685,6 +735,16 @@ export const config = {
     // rate; only the amount the user pays includes this margin. Applied in
     // createIntent (USDC path). Default: 5 (%).
     usdQuoteMarginPercent: Number(env('USD_QUOTE_MARGIN', '5')),
+  },
+  usageReports: {
+    // When attribution went live (#894): from then on every upload records its
+    // API key and the credit batches it drew from (#891). Reports show earlier
+    // usage as unattributed and have no credit balance for ranges starting
+    // before it. Unset means attribution has not gone live.
+    attributionStart: optionalDateEnv(
+      'ATTRIBUTION_START',
+      process.env.ATTRIBUTION_START,
+    ),
   },
   deletion: {
     gracePeriodDays: Number(env('DELETION_GRACE_PERIOD_DAYS', '30')),

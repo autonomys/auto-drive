@@ -1,5 +1,10 @@
+import pg from 'pg'
 import { MultiUploadBlockstore } from './blockstore.js'
 
-export const getUploadBlockstore = async (uploadId: string) => {
-  return new MultiUploadBlockstore(uploadId)
+// With a client, every read and write runs inside that client's transaction.
+export const getUploadBlockstore = async (
+  uploadId: string,
+  client?: pg.PoolClient,
+) => {
+  return new MultiUploadBlockstore(uploadId, client)
 }

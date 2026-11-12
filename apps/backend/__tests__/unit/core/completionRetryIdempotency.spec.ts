@@ -76,6 +76,20 @@ const installFakeBlockstore = () => {
       })
     })
 
+  // Chunk rows insert unconditionally, in the order given.
+  jest
+    .spyOn(blockstoreRepository, 'addChunkEntries')
+    .mockImplementation(async (uploadId, entries) => {
+      for (const entry of entries) {
+        rows.push({ sort_id: nextSortId++, upload_id: uploadId, ...entry })
+      }
+    })
+
+  // Every stored part has been processed, so completion finds no gap.
+  jest
+    .spyOn(filePartsRepository, 'getPartIndicesGreaterThan')
+    .mockResolvedValue([])
+
   const byUpload = (uploadId: string) =>
     rows
       .filter((r) => r.upload_id === uploadId)
@@ -170,6 +184,19 @@ const installFakeBlockstore = () => {
   }
 }
 
+// Serves `data` as stored part `index` and runs one drain step over it, as
+// uploadChunk does after storing a part.
+const processPart = async (data: Buffer, index: number) => {
+  jest
+    .spyOn(filePartsRepository, 'getChunkByUploadIdAndPartIndex')
+    .mockImplementation(async (_uploadId, partIndex) =>
+      partIndex === index ? ({ data } as any) : null,
+    )
+  expect(await UploadFileProcessingUseCase.processNextPart(UPLOAD_ID)).toBe(
+    true,
+  )
+}
+
 describe('completeUploadProcessing retry idempotency', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -200,7 +227,7 @@ describe('completeUploadProcessing retry idempotency', () => {
     }
 
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockImplementation(async () => storedInfo)
     const updateInfo = jest
       .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
@@ -227,6 +254,7 @@ describe('completeUploadProcessing retry idempotency', () => {
     // The tail is consumed, so a retry cannot flush it a second time.
     expect(updateInfo).toHaveBeenCalledWith(
       expect.objectContaining({ pending_bytes: null }),
+      expect.anything(),
     )
     expect(storedInfo.pending_bytes).toBeNull()
 
@@ -249,10 +277,10 @@ describe('completeUploadProcessing retry idempotency', () => {
 
   // The limit of that resume. Reusing the derived root is right only while the
   // upload still holds the bytes it was derived from, and `part A, failed
-  // complete, part B, complete` is legal at every step: uploadChunk has no status
-  // guard, the failed completion released the row to PENDING, and S3 permits
-  // UploadPart after a failed CompleteMultipartUpload. Silently returning A's CID
-  // would hand the client a truncated object to store and reference.
+  // complete, part B, complete` is legal at every step: the failed completion
+  // released the row to PENDING, so uploadChunk accepts parts again, and S3
+  // permits UploadPart after a failed CompleteMultipartUpload. Silently returning
+  // A's CID would hand the client a truncated object to store and reference.
   it('refuses to reuse a root node once more parts have been stored', async () => {
     installFakeBlockstore()
 
@@ -268,7 +296,7 @@ describe('completeUploadProcessing retry idempotency', () => {
     }
 
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockImplementation(async () => storedInfo)
     jest
       .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
@@ -289,14 +317,14 @@ describe('completeUploadProcessing retry idempotency', () => {
     } as any
     jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue(upload)
 
-    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, partA, 0)
+    await processPart(partA, 0)
     const firstCid =
       await UploadFileProcessingUseCase.completeUploadProcessing(upload)
 
     // Part B arrives while the upload is PENDING again after the failed
     // completion, then the client completes a second time.
     const partB = Buffer.alloc(DEFAULT_MAX_CHUNK_SIZE, 2)
-    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, partB, 1)
+    await processPart(partB, 1)
     storedBytes += BigInt(partB.byteLength)
 
     await expect(
@@ -325,7 +353,7 @@ describe('completeUploadProcessing retry idempotency', () => {
       updated_at: new Date(),
     }
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockImplementation(async () => storedInfo)
     jest
       .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
@@ -346,7 +374,7 @@ describe('completeUploadProcessing retry idempotency', () => {
     } as any
     jest.spyOn(uploadsRepository, 'getUploadEntryById').mockResolvedValue(upload)
 
-    await UploadFileProcessingUseCase.processChunk(UPLOAD_ID, part, 0)
+    await processPart(part, 0)
     const firstCid =
       await UploadFileProcessingUseCase.completeUploadProcessing(upload)
     const secondCid =
@@ -419,7 +447,7 @@ describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
       updated_at: new Date(),
     }
     jest
-      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoByUploadId')
+      .spyOn(fileProcessingInfoRepository, 'getFileProcessingInfoForUpdate')
       .mockImplementation(async () => info)
     jest
       .spyOn(fileProcessingInfoRepository, 'updateFileProcessingInfo')
@@ -465,11 +493,7 @@ describe('migrateFromBlockstoreToNodesTable over repeated content', () => {
     const PARTS = 14
     expect(PARTS * PART_SIZE).toBeGreaterThan(200 * DEFAULT_MAX_CHUNK_SIZE)
     for (let i = 0; i < PARTS; i++) {
-      await UploadFileProcessingUseCase.processChunk(
-        UPLOAD_ID,
-        Buffer.alloc(PART_SIZE, 0),
-        i,
-      )
+      await processPart(Buffer.alloc(PART_SIZE, 0), i)
       uploadedBytes += BigInt(PART_SIZE)
     }
     await UploadFileProcessingUseCase.completeUploadProcessing(uploadEntry)

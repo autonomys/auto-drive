@@ -55,9 +55,9 @@ export class UploadCompletionInProgressError extends ConflictError {
  * completeFileProcessing derives the root at most once and reuses it on re-entry,
  * which is what makes the "top up your credits and retry" flow resume instead of
  * restarting. Reuse is only correct while the upload still holds the same bytes
- * the root was built from, and it can stop being true: uploadChunk has no status
- * guard, a failed completion releases the row back to PENDING, and S3 permits
- * UploadPart after a failed CompleteMultipartUpload. Silently returning the old
+ * the root was built from, and it can stop being true: a failed completion
+ * releases the row back to PENDING, after which uploadChunk accepts parts again,
+ * and S3 permits UploadPart after a failed CompleteMultipartUpload. Silently returning the old
  * root would answer 200 with a CID covering a prefix of what the client
  * uploaded — a truncated object the client then stores and references. This says
  * so instead.

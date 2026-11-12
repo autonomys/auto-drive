@@ -2011,6 +2011,234 @@ describe('AWS S3 - SDK', () => {
         (list.Versions ?? []).some((ver) => ver.VersionId === v.VersionId),
       ).toBe(true)
     })
+
+    describe('CopyObject of a specific source version', () => {
+      const copyVersion = (
+        srcKey: string,
+        versionId: string | undefined,
+        dstKey: string,
+      ) =>
+        s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: dstKey,
+            CopySource: `${srcKey}?versionId=${versionId}`,
+          }),
+        )
+
+      const readBody = async (key: string) => {
+        const got = await s3Client.send(
+          new GetObjectCommand({ Bucket, Key: key }),
+        )
+        return {
+          body: Buffer.from(await got.Body!.transformToByteArray()).toString(),
+          etag: got.ETag,
+        }
+      }
+
+      it('copies the named older version, not the current one', async () => {
+        const src = 'versions-test/copy-old-src.txt'
+        const dst = 'versions-test/copy-old-dst.txt'
+        const v1 = await putVersion(src, 'old')
+        await putVersion(src, 'new-and-longer')
+
+        const copy = await copyVersion(src, v1.VersionId, dst)
+        expect(copy.CopyObjectResult?.ETag).toBe(v1.ETag)
+        expect(copy.VersionId).toBe(v1.VersionId)
+        expect(copy.CopySourceVersionId).toBe(v1.VersionId)
+
+        expect(await readBody(dst)).toEqual({ body: 'old', etag: v1.ETag })
+        expect((await readBody(src)).body).toBe('new-and-longer')
+      })
+
+      it('restores an older version onto its own key', async () => {
+        // rclone's `copyto --s3-versions remote:b/f-v<time>.txt remote:b/f.txt`.
+        const key = 'versions-test/copy-restore.txt'
+        const v1 = await putVersion(key, 'restore-me')
+        await putVersion(key, 'overwritten-content')
+
+        await copyVersion(key, v1.VersionId, key)
+
+        expect(await readBody(key)).toEqual({
+          body: 'restore-me',
+          etag: v1.ETag,
+        })
+        const list = await s3Client.send(
+          new ListObjectVersionsCommand({
+            Bucket: VBucket,
+            Prefix: 'copy-restore.txt',
+          }),
+        )
+        const latest = (list.Versions ?? []).find(
+          (v) => v.Key === 'copy-restore.txt' && v.IsLatest,
+        )
+        expect(latest?.VersionId).toBe(v1.VersionId)
+      })
+
+      it('restores a version of a key whose current state is a delete marker', async () => {
+        const key = 'versions-test/copy-undelete.txt'
+        const v1 = await putVersion(key, 'before-delete')
+        await putVersion(key, 'deleted-content')
+        await s3Client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+
+        await copyVersion(key, v1.VersionId, key)
+
+        expect(await readBody(key)).toEqual({
+          body: 'before-delete',
+          etag: v1.ETag,
+        })
+      })
+
+      it('carries the version metadata under COPY and the request metadata under REPLACE', async () => {
+        const src = 'versions-test/copy-meta-src.txt'
+        const v1 = await s3Client.send(
+          new PutObjectCommand({
+            Bucket,
+            Key: src,
+            Body: Buffer.from('meta-v1'),
+            ContentType: 'text/x-v1',
+            Metadata: { mtime: '1000.5', tag: 'v1' },
+          }),
+        )
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket,
+            Key: src,
+            Body: Buffer.from('meta-v2'),
+            ContentType: 'text/x-v2',
+            Metadata: { mtime: '2000.5', tag: 'v2' },
+          }),
+        )
+
+        await copyVersion(src, v1.VersionId, 'versions-test/copy-meta-copy.txt')
+        const copied = await s3Client.send(
+          new HeadObjectCommand({
+            Bucket,
+            Key: 'versions-test/copy-meta-copy.txt',
+          }),
+        )
+        expect(copied.ContentType).toBe('text/x-v1')
+        expect(copied.Metadata).toMatchObject({ mtime: '1000.5', tag: 'v1' })
+
+        await s3Client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: 'versions-test/copy-meta-replace.txt',
+            CopySource: `${src}?versionId=${v1.VersionId}`,
+            MetadataDirective: 'REPLACE',
+            ContentType: 'text/x-replaced',
+            Metadata: { mtime: '3000.5' },
+          }),
+        )
+        const replaced = await s3Client.send(
+          new HeadObjectCommand({
+            Bucket,
+            Key: 'versions-test/copy-meta-replace.txt',
+          }),
+        )
+        expect(replaced.ETag).toBe(v1.ETag)
+        expect(replaced.ContentType).toBe('text/x-replaced')
+        expect(replaced.Metadata?.mtime).toBe('3000.5')
+        expect(replaced.Metadata?.tag).toBeUndefined()
+      })
+
+      it('answers 404 NoSuchVersion for a version the source key never had', async () => {
+        const src = 'versions-test/copy-unknown-src.txt'
+        await putVersion(src, 'only-version')
+        // A real CID, but a version of a different key.
+        const other = await putVersion(
+          'versions-test/copy-unknown-other.txt',
+          'other-content',
+        )
+
+        await expect(
+          copyVersion(
+            src,
+            other.VersionId,
+            'versions-test/copy-unknown-dst.txt',
+          ),
+        ).rejects.toMatchObject({
+          $metadata: { httpStatusCode: 404 },
+          name: 'NoSuchVersion',
+        })
+        await expect(
+          s3Client.send(
+            new HeadObjectCommand({
+              Bucket,
+              Key: 'versions-test/copy-unknown-dst.txt',
+            }),
+          ),
+        ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      })
+
+      it('answers 400 InvalidRequest for a delete marker version id', async () => {
+        const key = 'versions-test/copy-marker.txt'
+        await putVersion(key, 'marked')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        expect(del.VersionId).toMatch(/^dm-\d+$/)
+
+        await expect(
+          copyVersion(key, del.VersionId, 'versions-test/copy-marker-dst.txt'),
+        ).rejects.toMatchObject({
+          $metadata: { httpStatusCode: 400 },
+          name: 'InvalidRequest',
+        })
+      })
+
+      it('refuses a version whose content was removed (404 NoSuchKey)', async () => {
+        // The sole key's DeleteObject moves its content to the web-app Trash, so
+        // that version must not be copyable, just as it is not readable.
+        const key = 'versions-test/copy-removed.txt'
+        const v = await putVersion(key, 'trashed-on-delete')
+        await s3Client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+
+        await expect(
+          copyVersion(key, v.VersionId, 'versions-test/copy-removed-dst.txt'),
+        ).rejects.toMatchObject({
+          $metadata: { httpStatusCode: 404 },
+          name: 'NoSuchKey',
+        })
+      })
+
+      it('answers 400 InvalidArgument for a version id that is not a CID', async () => {
+        const key = 'versions-test/copy-bad-id.txt'
+        const dst = 'versions-test/copy-bad-id-dst.txt'
+        await putVersion(key, 'bad-id')
+
+        // %01 cannot be echoed into an XML body and Postgres rejects %00.
+        for (const id of ['%01x', '%00', 'abc']) {
+          await expect(copyVersion(key, id, dst)).rejects.toMatchObject({
+            $metadata: { httpStatusCode: 400 },
+            name: 'InvalidArgument',
+          })
+        }
+        await expect(
+          s3Client.send(new HeadObjectCommand({ Bucket, Key: dst })),
+        ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+      })
+
+      it('copies the current version by its id when it has no version row', async () => {
+        // Keys written by a pre-#781 pod during that rollout have no row.
+        const key = 'versions-test/copy-no-row.txt'
+        const dst = 'versions-test/copy-no-row-dst.txt'
+        const v = await putVersion(key, 'no-version-row')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'copy-no-row.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+
+        const copy = await copyVersion(key, v.VersionId, dst)
+        expect(copy.VersionId).toBe(v.VersionId)
+        expect(await readBody(dst)).toEqual({
+          body: 'no-version-row',
+          etag: v.ETag,
+        })
+      })
+    })
   })
 
   describe('Missing keys', () => {

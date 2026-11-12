@@ -3,6 +3,7 @@ import {
   handleAdminAuth,
   handleAuth,
   handleAuthIgnoreOnboarding,
+  handleServiceAuth,
   refreshAccessToken,
 } from '../services/authManager/express.js'
 import { UsersUseCases } from '../useCases/index.js'
@@ -363,6 +364,30 @@ userController.get('/admin/search', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(error)
     res.status(500).json({ error: 'Failed to search users' })
+  }
+})
+
+// Service-only: the names of API keys, for the backend's usage reports.
+userController.post('/apiKeys/batch', async (req: Request, res: Response) => {
+  if (!handleServiceAuth(req, res)) {
+    return
+  }
+
+  const { ids } = req.body ?? {}
+  if (
+    !Array.isArray(ids) ||
+    ids.length > 100 ||
+    !ids.every((id) => typeof id === 'string')
+  ) {
+    res.status(400).json({ error: 'ids must be an array of up to 100 strings' })
+    return
+  }
+
+  try {
+    res.json(await ApiKeysUseCases.getApiKeyNames(ids))
+  } catch (error) {
+    logger.error(error)
+    res.status(500).json({ error: 'Failed to get API keys' })
   }
 })
 

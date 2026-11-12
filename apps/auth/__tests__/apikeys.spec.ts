@@ -129,6 +129,17 @@ describe('ApiKeyUseCases', () => {
     ).rejects.toThrow('API key not found')
   })
 
+  it('should name keys for reports, deleted ones included, without secrets', async () => {
+    const names = await ApiKeysUseCases.getApiKeyNames([
+      apiKey.id,
+      'non-existent-api-key',
+    ])
+
+    expect(names).toEqual([
+      { id: apiKey.id, name: 'My key', deletedAt: expect.any(Date) },
+    ])
+  })
+
   afterAll(async () => {
     await closeDatabase()
     await dbMigration.down()

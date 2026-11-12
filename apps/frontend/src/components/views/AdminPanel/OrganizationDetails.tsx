@@ -12,6 +12,7 @@ import {
   Calendar,
   Clock,
   CreditCard,
+  ChartColumn,
 } from 'lucide-react';
 import { gql, useApolloClient } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
@@ -49,6 +50,7 @@ import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
 import { PartnerTerms } from './PartnerTerms';
+import { UsageReportView } from '../UsageReport';
 
 // GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
@@ -531,6 +533,16 @@ export const OrganizationDetails = ({ accountId }: Props) => {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {account && (
+        <div className='rounded-lg border border-gray-200 bg-background p-6'>
+          <h2 className='mb-4 flex items-center gap-2 text-lg font-semibold'>
+            <ChartColumn className='h-5 w-5' />
+            Usage Report
+          </h2>
+          <UsageReportView accountId={account.id} />
         </div>
       )}
 
