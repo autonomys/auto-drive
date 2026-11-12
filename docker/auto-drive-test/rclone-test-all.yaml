@@ -1,14 +1,26 @@
-# rclone's integration test runner config (fstest/test_all), for the S3 backend
-# suite against an auto-drive-test container. Unlike rclone's own config.yaml,
-# the suite runs in full, without -short.
+# rclone's integration test runner config (fstest/test_all) for an
+# auto-drive-test container: the S3 backend suite, in full rather than with
+# -short as in rclone's own config.yaml, and the other suites rclone runs
+# against remotes.
 tests:
   - path: backend
     addbackend: true
     nobinary: true
+  - path: fs/operations
+    fastlist: true
+  - path: fs/sync
+    fastlist: true
+  - path: cmd/bisync
+  - path: cmd/gitannex
+  - path: vfs
 backends:
   - backend: "s3"
     remote: "TestS3Autonomys:"
     fastlist: true
+    # The image keeps production's per-client nginx limits, which answer 503.
+    # rclone retries those, but tests that make a single attempt, such as
+    # TestCopyURL, flake when several suites run at once.
+    oneonly: true
     ignore:
       # There are no bucket endpoints (#779): Rmdir of a bucket sends a request
       # with no key, which is handled as a DeleteObject and always succeeds.
