@@ -7,7 +7,10 @@ import {
   afterEach,
 } from '@jest/globals'
 import { S3UseCases } from '../../../src/core/s3/index.js'
-import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../../src/infrastructure/repositories/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
@@ -51,8 +54,22 @@ describe('S3UseCases', () => {
       ...over,
     }) as any
 
+  // Key writes and deletes run their queries on the client of a content-lock
+  // transaction; a stand-in client keeps these tests off the database.
+  const lockClient = {} as any
+
   beforeEach(() => {
     jest.clearAllMocks()
+    jest
+      .spyOn(s3ObjectMappingsRepository, 'withContentLock')
+      .mockImplementation(((
+        _p: string,
+        _u: string,
+        _c: string,
+        _mode: string,
+        fn: any,
+      ) => fn(lockClient)) as any)
+    jest.spyOn(ownershipRepository, 'restoreIfDeleted').mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -631,6 +648,7 @@ describe('S3UseCases', () => {
         expect.stringMatching(MULTIPART_MD5_RE),
         '1620000000.5',
         stashedMetadata,
+        lockClient,
       )
       expect(clearMetaSpy).toHaveBeenCalledWith('upload123')
     })
@@ -736,6 +754,7 @@ describe('S3UseCases', () => {
         '6cd3556deb0da54bca060b4c39479839',
         null,
         null,
+        lockClient,
       )
     })
 
@@ -767,6 +786,7 @@ describe('S3UseCases', () => {
         expect.any(String),
         null,
         metadata,
+        lockClient,
       )
     })
   })
@@ -872,19 +892,26 @@ describe('S3UseCases', () => {
   })
 
   describe('deleteObject', () => {
-    it('trashes the object then hides the key when it was the caller’s last reference', async () => {
+    const hideKey = () =>
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue(new Date(5000))
+    const remainingKeys = (count: number) =>
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
+        .mockResolvedValue(count)
+    const trash = (moved = true) =>
+      jest
+        .spyOn(ownershipRepository, 'markAsDeletedIfActive')
+        .mockResolvedValue(moved)
+
+    it('hides the key, then trashes the object at the key’s delete time when it was the caller’s last reference', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      const softDeleteSpy = hideKey()
+      const countSpy = remainingKeys(0)
+      const trashSpy = trash()
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -899,12 +926,33 @@ describe('S3UseCases', () => {
         deleteMarker: true,
         versionId: 'dm-5000',
       })
-      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(s3ObjectMappingsRepository.withContentLock).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        'exclusive',
+        expect.any(Function),
+      )
       expect(softDeleteSpy).toHaveBeenCalledWith(
         'google',
         'user1',
         'my-bucket',
         'file.txt',
+        'cid123',
+        lockClient,
+      )
+      expect(countSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        lockClient,
+      )
+      expect(trashSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        new Date(5000),
+        lockClient,
       )
     })
 
@@ -912,17 +960,9 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ key: 'copy.txt' }))
-      // before-hide = 2, after-hide re-check = 1 (sibling still active).
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValueOnce(2)
-        .mockResolvedValueOnce(1)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      hideKey()
+      remainingKeys(1)
+      const trashSpy = trash()
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -931,32 +971,37 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
-    it('trashes via the race guard when a concurrent delete removed the sibling', async () => {
+    it('leaves the object alone when the key was deleted or rewritten before it could be hidden', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping({ key: 'k2.txt' }))
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValueOnce(2)
-        .mockResolvedValueOnce(0)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
+        .mockResolvedValue(mapping())
       jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+        .mockResolvedValue(null)
+      const countSpy = remainingKeys(0)
+      const trashSpy = trash()
 
-      const result = await S3UseCases.deleteObject(mockUser, 'my-bucket', 'k2.txt')
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
 
-      expect(result.isOk()).toBe(true)
-      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: false,
+        versionId: null,
+      })
+      expect(countSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
     it('is a no-op with no marker when the key never existed', async () => {
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
       // No soft-deleted row either: the key never existed → no delete marker.
       jest
         .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
@@ -965,7 +1010,7 @@ describe('S3UseCases', () => {
         s3ObjectMappingsRepository,
         'softDeleteMapping',
       )
-      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
+      const trashSpy = jest.spyOn(ownershipRepository, 'markAsDeletedIfActive')
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -980,14 +1025,16 @@ describe('S3UseCases', () => {
         versionId: null,
       })
       expect(softDeleteSpy).not.toHaveBeenCalled()
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
     it('reports the existing delete marker on a repeat delete of an already-deleted key', async () => {
       // findByKey hides soft-deleted rows, so a repeat DeleteObject sees no live
       // key — but the current state IS a delete marker, so report it (no new
       // marker is created).
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
       jest
         .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
         .mockResolvedValue({ deletedAt: new Date(5000) })
@@ -1011,19 +1058,13 @@ describe('S3UseCases', () => {
       expect(softDeleteSpy).not.toHaveBeenCalled()
     })
 
-    it('still succeeds when moving the object to Trash fails', async () => {
+    it('still succeeds when the object cannot be moved to Trash', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
-      jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(err(new ForbiddenError('not an owner')))
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      hideKey()
+      remainingKeys(0)
+      trash(false)
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -1031,8 +1072,10 @@ describe('S3UseCases', () => {
         'file.txt',
       )
 
-      expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).toHaveBeenCalled()
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: true,
+        versionId: 'dm-5000',
+      })
     })
   })
 
@@ -1080,6 +1123,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1139,6 +1183,7 @@ describe('S3UseCases', () => {
         source.md5,
         '111.5',
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1167,6 +1212,7 @@ describe('S3UseCases', () => {
         source.md5,
         '222.9',
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1195,6 +1241,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1223,6 +1270,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         srcMeta,
+        lockClient,
       )
     })
 
@@ -1257,6 +1305,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         replacement,
+        lockClient,
       )
     })
 

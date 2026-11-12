@@ -1,4 +1,5 @@
 import { S3ObjectListing } from '@autonomys/file-server'
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 import { ownershipSQL } from '../objects/ownership.js'
 
@@ -144,8 +145,9 @@ const createMapping = async (
   md5: string | null = null,
   mtime: string | null = null,
   metadata: S3ObjectMetadata | null = null,
+  client?: pg.PoolClient,
 ): Promise<S3KeyMapping> => {
-  const db = await getDatabase()
+  const db = client ?? (await getDatabase())
 
   // Plain upsert keyed on (owner, bucket, key): a user can only ever hit their
   // OWN row, so there is no cross-user contention to guard against. ON CONFLICT
@@ -180,8 +182,8 @@ const createMapping = async (
       ),
       versioned AS (
         INSERT INTO "S3".object_versions
-          (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (owner_oauth_provider, owner_oauth_user_id, bucket, "key", cid, md5, mtime, metadata, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, statement_timestamp())
       )
       SELECT * FROM upserted
     `,
@@ -420,76 +422,36 @@ const findSoftDeletedByKey = async (
 }
 
 /**
- * Soft-delete a single (owner, bucket, key) mapping (S3 DeleteObject). Sets
- * deleted_at so the key is hidden from every read path; the underlying content
- * is never removed from the DSN. Idempotent: deleting an already-deleted or
- * non-existent key is a no-op (S3 DeleteObject succeeds regardless). Returns the
- * cid and deleted_at of the row it just soft-deleted, or null if there was no
- * active row: the caller uses the cid to decide whether to also move the object
- * to the UI Trash, and deleted_at as the created delete marker's timestamp.
+ * Soft-delete a single (owner, bucket, key) mapping (S3 DeleteObject), if it
+ * still points at `cid`. Sets deleted_at so the key is hidden from every read
+ * path; the underlying content is never removed from the DSN. Idempotent:
+ * deleting an already-deleted or non-existent key is a no-op (S3 DeleteObject
+ * succeeds regardless). Returns the deleted_at of the row it just soft-deleted,
+ * or null if there was no such active row: the caller uses it as the created
+ * delete marker's timestamp and as the Trash time.
  */
 const softDeleteMapping = async (
   ownerOauthProvider: string,
   ownerOauthUserId: string,
   bucket: string,
   s3Key: string,
-): Promise<{ cid: string; deletedAt: Date } | null> => {
-  const db = await getDatabase()
+  cid: string,
+  client?: pg.PoolClient,
+): Promise<Date | null> => {
+  const db = client ?? (await getDatabase())
 
-  const result = await db.query<{ cid: string; deleted_at: Date }>({
+  const result = await db.query<{ deleted_at: Date }>({
     text: `
       UPDATE "S3".object_mappings
-      SET deleted_at = NOW(), updated_at = NOW()
+      SET deleted_at = statement_timestamp(), updated_at = NOW()
       WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
-        AND bucket = $3 AND "key" = $4 AND deleted_at IS NULL
-      RETURNING cid, deleted_at
+        AND bucket = $3 AND "key" = $4 AND cid = $5 AND deleted_at IS NULL
+      RETURNING deleted_at
     `,
-    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key],
+    values: [ownerOauthProvider, ownerOauthUserId, bucket, s3Key, cid],
   })
 
-  const row = result.rows[0]
-  return row ? { cid: row.cid, deletedAt: row.deleted_at } : null
-}
-
-/**
- * Clear the soft-delete flag on the caller's mappings pointing at a cid. Called
- * when the underlying object is restored from the web-app Trash so that S3 keys
- * hidden by a DeleteObject reappear too — the reverse of deleteObject's
- * propagation to the Trash, keeping the S3 namespace and the UI in sync.
- *
- * When `since` is given, only keys soft-deleted at/after that instant are
- * restored. deleteObject stamps the object's Trash time (ownership) BEFORE it
- * hides the mapping, so the triggering key's deleted_at is >= the Trash time,
- * while keys the owner had individually deleted earlier stay hidden — restore
- * brings back what this trash removed, not every alias that ever pointed here.
- */
-const restoreMappingsByCid = async (
-  ownerOauthProvider: string,
-  ownerOauthUserId: string,
-  cid: string,
-  since: Date | null = null,
-): Promise<void> => {
-  const db = await getDatabase()
-
-  const base = `
-    UPDATE "S3".object_mappings
-    SET deleted_at = NULL, updated_at = NOW()
-    WHERE owner_oauth_provider = $1 AND owner_oauth_user_id = $2
-      AND cid = $3 AND deleted_at IS NOT NULL
-  `
-
-  if (since) {
-    await db.query({
-      text: base + ' AND deleted_at >= $4',
-      values: [ownerOauthProvider, ownerOauthUserId, cid, since],
-    })
-    return
-  }
-
-  await db.query({
-    text: base,
-    values: [ownerOauthProvider, ownerOauthUserId, cid],
-  })
+  return result.rows[0]?.deleted_at ?? null
 }
 
 /**
@@ -503,8 +465,9 @@ const countActiveMappingsByCid = async (
   ownerOauthProvider: string,
   ownerOauthUserId: string,
   cid: string,
+  client?: pg.PoolClient,
 ): Promise<number> => {
-  const db = await getDatabase()
+  const db = client ?? (await getDatabase())
 
   const result = await db.query<{ count: string }>({
     text: `
@@ -517,6 +480,50 @@ const countActiveMappingsByCid = async (
   })
 
   return Number(result.rows[0]?.count ?? 0)
+}
+
+/**
+ * Run `fn` in one transaction holding a lock on the caller's keys to `cid`, so
+ * that the DeleteObject "last key" decision never interleaves with a write of a
+ * key to that content. Deletes take the lock `exclusive`; writes take it
+ * `shared`, as they only add keys and take the content out of Trash, which is
+ * safe to do concurrently. `fn` must run every query on the client it is
+ * given: a query on the pool from inside it deadlocks once every pool
+ * connection is held by a request waiting for this lock.
+ */
+const withContentLock = async <T>(
+  ownerOauthProvider: string,
+  ownerOauthUserId: string,
+  cid: string,
+  mode: 'shared' | 'exclusive',
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> => {
+  const lockKey = JSON.stringify([
+    's3-content',
+    ownerOauthProvider,
+    ownerOauthUserId,
+    cid,
+  ])
+  const db = await getDatabase()
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
+    const lockFunction =
+      mode === 'shared'
+        ? 'pg_advisory_xact_lock_shared'
+        : 'pg_advisory_xact_lock'
+    await client.query(`SELECT ${lockFunction}(hashtextextended($1, 0))`, [
+      lockKey,
+    ])
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 const listBuckets = async (
@@ -703,8 +710,8 @@ export const s3ObjectMappingsRepository = {
   findVersionByCid,
   listObjectVersions,
   softDeleteMapping,
-  restoreMappingsByCid,
   countActiveMappingsByCid,
+  withContentLock,
   setMultipartMeta,
   getMultipartMeta,
   deleteMultipartMeta,
