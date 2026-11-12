@@ -2192,6 +2192,28 @@ describe('AWS S3 - SDK', () => {
         ).toMatchObject({ status: 404, name: 'NoSuchVersion' })
       })
 
+      it('answers 405 for the delete marker of a key with no version row', async () => {
+        const key = 'versions-test/get-no-row-marker.txt'
+        await putVersion(key, 'get-no-row-marker-content')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'get-no-row-marker.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        expect(del.VersionId).toMatch(/^dm-\d+$/)
+
+        const get = await rejection(getVersion(key, del.VersionId!))
+        expect(get).toMatchObject({ status: 405, name: 'MethodNotAllowed' })
+        expect(get.headers).toMatchObject({
+          'x-amz-delete-marker': 'true',
+          'x-amz-version-id': del.VersionId,
+        })
+      })
+
       it('serves the current version by its id when it has no version row', async () => {
         // Keys written by a pre-#781 pod during that rollout have no row.
         const key = 'versions-test/get-no-row.txt'

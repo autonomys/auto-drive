@@ -252,9 +252,10 @@ const findVersionByCid = async (
  * current state is not a delete marker. Scoped to the caller's namespace.
  *
  * Mirrors the marker buildListVersionsResult synthesises from listObjectVersions
- * rows: a key with version history has one when its pointer is soft-deleted
- * (dated by deleted_at) or its newest version's content is owner-removed (dated
- * by that version's write time).
+ * rows: a key has one when its pointer is soft-deleted (dated by deleted_at) or
+ * its newest version's content is owner-removed (dated by that version's write
+ * time). A key with no version row still has the first kind, because
+ * DeleteObject reports it.
  */
 const findDeleteMarkerTime = async (
   ownerOauthProvider: string,
@@ -265,7 +266,7 @@ const findDeleteMarkerTime = async (
   const db = await getDatabase()
   const result = await db.query<{
     deleted_at: Date | null
-    newest_version_at: Date
+    newest_version_at: Date | null
     owner_removed: boolean
   }>({
     text: `
@@ -274,7 +275,7 @@ const findDeleteMarkerTime = async (
         ov.created_at AS newest_version_at,
         NOT (${ownershipSQL.notRemovedByOwnerSQL('ov.cid')}) AS owner_removed
       FROM "S3".object_mappings om
-      JOIN LATERAL (
+      LEFT JOIN LATERAL (
         SELECT v.cid, v.created_at
         FROM "S3".object_versions v
         WHERE v.owner_oauth_provider = om.owner_oauth_provider
