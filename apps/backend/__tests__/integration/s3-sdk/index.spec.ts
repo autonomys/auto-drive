@@ -36,7 +36,7 @@ import { config } from '../../../src/config.js'
 import { AccountsUseCases, ObjectUseCases } from '../../../src/core/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
-import { InteractionType } from '@auto-drive/models'
+import { InteractionType, ObjectTag } from '@auto-drive/models'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -1998,7 +1998,15 @@ describe('AWS S3 - SDK', () => {
         s3Client.send(
           new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
         ),
-      ).rejects.toThrow()
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
+      })
+      await expect(
+        s3Client.send(
+          new HeadObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
 
       // Retention ≠ retrieval: the version is still enumerated in the history.
       const list = await s3Client.send(
@@ -2010,6 +2018,214 @@ describe('AWS S3 - SDK', () => {
       expect(
         (list.Versions ?? []).some((ver) => ver.VersionId === v.VersionId),
       ).toBe(true)
+    })
+
+    describe('GetObject and HeadObject of a version that cannot be served', () => {
+      const getVersion = (key: string, versionId: string) =>
+        s3Client.send(
+          new GetObjectCommand({ Bucket, Key: key, VersionId: versionId }),
+        )
+      const headVersion = (key: string, versionId: string) =>
+        s3Client.send(
+          new HeadObjectCommand({ Bucket, Key: key, VersionId: versionId }),
+        )
+
+      // The SDK keeps a failed call's headers on the non-enumerable $response.
+      const rejection = async (request: Promise<unknown>) => {
+        try {
+          await request
+        } catch (e) {
+          const err = e as {
+            name: string
+            $metadata: { httpStatusCode?: number }
+            $response?: { headers: Record<string, string> }
+            Key?: string
+            VersionId?: string
+          }
+          return {
+            status: err.$metadata.httpStatusCode,
+            name: err.name,
+            headers: err.$response?.headers ?? {},
+            Key: err.Key,
+            VersionId: err.VersionId,
+          }
+        }
+        throw new Error('expected the request to be refused')
+      }
+
+      const findMarker = async (name: string) => {
+        const list = await s3Client.send(
+          new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: name }),
+        )
+        return (list.DeleteMarkers ?? []).find((m) => m.Key === name)
+      }
+
+      it('answers 404 NoSuchVersion for a version the key never had', async () => {
+        const key = 'versions-test/get-unknown.txt'
+        await putVersion(key, 'get-unknown-only-version')
+        // A real CID, but a version of a different key.
+        const other = await putVersion(
+          'versions-test/get-unknown-other.txt',
+          'get-unknown-other-content',
+        )
+
+        expect(
+          await rejection(getVersion(key, other.VersionId!)),
+        ).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+          Key: 'get-unknown.txt',
+          VersionId: other.VersionId,
+        })
+        expect(
+          (await rejection(headVersion(key, other.VersionId!))).status,
+        ).toBe(404)
+      })
+
+      it('answers 405 MethodNotAllowed with delete-marker headers for a delete marker id', async () => {
+        const key = 'versions-test/get-marker.txt'
+        await putVersion(key, 'get-marker-content')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        const markerId = del.VersionId!
+        expect(markerId).toMatch(/^dm-\d+$/)
+        const marker = await findMarker('get-marker.txt')
+        expect(marker?.VersionId).toBe(markerId)
+        const markerHeaders = {
+          'x-amz-delete-marker': 'true',
+          'x-amz-version-id': markerId,
+          'last-modified': marker!.LastModified!.toUTCString(),
+        }
+
+        const get = await rejection(getVersion(key, markerId))
+        expect(get).toMatchObject({ status: 405, name: 'MethodNotAllowed' })
+        expect(get.headers).toMatchObject(markerHeaders)
+
+        const head = await rejection(headVersion(key, markerId))
+        expect(head.status).toBe(405)
+        expect(head.headers).toMatchObject(markerHeaders)
+      })
+
+      it('answers 405 for the delete marker of a key whose content was trashed in the web app', async () => {
+        // The pointer is still live, so the marker ListObjectVersions shows is
+        // dated by the newest version rather than by a DeleteObject.
+        const key = 'versions-test/get-web-trashed.txt'
+        const v = await putVersion(key, 'get-web-trashed-content')
+        await ObjectUseCases.markAsDeleted(user, v.VersionId!)
+        const marker = await findMarker('get-web-trashed.txt')
+        expect(marker?.VersionId).toMatch(/^dm-\d+$/)
+
+        const head = await rejection(headVersion(key, marker!.VersionId!))
+        expect(head.status).toBe(405)
+        expect(head.headers).toMatchObject({
+          'x-amz-delete-marker': 'true',
+          'last-modified': marker!.LastModified!.toUTCString(),
+        })
+      })
+
+      it('answers 404 NoSuchVersion for a delete marker id the key does not have', async () => {
+        const key = 'versions-test/get-foreign-marker.txt'
+        await putVersion(key, 'get-foreign-marker-live')
+        const deleted = 'versions-test/get-foreign-marker-deleted.txt'
+        await putVersion(deleted, 'get-foreign-marker-deleted')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: deleted }),
+        )
+
+        const get = await rejection(getVersion(key, del.VersionId!))
+        expect(get).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+          VersionId: del.VersionId,
+        })
+        expect(get.headers['x-amz-delete-marker']).toBeUndefined()
+        expect((await rejection(headVersion(key, del.VersionId!))).status).toBe(
+          404,
+        )
+      })
+
+      it('answers 404 NoSuchVersion for a delete marker a later write replaced', async () => {
+        // Only a key's current delete marker is kept: a write after the delete
+        // drops the marker from ListObjectVersions, so it is no longer a version.
+        const key = 'versions-test/get-stale-marker.txt'
+        await putVersion(key, 'get-stale-marker-before')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        await putVersion(key, 'get-stale-marker-after')
+        expect(await findMarker('get-stale-marker.txt')).toBeUndefined()
+
+        expect(await rejection(getVersion(key, del.VersionId!))).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+        })
+      })
+
+      it('answers 400 InvalidArgument for a version id that names no version', async () => {
+        const key = 'versions-test/get-bad-id.txt'
+        await putVersion(key, 'get-bad-id-content')
+
+        // \x01 cannot be echoed into an XML body and Postgres rejects \x00.
+        for (const id of ['\x01x', '\x00', 'abc', 'dm-', 'dm-1x', 'dm-\x01']) {
+          expect({
+            id,
+            ...(await rejection(getVersion(key, id))),
+          }).toMatchObject({ id, status: 400, name: 'InvalidArgument' })
+          expect({
+            id,
+            status: (await rejection(headVersion(key, id))).status,
+          }).toEqual({ id, status: 400 })
+        }
+      })
+
+      it('answers 404 NoSuchVersion for a key that XML cannot carry', async () => {
+        const key = 'versions-test/get-ctl-\x01.txt'
+        await putVersion(key, 'get-ctl-content')
+        const other = await putVersion(
+          'versions-test/get-ctl-other.txt',
+          'get-ctl-other-content',
+        )
+
+        expect(
+          await rejection(getVersion(key, other.VersionId!)),
+        ).toMatchObject({ status: 404, name: 'NoSuchVersion' })
+      })
+
+      it('serves the current version by its id when it has no version row', async () => {
+        // Keys written by a pre-#781 pod during that rollout have no row.
+        const key = 'versions-test/get-no-row.txt'
+        const v = await putVersion(key, 'get-no-row-content')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'get-no-row.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+
+        const head = await headVersion(key, v.VersionId!)
+        expect(head).toMatchObject({ VersionId: v.VersionId, ETag: v.ETag })
+        const got = await getVersion(key, v.VersionId!)
+        expect(got).toMatchObject({ VersionId: v.VersionId, ETag: v.ETag })
+        expect(
+          Buffer.from(await got.Body!.transformToByteArray()).toString(),
+        ).toBe('get-no-row-content')
+      })
+
+      it('keeps answering 451 for a version whose content is banned', async () => {
+        const key = 'versions-test/get-banned.txt'
+        const v1 = await putVersion(key, 'get-banned-content')
+        await putVersion(key, 'get-banned-current')
+        await ObjectUseCases.addTag(v1.VersionId!, ObjectTag.Banned)
+
+        expect(await rejection(getVersion(key, v1.VersionId!))).toMatchObject({
+          status: 451,
+          name: 'UnavailableForLegalReasons',
+        })
+        expect((await rejection(headVersion(key, v1.VersionId!))).status).toBe(
+          451,
+        )
+      })
     })
 
     describe('CopyObject of a specific source version', () => {
