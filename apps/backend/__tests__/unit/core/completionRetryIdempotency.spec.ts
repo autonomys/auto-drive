@@ -104,6 +104,14 @@ const installFakeBlockstore = () => {
     )
 
   jest
+    .spyOn(blockstoreRepository, 'getCidsByType')
+    .mockImplementation(async (uploadId, nodeType) =>
+      byUpload(uploadId)
+        .filter((r) => r.node_type === nodeType)
+        .map((r) => r.cid),
+    )
+
+  jest
     .spyOn(blockstoreRepository, 'getByCid')
     .mockImplementation(
       async (uploadId, cid) =>

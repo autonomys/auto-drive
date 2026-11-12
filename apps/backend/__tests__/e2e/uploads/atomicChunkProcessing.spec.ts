@@ -234,6 +234,27 @@ describe('atomic per-part processing', () => {
     await expectCleanResult(uploadId, name, file)
   })
 
+  it('completes a multi-chunk file without reading its chunk data', async () => {
+    const name = 'no-payload.bin'
+    const file = randomBytes(5 * DEFAULT_MAX_CHUNK_SIZE + 1234)
+    const uploadId = await createUpload(name)
+    for (const [index, part] of splitParts(file).entries()) {
+      await UploadsUseCases.uploadChunk(user, uploadId, index, part)
+    }
+
+    const getByType = jest.spyOn(blockstoreRepository, 'getByType')
+    const getByCid = jest.spyOn(blockstoreRepository, 'getByCid')
+    const getAll = jest.spyOn(blockstoreRepository, 'getBlockstoreEntries')
+    const cid = await UploadsUseCases.completeUpload(user, uploadId)
+
+    expect(cid).toBe(await goldenCid(name, file))
+    expect(getByType.mock.calls.map((call) => call[1])).not.toContain(
+      MetadataType.FileChunk,
+    )
+    expect(getByCid).not.toHaveBeenCalled()
+    expect(getAll).not.toHaveBeenCalled()
+  })
+
   it('processes parts that arrive out of order once the gap fills', async () => {
     const name = 'out-of-order.bin'
     const file = randomBytes(3 * PART_SIZE - 777)

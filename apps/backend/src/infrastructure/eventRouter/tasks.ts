@@ -92,6 +92,11 @@ export const TaskSchema = z.discriminatedUnion('id', [
     retriesLeft: z.number().default(MAX_RETRIES),
     params: z.object({}),
   }),
+  z.object({
+    id: z.literal('reclaim-archived-data'),
+    retriesLeft: z.number().default(MAX_RETRIES),
+    params: z.object({}),
+  }),
 ])
 
 export type MigrateUploadTask = z.infer<typeof TaskSchema>
@@ -169,6 +174,10 @@ type TaskCreateParams =
       id: 'recover-migrations'
       params: Record<string, never>
     }
+  | {
+      id: 'reclaim-archived-data'
+      params: Record<string, never>
+    }
 
 export const createTask = (task: TaskCreateParams): Task => {
   switch (task.id) {
@@ -244,7 +253,14 @@ export const createTask = (task: TaskCreateParams): Task => {
         params: task.params,
         retriesLeft: MAX_RETRIES,
       }
+    case 'reclaim-archived-data':
+      return {
+        id: task.id,
+        params: task.params,
+        retriesLeft: MAX_RETRIES,
+      }
     default:
       return exhaustiveCheck(task)
   }
 }
+
