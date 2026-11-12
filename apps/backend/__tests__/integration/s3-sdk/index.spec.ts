@@ -2297,7 +2297,7 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(404)
       const body = await res.text()
       expect(body).toContain('<Code>NoSuchKey</Code>')
-      expect(body).toContain(ControlCharKey.replace('\x19', '�'))
+      expect(body).toContain(ControlCharKey.replace('\x19', '\uFFFD'))
     })
   })
 
@@ -2350,6 +2350,41 @@ describe('AWS S3 - SDK', () => {
         expect(await res.text()).toContain(`<Code>${code}</Code>`)
       },
     )
+  })
+
+  describe('Listing a key that contains U+FFFF', () => {
+    beforeAll(async () => {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: 'nonchar-list/k\uFFFF',
+          Body: Buffer.from('x'),
+        }),
+      )
+    })
+
+    it.each([
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ])(
+      '$op without encoding-type answers 400 InvalidArgument',
+      async ({ query }) => {
+        const res = await fetch(`${BASE_PATH}/s3/nonchar-list?${query}`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+      },
+    )
+
+    it('ListObjectsV2 with encoding-type=url returns the key encoded', async () => {
+      const res = await fetch(
+        `${BASE_PATH}/s3/nonchar-list?list-type=2&encoding-type=url`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('<Key>k%EF%BF%BF</Key>')
+    })
   })
 
   // These remain unimplemented and must return 501, never reach a write handler.

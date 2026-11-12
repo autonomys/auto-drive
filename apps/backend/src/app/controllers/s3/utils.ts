@@ -17,9 +17,11 @@ export const sendXML = <T extends object>(
   )
 }
 
-// Control characters XML 1.0 cannot represent (all except TAB, LF, CR).
+// Characters XML 1.0 cannot represent: control characters other than TAB, LF
+// and CR, and U+FFFE/U+FFFF. Lone surrogates are illegal too, but a key read
+// back from Postgres cannot contain one.
 // eslint-disable-next-line no-control-regex
-const XML_ILLEGAL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/
+const XML_ILLEGAL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/
 
 export const hasXmlIllegalChars = (value: string): boolean =>
   XML_ILLEGAL_CHARS.test(value)

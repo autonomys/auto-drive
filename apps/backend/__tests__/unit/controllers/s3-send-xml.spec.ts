@@ -20,12 +20,12 @@ describe('sendXML', () => {
     sendXML(res, 'Error', {
       Code: 'NoSuchKey',
       Message: 'Object default/a\x19b not found',
-      Key: 'a\x00&<b￿c\td',
+      Key: 'a\x00&<b\uFFFFc\td',
     })
     expect(state.body).toContain(
-      '<Message>Object default/a�b not found</Message>',
+      '<Message>Object default/a\uFFFDb not found</Message>',
     )
-    expect(state.body).toContain('<Key>a�&amp;&lt;b�c\td</Key>')
+    expect(state.body).toContain('<Key>a\uFFFD&amp;&lt;b\uFFFDc\td</Key>')
   })
 
   it('refuses to rewrite a success body', () => {
