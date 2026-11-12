@@ -1777,6 +1777,31 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(503)
       expect(await res.text()).toContain('<Code>ServiceUnavailable</Code>')
     })
+
+    // The body parser answers this encoding 501 when it reaches the body, so a
+    // 403 shows the credentials were checked first.
+    it('answers an unsigned write before reading its body', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/auth-test/probe.txt`, {
+        method: 'PUT',
+        headers: { 'Content-Encoding': 'aws-chunked' },
+        body: 'x',
+      })
+      expect(res.status).toBe(403)
+      expect(await res.text()).toContain('<Code>AccessDenied</Code>')
+    })
+
+    it('authenticates a write once', async () => {
+      const lookup = jest.spyOn(AuthManager, 'getUserFromAccessToken')
+      lookup.mockClear()
+
+      const res = await fetch(`${BASE_PATH}/s3/auth-test/once.txt`, {
+        method: 'PUT',
+        headers: { Authorization: AUTH },
+        body: 'x',
+      })
+      expect(res.status).toBe(200)
+      expect(lookup).toHaveBeenCalledTimes(1)
+    })
   })
 
   // Versioned-WORM (issue #781): versioning is always on, versionId = the

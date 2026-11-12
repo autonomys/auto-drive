@@ -131,6 +131,7 @@ describe('a suffix range is resolved by the use case, not a second read', () => 
     const headers = new Map<string, string>()
     const state: { status?: number; body?: string } = {}
     const res = {
+      locals: {},
       set: (name: string, value: string) => {
         headers.set(name.toLowerCase(), value)
         return res

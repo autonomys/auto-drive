@@ -17,6 +17,7 @@ import { createMockUser } from '../../utils/mocks.js'
 const stubRes = () => {
   const state = { status: 200, body: '', headers: new Map<string, string>() }
   const res = {
+    locals: {},
     status: (code: number) => {
       state.status = code
       return res

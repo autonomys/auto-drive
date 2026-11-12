@@ -22,6 +22,7 @@ describe('S3 reads and download credits', () => {
     const headers = new Map<string, string>()
     const state: { status?: number; body?: string } = {}
     const res = {
+      locals: {},
       headersSent: false,
       set: (name: string, value: string) => {
         headers.set(name.toLowerCase(), value)

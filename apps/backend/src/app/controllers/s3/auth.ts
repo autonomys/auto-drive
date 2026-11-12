@@ -26,9 +26,23 @@ const logger = createLogger('s3:auth')
  *   - the key is rejected            → 403 InvalidAccessKeyId (permanent)
  *   - the auth service cannot answer → 503 ServiceUnavailable (retryable)
  *
- * Returns the authenticated user, or null once a response has been sent.
+ * Returns the authenticated user, or null once a response has been sent. The
+ * user is kept on res.locals, so a request is authenticated once however many
+ * times this is called for it.
  */
 export const handleS3Auth = async (
+  req: Request,
+  res: Response,
+): Promise<UserWithOrganization | null> => {
+  if (res.locals.s3User) {
+    return res.locals.s3User
+  }
+  const user = await authenticateS3(req, res)
+  res.locals.s3User = user
+  return user
+}
+
+const authenticateS3 = async (
   req: Request,
   res: Response,
 ): Promise<UserWithOrganization | null> => {

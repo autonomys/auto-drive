@@ -152,6 +152,12 @@ export const config = {
   express: {
     port: Number(env('PORT', '3000')),
     requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
+    // Largest file part POST /uploads/file/:uploadId/chunk accepts. The default
+    // matches the S3 endpoint's per-request body limit.
+    uploadChunkMaxBytes: positiveIntEnv(
+      'UPLOAD_CHUNK_MAX_BYTES',
+      200 * 1024 * 1024,
+    ),
     corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   },
   chain: {
