@@ -183,9 +183,20 @@ export class BadRequestError extends HttpError {
 // the operation (e.g. trying to reprocess an intent that is not OVER_CAP).
 export class ConflictError extends HttpError {
   static readonly statusCode = 409
-  constructor(message: string) {
-    super(ConflictError.statusCode, message)
+  constructor(message: string, errorCode?: string) {
+    super(ConflictError.statusCode, message, errorCode)
     this.name = 'ConflictError'
+  }
+}
+
+// 409 Conflict — moving a user into a partner organization would leave their
+// purchased credits behind on their current account. An admin can confirm the
+// move anyway, so the client needs the code to offer that.
+export class UnusedCreditsError extends ConflictError {
+  static readonly code = 'UNUSED_PURCHASED_CREDITS'
+  constructor(message: string) {
+    super(message, UnusedCreditsError.code)
+    this.name = 'UnusedCreditsError'
   }
 }
 

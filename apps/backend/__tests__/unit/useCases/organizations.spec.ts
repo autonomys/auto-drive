@@ -27,6 +27,7 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnusedCreditsError,
 } from '../../../src/errors/index.js'
 
 const admin = { role: UserRole.Admin, publicId: 'admin-pub' } as User
@@ -220,8 +221,49 @@ describe('OrganizationsUseCases', () => {
       )
 
       const error = result._unsafeUnwrapErr()
-      expect(error).toBeInstanceOf(ConflictError)
+      expect(error).toBeInstanceOf(UnusedCreditsError)
       expect(error.message).toContain('1024 bytes of purchased credits')
+      expect(addMemberSpy).not.toHaveBeenCalled()
+    })
+
+    it('moves a user with purchased credits when the admin allows it', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue(remaining(1024n))
+
+      const result = await OrganizationsUseCases.addMember(
+        admin,
+        'partner-org',
+        'pub1',
+        OrganizationRole.Member,
+        { allowUnusedCredits: true },
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(addMemberSpy).toHaveBeenCalled()
+    })
+
+    it('reports unresolved payments before purchased credits', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue(remaining(1024n))
+      jest
+        .spyOn(intentsRepository, 'getByUserAndStatuses')
+        .mockResolvedValue([
+          { id: 'i1', status: IntentStatus.PENDING } as Intent,
+        ])
+
+      const result = await OrganizationsUseCases.addMember(
+        admin,
+        'partner-org',
+        'pub1',
+        OrganizationRole.Member,
+        { allowUnusedCredits: true },
+      )
+
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(ConflictError)
+      expect(error).not.toBeInstanceOf(UnusedCreditsError)
       expect(addMemberSpy).not.toHaveBeenCalled()
     })
 

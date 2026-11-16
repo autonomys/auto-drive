@@ -12,6 +12,7 @@ import {
   OrganizationWithMembers,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
+import { ApiError } from '@/services/api';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -46,8 +47,9 @@ const describeChange = (
 
 /**
  * Members of a partner organization: add, change role and remove. The
- * backend refuses a move while the user holds purchased credits or has
- * unresolved payments, and its message is shown as is.
+ * backend refuses a move while the user has unresolved payments, and its
+ * message is shown as is. A move that would leave purchased credits behind
+ * asks the admin to confirm, then retries with `allowUnusedCredits`.
  */
 export const PartnerMembers = ({
   account,
@@ -76,13 +78,28 @@ export const PartnerMembers = ({
   };
 
   const { mutate: addMember, isPending: isAdding } = useMutation({
-    mutationFn: () =>
-      api.addOrganizationMember(organization.id, publicId.trim(), role),
+    mutationFn: (allowUnusedCredits: boolean) =>
+      api.addOrganizationMember(
+        organization.id,
+        publicId.trim(),
+        role,
+        allowUnusedCredits,
+      ),
     onSuccess: () => {
       setPublicId('');
       afterChange('Member added');
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => {
+      if (
+        error instanceof ApiError &&
+        error.code === 'UNUSED_PURCHASED_CREDITS' &&
+        window.confirm(`${error.message}\n\nMove the user anyway?`)
+      ) {
+        addMember(true);
+        return;
+      }
+      toast.error(error.message);
+    },
   });
 
   const { mutate: changeRole } = useMutation({
@@ -128,7 +145,7 @@ export const PartnerMembers = ({
           className='mb-4 flex flex-wrap gap-2'
           onSubmit={(e) => {
             e.preventDefault();
-            if (publicId.trim()) addMember();
+            if (publicId.trim()) addMember(false);
           }}
         >
           <input

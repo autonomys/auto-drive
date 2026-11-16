@@ -530,15 +530,20 @@ export const createApiService = ({
       method: 'POST',
       body: { name },
     }),
-  /** Admin: moves a user into a partner organization. */
+  /**
+   * Admin: moves a user into a partner organization. Without
+   * `allowUnusedCredits`, a user whose account still holds purchased credits
+   * is refused with code UNUSED_PURCHASED_CREDITS.
+   */
   addOrganizationMember: (
     organizationId: string,
     publicId: string,
     role: OrganizationRole,
+    allowUnusedCredits = false,
   ): Promise<void> =>
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members`,
-      { method: 'POST', body: { publicId, role } },
+      { method: 'POST', body: { publicId, role, allowUnusedCredits } },
     ),
   changeOrganizationMemberRole: (
     organizationId: string,
