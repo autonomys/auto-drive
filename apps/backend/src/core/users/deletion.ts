@@ -1,5 +1,6 @@
 import { err, ok, Result } from 'neverthrow'
 import {
+  Account,
   DeletionAuditEntry,
   DeletionRequest,
   IntentStatus,
@@ -15,6 +16,31 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { getDatabase } from '../../infrastructure/drivers/pg.js'
 
 const logger = createLogger('core:deletion')
+
+// The personal organization the user was last moved into the partner
+// organization from. Users are only moved into a partner organization from a
+// personal one.
+const getAccountMovedInFrom = async (
+  publicId: string,
+  partnerOrganizationId: string,
+): Promise<Account | null> => {
+  const changes = await AuthManager.getOrganizationMembershipChanges(
+    partnerOrganizationId,
+  )
+  if (changes.isErr()) throw changes.error
+
+  // Newest first.
+  const moveIn = changes.value.find(
+    (c) =>
+      c.publicId === publicId &&
+      c.toOrganizationId === partnerOrganizationId &&
+      c.fromOrganizationId !== null &&
+      c.fromOrganizationId !== partnerOrganizationId,
+  )
+  return moveIn?.fromOrganizationId
+    ? accountsRepository.getByOrganizationId(moveIn.fromOrganizationId)
+    : null
+}
 
 const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
   const db = await getDatabase()
@@ -55,19 +81,27 @@ const anonymiseUserData = async (request: DeletionRequest): Promise<void> => {
 
   // A personal account's only member is the user, so its credits are
   // forfeited. A partner account's credits belong to the partner, which keeps
-  // them for its other and future members. The members aren't counted, so a
-  // membership change during the deletion can't make this wrong: nobody is
-  // moved into a personal organization, and a user is moved out of theirs only
-  // once it holds no purchased credits and they have no unresolved payments.
+  // them for its other and future members. A partner member's own personal
+  // account is forfeited instead: an admin may have moved them out of it while
+  // it still held credits, and only they could ever use those again. The
+  // members aren't counted, so a membership change during the deletion can't
+  // make this wrong: nobody is moved into a personal organization, and a user
+  // is moved out of theirs only once they have no unresolved payments.
   const organizationCase = account?.isPartner
     ? 'partner_organization'
     : 'personal_organization'
-  const forfeitedAccountId = account && !account.isPartner ? account.id : null
+  const personalAccount = account?.isPartner
+    ? await getAccountMovedInFrom(publicId, account.organizationId)
+    : account
+  const forfeitedAccountId =
+    personalAccount && !personalAccount.isPartner ? personalAccount.id : null
 
   // Expire the user's own pending intents, whether or not they have an
   // account. When the account is forfeited, its confirmed intents are expired
   // too, and the user's older ones that have no account and would be
-  // credited to it: they would otherwise be credited afterwards. Intents go
+  // credited to it: they would otherwise be credited afterwards. A partner
+  // member has none of either, as they were moved with no unresolved payments
+  // and newer intents record the buyer's current account. Intents go
   // before credits. A confirmation that completes first has inserted its
   // credits by the time they are expired below; one that comes later finds
   // its intent expired and inserts nothing.

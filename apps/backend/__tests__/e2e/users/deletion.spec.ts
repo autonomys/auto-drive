@@ -2,9 +2,11 @@ import {
   DeletionRequest,
   DeletionRequestStatus,
   IntentStatus,
+  OrganizationRole,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { jest } from '@jest/globals'
+import { ok } from 'neverthrow'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import {
@@ -101,6 +103,9 @@ describe('Deletion in personal and partner organizations', () => {
     jest
       .spyOn(AuthManager, 'markDeletionAsCompleted')
       .mockResolvedValue(deletionRequestFor(user))
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembershipChanges')
+      .mockResolvedValue(ok([]))
   })
 
   afterEach(async () => {
@@ -229,6 +234,65 @@ describe('Deletion in personal and partner organizations', () => {
     expect((await lastCompletion())?.details).toMatchObject({
       organizationCase: 'partner_organization',
       creditsExpired: 0,
+    })
+  })
+
+  it('expires the credits a partner member left on their personal account', async () => {
+    const partnerMember = createMockUser()
+    const partnerAccountId = (
+      await AccountsUseCases.getOrCreateAccount(partnerMember)
+    ).id
+    const db = await getDatabase()
+    await db.query('UPDATE accounts SET is_partner = TRUE WHERE id = $1', [
+      partnerAccountId,
+    ])
+    const partnerIntentId = await insertIntent(
+      partnerMember.publicId,
+      IntentStatus.CONFIRMED,
+    )
+    await AccountsUseCases.addCreditsToAccount(
+      {
+        id: partnerIntentId,
+        userPublicId: partnerMember.publicId,
+        accountId: partnerAccountId,
+      },
+      BigInt(2000),
+    )
+
+    // Moved into the partner organization, leaving the credits behind.
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue({
+      ...user,
+      organizationId: partnerMember.organizationId,
+    })
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembershipChanges')
+      .mockResolvedValue(
+        ok([
+          {
+            id: uuidv4(),
+            publicId: user.publicId,
+            fromOrganizationId: user.organizationId,
+            toOrganizationId: partnerMember.organizationId,
+            role: OrganizationRole.Member,
+            actor: uuidv4(),
+            createdAt: new Date().toISOString(),
+          },
+        ]),
+      )
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(user))
+
+    expect(
+      (await purchasedCreditsRepository.getRemainingCredits(accountId))
+        .uploadBytesRemaining,
+    ).toBe(0n)
+    expect(
+      (await purchasedCreditsRepository.getRemainingCredits(partnerAccountId))
+        .uploadBytesRemaining,
+    ).toBe(2000n)
+    expect((await lastCompletion())?.details).toMatchObject({
+      organizationCase: 'partner_organization',
+      creditsExpired: 1,
     })
   })
 })
