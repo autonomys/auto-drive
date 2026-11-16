@@ -154,6 +154,12 @@ export const config = {
     // Largest JSON body POST /uploads/folder reads (its file tree). The other
     // routes' JSON and URL-encoded bodies keep body-parser's default, 100 KB.
     requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
+    // Largest file part POST /uploads/file/:uploadId/chunk accepts. The default
+    // matches the S3 endpoint's per-request body limit.
+    uploadChunkMaxBytes: positiveIntEnv(
+      'UPLOAD_CHUNK_MAX_BYTES',
+      200 * 1024 * 1024,
+    ),
     corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   },
   chain: {
