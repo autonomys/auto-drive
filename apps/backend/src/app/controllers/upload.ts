@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { json, Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
@@ -8,8 +8,22 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { config } from '../../config.js'
 
 const logger = createLogger('http:controllers:upload')
+
+// apis/frontend.ts mounts this router before its body parsers, so each route
+// reads its JSON body here, after the credential check. Resolves false once it
+// has answered a body it could not read. The limit defaults to 100 KB.
+const readJson = (req: Request, res: Response, limit?: string) =>
+  new Promise<boolean>((resolve) => {
+    json({ limit })(req, res, (err?: { status?: number; message?: string }) => {
+      if (err) {
+        res.status(err.status ?? 400).json({ error: err.message })
+      }
+      resolve(!err)
+    })
+  })
 
 const uploadController = Router()
 
@@ -18,6 +32,9 @@ uploadController.post(
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    if (!(await readJson(req, res))) {
       return
     }
 
@@ -67,6 +84,10 @@ uploadController.post(
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    // A folder tree grows with the number of files in it.
+    if (!(await readJson(req, res, config.express.requestSizeLimit))) {
       return
     }
     const { fileTree, uploadOptions } = req.body
@@ -121,6 +142,9 @@ uploadController.post(
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    if (!(await readJson(req, res))) {
       return
     }
 
@@ -194,7 +218,7 @@ uploadController.post(
     }
     const { uploadId } = req.params
     const chunk = req.file?.buffer
-    let { index } = req.body
+    let { index } = req.body ?? {} // unset when the body is not multipart
 
     if (!chunk) {
       logger.error('Missing chunk', {

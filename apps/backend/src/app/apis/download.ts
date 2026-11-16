@@ -30,31 +30,9 @@ const createServer = async () => {
   }
 
   // The S3 controller handles its own raw body parsing (binary object
-  // payloads). It is mounted before the JSON/urlencoded parsers below so those
-  // never run for /s3 — otherwise body-parser would set req.body to {} and the
-  // raw object bytes would be lost.
+  // payloads). No other route here reads a request body, so this API mounts no
+  // JSON or URL-encoded parser.
   app.use('/s3', s3Controller)
-
-  app.use(
-    express.json({
-      limit: config.express.requestSizeLimit,
-    }),
-  )
-  logger.trace(
-    'JSON body parser middleware configured with limit: %s',
-    config.express.requestSizeLimit,
-  )
-
-  app.use(
-    express.urlencoded({
-      limit: config.express.requestSizeLimit,
-      extended: true,
-    }),
-  )
-  logger.trace(
-    'URL-encoded parser middleware configured with limit: %s',
-    config.express.requestSizeLimit,
-  )
 
   app.use('/downloads', downloadController)
   app.use('/features', featuresController)

@@ -11,27 +11,6 @@ const createServer = async () => {
   logger.debug('Initializing worker API server')
   const app = express()
 
-  app.use(
-    express.json({
-      limit: config.express.requestSizeLimit,
-    }),
-  )
-  logger.trace(
-    'JSON body parser middleware configured with limit: %s',
-    config.express.requestSizeLimit,
-  )
-
-  app.use(
-    express.urlencoded({
-      limit: config.express.requestSizeLimit,
-      extended: true,
-    }),
-  )
-  logger.trace(
-    'URL-encoded parser middleware configured with limit: %s',
-    config.express.requestSizeLimit,
-  )
-
   if (config.express.corsAllowedOrigins) {
     logger.debug(
       'Configuring CORS with allowed origins: %j',

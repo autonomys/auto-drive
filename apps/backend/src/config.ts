@@ -151,6 +151,8 @@ export const config = {
   },
   express: {
     port: Number(env('PORT', '3000')),
+    // Largest JSON body POST /uploads/folder reads (its file tree). The other
+    // routes' JSON and URL-encoded bodies keep body-parser's default, 100 KB.
     requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
     corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   },
