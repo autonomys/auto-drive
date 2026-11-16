@@ -1,3 +1,4 @@
+import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
 
 type Ownership = {
@@ -46,6 +47,40 @@ const updateDeletedAt = async (
     text: 'UPDATE object_ownership SET marked_as_deleted = $1 WHERE cid = $2 AND oauth_provider = $3 AND oauth_user_id = $4',
     values: [markedAsDeleted, cid, provider, userId],
   })
+}
+
+// Moves the user's ownership of a cid to Trash at `markedAsDeleted`, unless it
+// is already there or the user has none. Returns whether it moved.
+const markAsDeletedIfActive = async (
+  provider: string,
+  userId: string,
+  cid: string,
+  markedAsDeleted: Date,
+  client?: pg.PoolClient,
+): Promise<boolean> => {
+  const db = client ?? (await getDatabase())
+
+  const result = await db.query({
+    text: 'UPDATE object_ownership SET marked_as_deleted = $1 WHERE cid = $2 AND oauth_provider = $3 AND oauth_user_id = $4 AND marked_as_deleted IS NULL',
+    values: [markedAsDeleted, cid, provider, userId],
+  })
+  return (result.rowCount ?? 0) > 0
+}
+
+// Takes the user's ownership of a cid out of Trash. Returns whether it was there.
+const restoreIfDeleted = async (
+  provider: string,
+  userId: string,
+  cid: string,
+  client?: pg.PoolClient,
+): Promise<boolean> => {
+  const db = client ?? (await getDatabase())
+
+  const result = await db.query({
+    text: 'UPDATE object_ownership SET marked_as_deleted = NULL WHERE cid = $1 AND oauth_provider = $2 AND oauth_user_id = $3 AND marked_as_deleted IS NOT NULL',
+    values: [cid, provider, userId],
+  })
+  return (result.rowCount ?? 0) > 0
 }
 
 const getOwnerships = async (cid: string): Promise<Ownership[]> => {
@@ -174,6 +209,8 @@ export const ownershipRepository = {
   setUserAsOwner,
   setUserAsAdmin,
   updateDeletedAt,
+  markAsDeletedIfActive,
+  restoreIfDeleted,
   getOwnerships,
   getDeletedOwnerships,
   getAllOwnerships,
