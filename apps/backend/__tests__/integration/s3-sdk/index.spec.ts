@@ -1,5 +1,6 @@
 import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'zlib'
 import { createHash, randomBytes } from 'crypto'
+import { request } from 'http'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -1779,16 +1780,39 @@ describe('AWS S3 - SDK', () => {
     })
 
     // The body parser answers this encoding 501 when it reaches the body, so a
-    // 403 shows the credentials were checked first.
-    it('answers an unsigned write before reading its body', async () => {
-      const res = await fetch(`${BASE_PATH}/s3/auth-test/probe.txt`, {
-        method: 'PUT',
-        headers: { 'Content-Encoding': 'aws-chunked' },
-        body: 'x',
-      })
-      expect(res.status).toBe(403)
-      expect(await res.text()).toContain('<Code>AccessDenied</Code>')
-    })
+    // 403 shows the credentials were checked first. Sent with http.request
+    // because fetch refuses a body on GET.
+    it.each(['PUT', 'POST', 'DELETE', 'GET'])(
+      'answers an unsigned %s before reading its body',
+      async (method) => {
+        const res = await new Promise<{ status?: number; body: string }>(
+          (resolve, reject) => {
+            const req = request(
+              `${BASE_PATH}/s3/auth-test/probe.txt`,
+              {
+                method,
+                headers: {
+                  'Content-Encoding': 'aws-chunked',
+                  'Content-Length': '1',
+                },
+              },
+              (response) => {
+                let body = ''
+                response.setEncoding('utf8')
+                response.on('data', (chunk) => (body += chunk))
+                response.on('end', () =>
+                  resolve({ status: response.statusCode, body }),
+                )
+              },
+            )
+            req.on('error', reject)
+            req.end('x')
+          },
+        )
+        expect(res.status).toBe(403)
+        expect(res.body).toContain('<Code>AccessDenied</Code>')
+      },
+    )
 
     it('authenticates a write once', async () => {
       const lookup = jest.spyOn(AuthManager, 'getUserFromAccessToken')

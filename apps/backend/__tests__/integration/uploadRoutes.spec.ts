@@ -235,6 +235,24 @@ describe('Upload routes answer client errors with their own status', () => {
       )
       expect(response.status).toBe(401)
     })
+
+    it.each([
+      ['without a boundary', 'multipart/form-data', 'x'],
+      [
+        'cut off mid-part',
+        'multipart/form-data; boundary=b',
+        '--b\r\nContent-Disposition: form-data; name="file"; filename="f"\r\n\r\nabc',
+      ],
+    ])('answers 400 for a form %s', async (_case, contentType, body) => {
+      const upload = await createUpload()
+      const response = await fetch(`${base}/uploads/file/${upload.id}/chunk`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': contentType },
+        body,
+      })
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toMatch(/^Invalid chunk form: /)
+    })
   })
 
   describe('POST /uploads/:uploadId/complete', () => {
