@@ -819,6 +819,7 @@ describe('S3UseCases', () => {
         null,
         null,
         null,
+        null,
       )
     })
 
