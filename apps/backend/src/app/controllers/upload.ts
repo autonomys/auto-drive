@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { json, Router, Request, Response } from 'express'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
@@ -8,16 +8,65 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
+import { config } from '../../config.js'
 
 const logger = createLogger('http:controllers:upload')
 
+// apis/frontend.ts mounts this router before its body parsers, so each route
+// reads its JSON body here, after the credential check. Resolves false once it
+// has answered a body it could not read. The limit defaults to 100 KB.
+const readJson = (req: Request, res: Response, limit?: string) =>
+  new Promise<boolean>((resolve) => {
+    json({ limit })(req, res, (err?: { status?: number; message?: string }) => {
+      if (err) {
+        res.status(err.status ?? 400).json({ error: err.message })
+      }
+      resolve(!err)
+    })
+  })
+
 const uploadController = Router()
+
+const chunkParser = multer({
+  limits: {
+    // The parser rejects a file that reaches fileSize, so a part of exactly the
+    // maximum needs one byte more.
+    fileSize: config.express.uploadChunkMaxBytes + 1,
+    files: 1,
+    fields: 4,
+    fieldSize: 1024,
+  },
+}).single('file')
+
+// Reads the multipart chunk body. Resolves false once it has answered a body it
+// could not read: 413 for a part that is too large, 400 for anything else (with
+// memory storage every parser error is about the body or the connection).
+const parseChunk = (req: Request, res: Response) =>
+  new Promise<boolean>((resolve) => {
+    chunkParser(req, res, (err: unknown) => {
+      if (!err) {
+        resolve(true)
+        return
+      }
+      const tooLarge =
+        err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
+      res.status(tooLarge ? 413 : 400).json({
+        error: tooLarge
+          ? `Chunk exceeds the ${config.express.uploadChunkMaxBytes} byte limit`
+          : `Invalid chunk form: ${err instanceof Error ? err.message : err}`,
+      })
+      resolve(false)
+    })
+  })
 
 uploadController.post(
   '/file',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    if (!(await readJson(req, res))) {
       return
     }
 
@@ -67,6 +116,10 @@ uploadController.post(
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    // A folder tree grows with the number of files in it.
+    if (!(await readJson(req, res, config.express.requestSizeLimit))) {
       return
     }
     const { fileTree, uploadOptions } = req.body
@@ -121,6 +174,9 @@ uploadController.post(
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    if (!(await readJson(req, res))) {
       return
     }
 
@@ -186,15 +242,19 @@ uploadController.post(
 
 uploadController.post(
   '/file/:uploadId/chunk',
-  multer().single('file'),
   asyncSafeHandler(async (req: Request, res: Response) => {
+    // Credentials are checked before the body is read.
     const user = await handleAuth(req, res)
     if (!user) {
       return
     }
+    if (!(await parseChunk(req, res))) {
+      return
+    }
+
     const { uploadId } = req.params
     const chunk = req.file?.buffer
-    let { index } = req.body
+    let { index } = req.body ?? {} // unset when the body is not multipart
 
     if (!chunk) {
       logger.error('Missing chunk', {
