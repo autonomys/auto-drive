@@ -396,6 +396,7 @@ const handleFileUploadFinalization = async (
     InteractionType.Upload,
     metadata.totalSize.valueOf(),
     metadata.dataCid,
+    upload?.customer_reference ?? null,
   )
 
   logger.info(

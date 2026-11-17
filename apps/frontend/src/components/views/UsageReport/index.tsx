@@ -7,7 +7,11 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import { Download, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
-import { UsageByApiKey, UsageReport } from '@auto-drive/models';
+import {
+  UsageByApiKey,
+  UsageByCustomerReference,
+  UsageReport,
+} from '@auto-drive/models';
 import { useNetwork } from '@/contexts/network';
 import { Table } from '@/components/molecules/Table';
 import {
@@ -42,6 +46,7 @@ const day = (iso: string) => dayjs.utc(iso).format('MMM D, YYYY');
 const EXPORTS = [
   { label: 'Summary', table: 'summary' },
   { label: 'API keys', table: 'apiKeys' },
+  { label: 'Customer references', table: 'customerReferences' },
   { label: 'Purchases', table: 'purchases' },
   { label: 'Interactions', table: 'interactions' },
   { label: 'JSON', table: 'report' },
@@ -165,6 +170,45 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
   </div>
 );
 
+const CustomerReferencesTable = ({
+  rows,
+}: {
+  rows: UsageByCustomerReference[];
+}) => (
+  <div className='overflow-x-auto'>
+    <Table className='min-w-full'>
+      <TableHead>
+        <TableHeadRow>
+          <TableHeadCell>Customer reference</TableHeadCell>
+          <TableHeadCell>Uploads</TableHeadCell>
+          <TableHeadCell>Upload size</TableHeadCell>
+          <TableHeadCell>Purchased</TableHeadCell>
+          <TableHeadCell>AI3 value</TableHeadCell>
+        </TableHeadRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((row) => (
+          <TableBodyRow key={row.customerReference ?? ''}>
+            <TableBodyCell>
+              {row.customerReference === null ? (
+                <span className='text-gray-500'>No reference</span>
+              ) : (
+                <span className='font-mono text-xs'>
+                  {row.customerReference}
+                </span>
+              )}
+            </TableBodyCell>
+            <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
+            <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
+            <TableBodyCell>{ai3(row.ai3Value)}</TableBodyCell>
+          </TableBodyRow>
+        ))}
+      </TableBody>
+    </Table>
+  </div>
+);
+
 const PurchasesTable = ({ report }: { report: UsageReport }) => (
   <div className='overflow-x-auto'>
     <Table className='min-w-full'>
@@ -231,7 +275,8 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
 
 /**
  * An account's usage over whole UTC days: uploads and downloads, split by API
- * key, with the credits granted and the purchased-credit balance.
+ * key and by customer reference, with the credits granted and the
+ * purchased-credit balance.
  */
 export const UsageReportView = ({ accountId }: { accountId: string }) => {
   const { api } = useNetwork();
@@ -363,6 +408,14 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
           <Section title='By API key'>
             <ApiKeysTable rows={report.apiKeys} />
           </Section>
+
+          {report.customerReferences.some(
+            (row) => row.customerReference !== null,
+          ) && (
+            <Section title='Uploads by customer reference'>
+              <CustomerReferencesTable rows={report.customerReferences} />
+            </Section>
+          )}
 
           <Section title='Credits granted'>
             <PurchasesTable report={report} />

@@ -81,6 +81,7 @@ type CompleteMultipartUploadParams = CompleteMultipartUploadCommandParams & {
 type PutObjectParams = PutObjectCommandParams & {
   Mtime?: string | null
   Metadata?: S3ObjectMetadata | null
+  CustomerReference?: string | null
 }
 
 /** CreateMultipartUpload params extended with the client mtime and object
@@ -89,6 +90,7 @@ type PutObjectParams = PutObjectCommandParams & {
 type CreateMultipartUploadParams = CreateMultipartUploadCommandParams & {
   Mtime?: string | null
   Metadata?: S3ObjectMetadata | null
+  CustomerReference?: string | null
 }
 
 /** CopyObject params. Source is resolved from the x-amz-copy-source header in
@@ -551,6 +553,7 @@ const createMultipartUpload = async (
     params.UploadOptions ?? null,
     null,
     null,
+    params.CustomerReference ?? null,
   )
 
   // Stash the client mtime and object metadata (if any) so
@@ -658,6 +661,7 @@ const putObject = async (
     params.UploadOptions ?? null,
     null,
     null,
+    params.CustomerReference ?? null,
   )
 
   const result = await handleInternalError(

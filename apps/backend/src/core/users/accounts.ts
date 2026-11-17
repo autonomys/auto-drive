@@ -313,6 +313,7 @@ const registerInteraction = async (
   type: InteractionType,
   size: bigint,
   cid?: string,
+  customerReference: string | null = null,
 ): Promise<void> => {
   const account = await getOrCreateAccount(user)
   const creditType = type === InteractionType.Upload ? 'upload' : 'download'
@@ -401,6 +402,7 @@ const registerInteraction = async (
         InteractionSource.Purchased,
         cid,
         user.apiKeyId,
+        customerReference,
         client,
       )
       await interactionsRepository.createCreditConsumption(
@@ -425,6 +427,7 @@ const registerInteraction = async (
         InteractionSource.FreeTier,
         cid,
         user.apiKeyId,
+        customerReference,
         client,
       )
     }

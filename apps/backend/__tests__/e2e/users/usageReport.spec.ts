@@ -135,6 +135,7 @@ describe('Usage reports', () => {
       bytes,
       type = 'upload',
       apiKeyId = null,
+      customerReference = null,
       from = [],
       recorded = true,
     }: {
@@ -142,6 +143,7 @@ describe('Usage reports', () => {
       bytes: number
       type?: 'upload' | 'download'
       apiKeyId?: string | null
+      customerReference?: string | null
       from?: [string, number][]
       recorded?: boolean
     },
@@ -150,8 +152,8 @@ describe('Usage reports', () => {
     const id = uuidv4()
     await db.query(
       `INSERT INTO interactions (id, account_id, type, size, source, cid,
-         api_key_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz::timestamp)`,
+         api_key_id, customer_reference, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz::timestamp)`,
       [
         id,
         accountId,
@@ -160,6 +162,7 @@ describe('Usage reports', () => {
         from.length > 0 ? 'purchased' : 'free_tier',
         `cid-${id}`,
         apiKeyId,
+        customerReference,
         at,
       ],
     )
@@ -221,6 +224,7 @@ describe('Usage reports', () => {
       at: day(12),
       bytes: 300,
       apiKeyId: 'key-1',
+      customerReference: 'cust-a',
       from: [[a, 300]],
     })
 
@@ -238,12 +242,18 @@ describe('Usage reports', () => {
       at: day(20),
       bytes: 700,
       apiKeyId: 'key-2',
+      customerReference: 'cust-b',
       from: [
         [a, 200],
         [b, 500],
       ],
     })
-    await interact(id, { at: day(22), bytes: 50, apiKeyId: 'key-1' })
+    await interact(id, {
+      at: day(22),
+      bytes: 50,
+      apiKeyId: 'key-1',
+      customerReference: 'cust-a',
+    })
     await interact(id, {
       at: day(23),
       bytes: 4000,
@@ -446,6 +456,48 @@ describe('Usage reports', () => {
     expect(total('downloadBytes')).toBe(BigInt(downloads.bytes))
   })
 
+  it('breaks uploads down by customer reference, summing to the totals', async () => {
+    const { account } = await seedPartner()
+
+    const { customerReferences, uploads } = await report(
+      admin,
+      account.id,
+      day(0),
+      NOW,
+    )
+
+    // Uploads without a reference come last, including those from before
+    // attribution. The download carries none and is left out.
+    expect(customerReferences).toEqual([
+      {
+        customerReference: 'cust-b',
+        uploadCount: 1,
+        uploadBytes: '700',
+        purchasedBytes: '700',
+        ai3Value: '2900',
+      },
+      {
+        customerReference: 'cust-a',
+        uploadCount: 2,
+        uploadBytes: '350',
+        purchasedBytes: '300',
+        ai3Value: '600',
+      },
+      {
+        customerReference: null,
+        uploadCount: 2,
+        uploadBytes: '200',
+        purchasedBytes: '200',
+        ai3Value: '300',
+      },
+    ])
+    const total = (field: 'uploadBytes' | 'purchasedBytes' | 'ai3Value') =>
+      customerReferences.reduce((sum, row) => sum + BigInt(row[field]), BigInt(0))
+    expect(total('uploadBytes')).toBe(BigInt(uploads.bytes))
+    expect(total('purchasedBytes')).toBe(BigInt(uploads.purchasedBytes))
+    expect(total('ai3Value')).toBe(BigInt(uploads.ai3Value))
+  })
+
   it('leaves keys unnamed when auth cannot name them', async () => {
     const { account } = await seedPartner()
     jest
@@ -551,6 +603,10 @@ describe('Usage reports', () => {
     const summary = UsageReportsUseCases.usageReportCsv(json, 'summary')
     const apiKeys = UsageReportsUseCases.usageReportCsv(json, 'apiKeys')
     const purchases = UsageReportsUseCases.usageReportCsv(json, 'purchases')
+    const customerReferences = UsageReportsUseCases.usageReportCsv(
+      json,
+      'customerReferences',
+    )
 
     expect(summary).toContain('upload_bytes,1150\r\n')
     expect(summary).toContain('ai3_value,0.0000000000000038\r\n')
@@ -561,6 +617,13 @@ describe('Usage reports', () => {
     expect(purchases.split('\r\n')[1]).toContain(
       ',usdc_eth,2.5,250000000000000,',
     )
+    expect(customerReferences.split('\r\n')).toEqual([
+      'customer_reference,upload_count,upload_bytes,purchased_upload_bytes,ai3_value',
+      'cust-b,1,700,700,0.0000000000000029',
+      'cust-a,2,350,300,0.0000000000000006',
+      ',1,100,100,0.0000000000000003',
+      '',
+    ])
   })
 
   it('exports every interaction in time order, across pages', async () => {
@@ -595,8 +658,13 @@ describe('Usage reports', () => {
     expect(interactions[2]).toMatchObject({
       createdAt: day(20).toISOString(),
       apiKeyName: '=HYPERLINK("x")',
+      customerReference: 'cust-b',
       ai3Value: '2900',
     })
+    expect(interactions[0].customerReference).toBeNull()
+    expect(
+      UsageReportsUseCases.usageInteractionsCsv([interactions[2]]),
+    ).toContain(',cust-b,0.0000000000000029\r\n')
   })
 
   // Whether the planner picks an index depends on the table's size, so the
