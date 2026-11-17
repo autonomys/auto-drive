@@ -21,6 +21,7 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnusedCreditsError,
 } from '../../errors/index.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -141,15 +142,18 @@ const listPartnerOrganizations = async (
 }
 
 /**
- * Moves a user into a partner organization. Refused while their current
- * account holds purchased credits, which are not transferred, or while they
- * have unresolved payments.
+ * Moves a user into a partner organization. Refused while they have
+ * unresolved payments. Purchased credits on their current account are not
+ * transferred, so a move that would leave some behind needs
+ * `allowUnusedCredits`. Those credits stay on that account, keep their expiry,
+ * and are usable again if the user is removed from the partner organization.
  */
 const addMember = async (
   executor: User,
   organizationId: string,
   publicId: string,
   role: OrganizationRole,
+  { allowUnusedCredits = false }: { allowUnusedCredits?: boolean } = {},
 ): Promise<Result<void, OrganizationError>> => {
   const admin = requireAdmin(executor)
   if (admin.isErr()) return err(admin.error)
@@ -180,22 +184,26 @@ const addMember = async (
       ),
     )
   }
-  if (currentAccount) {
-    const { uploadBytesRemaining } =
-      await purchasedCreditsRepository.getRemainingCredits(currentAccount.id)
-    if (uploadBytesRemaining > 0n) {
-      return err(
-        new ConflictError(
-          `User's account still holds ${uploadBytesRemaining} bytes of ` +
-            'purchased credits, which are not transferred. Wait for them to ' +
-            'be used, or refund them, before moving the user.',
-        ),
-      )
-    }
-  }
 
+  // Checked before the credits so an admin is not asked to confirm leaving
+  // credits behind on a move that would then be refused anyway.
   const intents = await checkNoUnresolvedIntents(publicId)
   if (intents.isErr()) return err(intents.error)
+
+  const unusedCreditBytes = currentAccount
+    ? (await purchasedCreditsRepository.getRemainingCredits(currentAccount.id))
+        .uploadBytesRemaining
+    : 0n
+  if (unusedCreditBytes > 0n && !allowUnusedCredits) {
+    return err(
+      new UnusedCreditsError(
+        `User's account still holds ${unusedCreditBytes} bytes of purchased ` +
+          'credits, which are not transferred. They stay on that account ' +
+          'and keep expiring on schedule, unusable until the user is ' +
+          'removed from the partner organization.',
+      ),
+    )
+  }
 
   const added = await AuthManager.addOrganizationMember(
     organizationId,
@@ -209,6 +217,7 @@ const addMember = async (
     publicId,
     role,
     fromOrganizationId: user.organizationId,
+    unusedCreditBytes: unusedCreditBytes.toString(),
     by: executor.publicId,
   })
   return ok()
