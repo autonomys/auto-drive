@@ -17,6 +17,19 @@ export const sendXML = <T extends object>(
   )
 }
 
+const DEFAULT_MAX_KEYS = 1000
+const S3_MAX_KEYS_UPPER_BOUND = 2147483647
+
+// S3 accepts max-keys from 0 to 2^31 - 1 and rejects anything else. 0 is a
+// valid request that lists nothing. Returns null for a value S3 would reject.
+export const parseMaxKeys = (raw: unknown): number | null => {
+  if (raw === undefined) return DEFAULT_MAX_KEYS
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null
+  const value = Number(raw)
+  if (value > S3_MAX_KEYS_UPPER_BOUND) return null
+  return Math.min(value, DEFAULT_MAX_KEYS)
+}
+
 // Characters XML 1.0 cannot represent: control characters other than TAB, LF
 // and CR, and U+FFFE/U+FFFF. Lone surrogates are illegal too, but a key read
 // back from Postgres cannot contain one.
