@@ -166,6 +166,39 @@ describe('Organization API keys', () => {
     await expect(
       OrganizationsUseCases.createApiKey(v4(), NO_OPTIONS),
     ).rejects.toBeInstanceOf(OrganizationNotFoundError)
+
+    // Two first keys at once both get created.
+    const raced = await organizationsRepository.createOrganization(
+      v4(),
+      'Raced partner',
+    )
+    await Promise.all([
+      OrganizationsUseCases.createApiKey(raced.id, NO_OPTIONS),
+      OrganizationsUseCases.createApiKey(raced.id, NO_OPTIONS),
+    ])
+    expect(await OrganizationsUseCases.listApiKeys(raced.id)).toHaveLength(2)
+  })
+
+  it('creates no key in an archived organization', async () => {
+    const archived = await organizationsRepository.createOrganization(
+      v4(),
+      'Archived',
+    )
+    const db = await getDatabase()
+    await db.query(
+      'UPDATE users.organizations SET archived_at = NOW() WHERE id = $1',
+      [archived.id],
+    )
+
+    await expect(
+      OrganizationsUseCases.createApiKey(archived.id, NO_OPTIONS),
+    ).rejects.toBeInstanceOf(OrganizationConflictError)
+    expect(
+      await usersRepository.getUserByOAuthInformation(
+        SERVICE_USER_PROVIDER,
+        archived.id,
+      ),
+    ).toBeUndefined()
   })
 
   it('revokes only keys of the organization', async () => {
@@ -220,7 +253,7 @@ describe('Organization API keys', () => {
     )
     await expect(
       UsersUseCases.updateRole(admin, publicId, UserRole.Admin),
-    ).rejects.toThrow('A service user cannot be given a role')
+    ).rejects.toBeInstanceOf(OrganizationConflictError)
   })
 
   it('lets a key only identify the service user in auth', async () => {

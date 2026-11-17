@@ -55,7 +55,8 @@ const updateOrganizationName = async (
 }
 
 // Archives an organisation once its last member has left it, keeping it and
-// its account for history and for a later restore.
+// its account for history and for a later restore. A partner's service user
+// counts: its API keys still upload to the organisation's account.
 const archiveIfEmpty = async (id: string, db: pg.Client): Promise<void> => {
   await db.query(
     `UPDATE users.organizations SET archived_at = NOW()

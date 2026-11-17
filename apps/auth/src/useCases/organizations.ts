@@ -168,18 +168,29 @@ const createApiKey = async (
   organizationId: string,
   options: { name: string | null; expiresAt: Date | null },
 ): Promise<ApiKey> => {
-  if (!(await organizationsRepository.getOrganizationById(organizationId))) {
+  const organization =
+    await organizationsRepository.getOrganizationById(organizationId)
+  if (!organization) {
     throw new OrganizationNotFoundError('Organization not found')
+  }
+  if (organization.archived_at) {
+    throw new OrganizationConflictError('Organization is archived')
   }
 
   // Partners created before service users get theirs with their first key.
   const serviceUser = serviceUserOf(organizationId)
-  const exists = await usersRepository.getUserByOAuthInformation(
-    serviceUser.oauthProvider,
-    serviceUser.oauthUserId,
-  )
-  if (!exists) {
-    await withTransaction((db) => createServiceUser(organizationId, db))
+  const serviceUserExists = () =>
+    usersRepository.getUserByOAuthInformation(
+      serviceUser.oauthProvider,
+      serviceUser.oauthUserId,
+    )
+  if (!(await serviceUserExists())) {
+    try {
+      await withTransaction((db) => createServiceUser(organizationId, db))
+    } catch (error) {
+      // A concurrent first key may have created it.
+      if (!(await serviceUserExists())) throw error
+    }
   }
 
   return ApiKeysUseCases.createApiKey(serviceUser, options)

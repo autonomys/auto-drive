@@ -7,7 +7,7 @@ import {
 } from '../services/authManager/express.js'
 import { OrganizationError } from '../errors/organizations.js'
 import { ApiKeyError } from '../errors/apikeys.js'
-import { parseCreateApiKeyBody } from './user.js'
+import { parseCreateApiKeyBody } from './apiKeyBody.js'
 
 const logger = createLogger('http:controllers:organization')
 

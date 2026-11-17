@@ -317,11 +317,13 @@ const authorizeApiKeys = async (
     return err(new ForbiddenError('Not a member of this organization'))
   }
 
-  const partnerAccount = await getPartnerAccount(organizationId)
+  const needsOrganizationAdmin = action !== 'list' && !asAutoDriveAdmin
+  const [partnerAccount, organization] = await Promise.all([
+    getPartnerAccount(organizationId),
+    needsOrganizationAdmin ? AuthManager.getOrganization(organizationId) : null,
+  ])
   if (partnerAccount.isErr()) return err(partnerAccount.error)
-  if (action === 'list' || asAutoDriveAdmin) return ok()
-
-  const organization = await AuthManager.getOrganization(organizationId)
+  if (!organization) return ok()
   if (organization.isErr()) return err(organization.error)
   const isOrganizationAdmin = organization.value.memberships.some(
     (m) =>
