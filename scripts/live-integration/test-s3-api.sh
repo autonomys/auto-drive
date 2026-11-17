@@ -994,6 +994,14 @@ fi
 
 section "ListObjectsV2 — MaxKeys clamping"
 
+# The server can itself refuse a max-keys value with InvalidArgument, which the
+# AWS CLI reports as "An error occurred (...)".  Only a refusal that never left
+# the CLI counts as "cannot probe".
+rejected_client_side() {
+  ! echo "$1" | grep -q "An error occurred" \
+    && echo "$1" | grep -qi "between\|invalid\|MaxKeys"
+}
+
 # MaxKeys=0 → no keys and IsTruncated=false, even though our tree prefix holds
 # 3 keys, and MaxKeys is echoed as 0.
 ZERO_OUT=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
@@ -1002,7 +1010,7 @@ ZERO_OUT=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
 if [[ $ZERO_EXIT -eq 0 ]]; then
   ZK_COUNT=$(echo "$ZERO_OUT" | jq '[.Contents[]?.Key] | length')
   ZK_TRUNC=$(echo "$ZERO_OUT" | jq -r '.IsTruncated // false')
-  ZK_MAX=$(echo "$ZERO_OUT" | jq -r '.MaxKeys // 0')
+  ZK_MAX=$(echo "$ZERO_OUT" | jq -r '.MaxKeys')
   if [[ "$ZK_COUNT" == "0" && "$ZK_TRUNC" == "false" && "$ZK_MAX" == "0" ]]; then
     ok "MaxKeys=0 — empty page, IsTruncated=false"
   else
@@ -1010,7 +1018,7 @@ if [[ $ZERO_EXIT -eq 0 ]]; then
       "count=${ZK_COUNT} (want 0) truncated=${ZK_TRUNC} (want false) maxKeys=${ZK_MAX} (want 0)"
   fi
 else
-  if echo "$ZERO_OUT" | grep -qi "between\|invalid\|MaxKeys"; then
+  if rejected_client_side "$ZERO_OUT"; then
     info "MaxKeys=0 — rejected client-side by AWS CLI; cannot probe clamp" \
       "$(echo "$ZERO_OUT" | head -1)"
   else
@@ -1034,7 +1042,7 @@ if [[ $BIG_EXIT -eq 0 ]]; then
       "echoed MaxKeys=${BIG_MAX} (want 1000)"
   fi
 else
-  if echo "$BIG_OUT" | grep -qi "between\|invalid\|MaxKeys"; then
+  if rejected_client_side "$BIG_OUT"; then
     info "MaxKeys=5000 — rejected client-side by AWS CLI" \
       "$(echo "$BIG_OUT" | head -1)"
   else
