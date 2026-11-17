@@ -77,25 +77,33 @@ export const PartnerMembers = ({
     onChanged();
   };
 
+  // The member travels in the mutation variables, so the confirmed retry
+  // replays the refused request even if the form changed in the meantime.
   const { mutate: addMember, isPending: isAdding } = useMutation({
-    mutationFn: (allowUnusedCredits: boolean) =>
+    mutationFn: (member: {
+      publicId: string;
+      role: OrganizationRole;
+      allowUnusedCredits: boolean;
+    }) =>
       api.addOrganizationMember(
         organization.id,
-        publicId.trim(),
-        role,
-        allowUnusedCredits,
+        member.publicId,
+        member.role,
+        member.allowUnusedCredits,
       ),
     onSuccess: () => {
       setPublicId('');
       afterChange('Member added');
     },
-    onError: (error: Error) => {
+    onError: (error: Error, member) => {
       if (
         error instanceof ApiError &&
         error.code === 'UNUSED_PURCHASED_CREDITS' &&
-        window.confirm(`${error.message}\n\nMove the user anyway?`)
+        window.confirm(
+          `${member.publicId}: ${error.message}\n\nMove the user anyway?`,
+        )
       ) {
-        addMember(true);
+        addMember({ ...member, allowUnusedCredits: true });
         return;
       }
       toast.error(error.message);
@@ -145,7 +153,10 @@ export const PartnerMembers = ({
           className='mb-4 flex flex-wrap gap-2'
           onSubmit={(e) => {
             e.preventDefault();
-            if (publicId.trim()) addMember(false);
+            const id = publicId.trim();
+            if (id) {
+              addMember({ publicId: id, role, allowUnusedCredits: false });
+            }
           }}
         >
           <input

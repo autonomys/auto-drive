@@ -243,29 +243,32 @@ describe('OrganizationsUseCases', () => {
       expect(addMemberSpy).toHaveBeenCalled()
     })
 
-    it('reports unresolved payments before purchased credits', async () => {
-      jest
-        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
-        .mockResolvedValue(remaining(1024n))
-      jest
-        .spyOn(intentsRepository, 'getByUserAndStatuses')
-        .mockResolvedValue([
-          { id: 'i1', status: IntentStatus.PENDING } as Intent,
-        ])
+    it.each([false, true])(
+      'reports unresolved payments before purchased credits (allowUnusedCredits: %s)',
+      async (allowUnusedCredits) => {
+        jest
+          .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+          .mockResolvedValue(remaining(1024n))
+        jest
+          .spyOn(intentsRepository, 'getByUserAndStatuses')
+          .mockResolvedValue([
+            { id: 'i1', status: IntentStatus.PENDING } as Intent,
+          ])
 
-      const result = await OrganizationsUseCases.addMember(
-        admin,
-        'partner-org',
-        'pub1',
-        OrganizationRole.Member,
-        { allowUnusedCredits: true },
-      )
+        const result = await OrganizationsUseCases.addMember(
+          admin,
+          'partner-org',
+          'pub1',
+          OrganizationRole.Member,
+          { allowUnusedCredits },
+        )
 
-      const error = result._unsafeUnwrapErr()
-      expect(error).toBeInstanceOf(ConflictError)
-      expect(error).not.toBeInstanceOf(UnusedCreditsError)
-      expect(addMemberSpy).not.toHaveBeenCalled()
-    })
+        const error = result._unsafeUnwrapErr()
+        expect(error).toBeInstanceOf(ConflictError)
+        expect(error).not.toBeInstanceOf(UnusedCreditsError)
+        expect(addMemberSpy).not.toHaveBeenCalled()
+      },
+    )
 
     it('refuses a user with unresolved payments', async () => {
       const lookup = jest
@@ -327,7 +330,9 @@ describe('OrganizationsUseCases', () => {
     it('refuses a user with unresolved payments', async () => {
       jest
         .spyOn(intentsRepository, 'getByUserAndStatuses')
-        .mockResolvedValue([{ id: 'i1', status: IntentStatus.PENDING } as Intent])
+        .mockResolvedValue([
+          { id: 'i1', status: IntentStatus.PENDING } as Intent,
+        ])
       const remove = jest.spyOn(AuthManager, 'removeOrganizationMember')
 
       const result = await OrganizationsUseCases.removeMember(
