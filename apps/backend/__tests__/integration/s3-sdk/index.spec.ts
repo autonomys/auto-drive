@@ -834,6 +834,56 @@ describe('AWS S3 - SDK', () => {
           expect(body).toContain('<ArgumentValue>-1</ArgumentValue>')
         },
       )
+
+      // As on S3: an unencoded '+' is a space, a repeated max-keys counts by
+      // its first value, and max-keys[a] is a different parameter.
+      it.each([
+        { value: '+5', argumentValue: ' 5' },
+        { value: 'abc&max-keys=10', argumentValue: 'abc' },
+      ])(
+        'ListObjectsV2 answers 400 for max-keys=$value, echoing "$argumentValue"',
+        async ({ value, argumentValue }) => {
+          const res = await fetch(
+            `${ListBucket}?list-type=2&max-keys=${value}`,
+            { headers: { Authorization: PROBE_AUTH } },
+          )
+          expect(res.status).toBe(400)
+          expect(await res.text()).toContain(
+            `<ArgumentValue>${argumentValue}</ArgumentValue>`,
+          )
+        },
+      )
+
+      it('ListObjectsV2 ignores a bracketed max-keys', async () => {
+        const res = await fetch(`${ListBucket}?list-type=2&max-keys[a]=1`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<MaxKeys>1000</MaxKeys>')
+      })
+    })
+
+    it('reads a repeated prefix by its first value', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&prefix=subdir/&prefix=other/`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<Prefix>subdir/</Prefix>')
+      expect(body).toContain('<Key>subdir/c.txt</Key>')
+      expect(body).not.toContain('other/')
+    })
+
+    it('answers 400 InvalidArgument for a continuation token it did not issue', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&continuation-token=a.txt`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>continuation-token</ArgumentName>',
+      )
     })
   })
 
@@ -2734,6 +2784,91 @@ describe('AWS S3 - SDK', () => {
       )
       expect(res.status).toBe(200)
       expect(await res.text()).toContain('<Key>k%EF%BF%BF</Key>')
+    })
+  })
+
+  // A listing echoes the prefix, the key-marker and a resume position, and each
+  // can hold a character XML cannot carry.
+  describe('Listing values echoed into the response', () => {
+    const EchoBucket = `${BASE_PATH}/s3/echo-list`
+    const LISTINGS = [
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ]
+    const list = (query: string) =>
+      fetch(`${EchoBucket}?${query}`, {
+        headers: { Authorization: PROBE_AUTH },
+      })
+
+    beforeAll(async () => {
+      for (const Key of ['echo-list/d/\x01', 'echo-list/e.txt']) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+    })
+
+    it('ListObjectsV2 pages on from a key XML cannot carry', async () => {
+      // d/\x01 folds into d/ and is the last key page 1 reads, so page 1's
+      // token names it.
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    })
+
+    it.each(LISTINGS)(
+      '$op without encoding-type answers 400 for a prefix XML cannot carry',
+      async ({ query }) => {
+        const res = await list(`${query}&max-keys=0&prefix=%01`)
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain(
+          '<ArgumentName>encoding-type</ArgumentName>',
+        )
+      },
+    )
+
+    it.each(LISTINGS)(
+      '$op with encoding-type=url echoes that prefix encoded',
+      async ({ query }) => {
+        const res = await list(
+          `${query}&max-keys=0&prefix=%01&encoding-type=url`,
+        )
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<Prefix>%01</Prefix>')
+      },
+    )
+
+    it('ListObjectVersions with encoding-type=url echoes the key-marker encoded', async () => {
+      const res = await list('versions&key-marker=d%2F%01&encoding-type=url')
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<KeyMarker>d%2F%01</KeyMarker>')
+      expect(body).toContain('<Key>e.txt</Key>')
+    })
+
+    it('ListObjectVersions without encoding-type answers 400 for that key-marker', async () => {
+      const res = await list('versions&key-marker=d%2F%01')
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>encoding-type</ArgumentName>',
+      )
     })
   })
 
