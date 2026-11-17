@@ -19,8 +19,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        app: [backend]
+        app: [backend, auth]
 
     steps:
       - uses: actions/checkout@v4
@@ -54,8 +55,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.TAG_NAME }}
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.SHORT_SHA }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
           platforms: linux/amd64
 
       - name: Build and push Docker image (prerelease)
@@ -68,6 +69,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:${{ env.BRANCH_NAME }}
             ghcr.io/${{ github.repository_owner }}/auto-drive-${{ matrix.app }}:snapshot-${{ env.SHORT_SHA }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
           platforms: linux/amd64
