@@ -30,6 +30,10 @@ if (config.corsAllowedOrigins) {
   )
 }
 
+app.get('/health', (_req: Request, res: Response) => {
+  res.sendStatus(204)
+})
+
 app.use('/users', userController)
 app.use('/organizations', organizationController)
 

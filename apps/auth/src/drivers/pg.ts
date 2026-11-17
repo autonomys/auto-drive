@@ -4,7 +4,7 @@ import { DsqlSigner } from '@aws-sdk/dsql-signer'
 import { env } from '../utils/misc.js'
 import { createLogger } from './logger.js'
 
-let db: pg.Client | undefined
+let db: Promise<pg.Client> | undefined
 
 const logger = createLogger('auth:pg')
 
@@ -71,9 +71,35 @@ export const createDB = async () => {
   return createPgDB()
 }
 
-export const getDatabase = async () => {
+const forget = (connection: Promise<pg.Client>) => {
+  if (db === connection) {
+    db = undefined
+  }
+}
+
+/**
+ * The connection every request shares. Callers get the same promise, so
+ * requests that arrive while it connects wait for it instead of opening a
+ * connection each.
+ */
+export const getDatabase = (): Promise<pg.Client> => {
   if (!db) {
-    db = await createDB()
+    const connection: Promise<pg.Client> = createDB().then((client) => {
+      // A connection the server ends leaves its client unusable, and without
+      // a listener the 'error' would end the process. Forgetting the client
+      // makes the next caller connect again.
+      client.on('error', (error) => {
+        logger.error('Shared connection error', error)
+        forget(connection)
+        client.end().catch((endError) => {
+          logger.error('Failed to close shared connection', endError)
+        })
+      })
+      client.on('end', () => forget(connection))
+      return client
+    })
+    connection.catch(() => forget(connection))
+    db = connection
   }
 
   return db
@@ -112,8 +138,10 @@ export const withTransaction = async <T>(
 }
 
 export const closeDatabase = async () => {
-  if (db) {
-    await db.end()
-    db = undefined
+  const connection = db
+  db = undefined
+  if (connection) {
+    const client = await connection
+    await client.end()
   }
 }

@@ -94,7 +94,11 @@ organizationsController.post(
     }
 
     const body = z
-      .object({ publicId: z.string().min(1), role: roleSchema })
+      .object({
+        publicId: z.string().min(1),
+        role: roleSchema,
+        allowUnusedCredits: z.boolean().optional(),
+      })
       .safeParse(req.body)
     if (!body.success) {
       res.status(400).json({
@@ -109,6 +113,7 @@ organizationsController.post(
         req.params.organizationId,
         body.data.publicId,
         body.data.role,
+        { allowUnusedCredits: body.data.allowUnusedCredits },
       ),
       'Failed to add member',
     )

@@ -113,7 +113,7 @@ services:
   auth:
     build:
       context: .
-      dockerfile: ./auth/Dockerfile
+      dockerfile: ./apps/auth/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
