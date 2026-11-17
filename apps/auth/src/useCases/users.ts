@@ -9,6 +9,7 @@ import {
   UserOrPublicId,
   UserRole,
   deriveUserPublicId,
+  SERVICE_USER_PROVIDER,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
 import { organizationMembersRepository } from '../repositories/organizationMembers.js'
@@ -224,6 +225,10 @@ const updateRole = async (
   }
 
   const user = await resolveUser(userOrPublicId)
+  // An organisation's API keys must never act as an Auto Drive admin.
+  if (user.oauthProvider === SERVICE_USER_PROVIDER) {
+    throw new Error('A service user cannot be given a role')
+  }
 
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)
 }

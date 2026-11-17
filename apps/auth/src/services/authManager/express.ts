@@ -1,5 +1,10 @@
 import { Request, Response } from 'express'
-import { MaybeUser, User, UserRole } from '@auto-drive/models'
+import {
+  MaybeUser,
+  SERVICE_USER_PROVIDER,
+  User,
+  UserRole,
+} from '@auto-drive/models'
 import { UsersUseCases } from '../../useCases/index.js'
 import { AuthManager } from './index.js'
 import { CustomJWTAuth } from './providers/custom.js'
@@ -23,6 +28,13 @@ export const handleAuth = async (
   // sent here — otherwise the request is left open until the client times out.
   if (!user.onboarded) {
     res.status(403).json({ error: 'User not onboarded' })
+    return null
+  }
+
+  // Organisation keys are for the backend, which resolves them with GET /@me.
+  // They can't manage keys or request the service user's deletion.
+  if (user.oauthProvider === SERVICE_USER_PROVIDER) {
+    res.status(403).json({ error: 'Not available to organization API keys' })
     return null
   }
 

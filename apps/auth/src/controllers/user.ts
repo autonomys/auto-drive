@@ -10,7 +10,11 @@ import { UsersUseCases } from '../useCases/index.js'
 import { DeletionUseCases } from '../useCases/deletion.js'
 import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { ApiKeyError } from '../errors/apikeys.js'
-import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
+import {
+  DeletionRequestStatus,
+  SERVICE_USER_PROVIDER,
+  UserRole,
+} from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { Web3Auth } from '../services/authManager/providers/web3.js'
 import { createLogger } from '../drivers/logger.js'
@@ -39,6 +43,11 @@ userController.post('/@me/onboard', async (req: Request, res: Response) => {
 userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
   if (!user) {
+    return
+  }
+  // Nobody signs in as a service user, not even with its API keys.
+  if (user.oauthProvider === SERVICE_USER_PROVIDER) {
+    res.status(403).json({ error: 'Not available to organization API keys' })
     return
   }
 
@@ -139,7 +148,7 @@ userController.get('/@me/apiKeys', async (req: Request, res: Response) => {
   }
 })
 
-const parseCreateApiKeyBody = (
+export const parseCreateApiKeyBody = (
   body: unknown,
 ): { name: string | null; expiresAt: Date | null } | { error: string } => {
   // Allow callers to POST with no body at all — creates an unnamed,

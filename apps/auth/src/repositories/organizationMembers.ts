@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { OrganizationRole } from '@auto-drive/models'
+import { OrganizationRole, SERVICE_USER_PROVIDER } from '@auto-drive/models'
 import { getDatabase } from '../drivers/pg.js'
 
 type DBOrganizationMember = {
@@ -16,14 +16,16 @@ export const organizationRole = (
   member: Pick<DBOrganizationMember, 'role'>,
 ): OrganizationRole => member.role ?? OrganizationRole.Admin
 
+// The people in an organisation: its service user, which only holds its API
+// keys, is left out.
 const getOrganizationMemberships = async (
   organizationId: string,
 ): Promise<DBOrganizationMember[]> => {
   const db = await getDatabase()
   return db
     .query<DBOrganizationMember>(
-      'SELECT * FROM users.users_organizations WHERE organization_id = $1',
-      [organizationId],
+      'SELECT * FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider <> $2',
+      [organizationId, SERVICE_USER_PROVIDER],
     )
     .then((result) => result.rows)
 }
