@@ -3495,4 +3495,97 @@ describe('AWS S3 - SDK', () => {
       })
     }, 30_000)
   })
+
+  // #892: a caller's own reference for the customer an object is for, recorded
+  // with the upload's interactions and never returned as object metadata.
+  describe('customer reference (x-amz-meta-customer-reference)', () => {
+    const referencesOf = async (cid: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{ customer_reference: string | null }>(
+        'SELECT customer_reference FROM interactions WHERE cid = $1',
+        [cid],
+      )
+      return result.rows.map((r) => r.customer_reference)
+    }
+
+    const cidOf = async (Key: string) => {
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.Metadata).not.toHaveProperty('customer-reference')
+      return head.Metadata!.cid
+    }
+
+    it('PutObject records it on the interaction', async () => {
+      const Key = 'customer-reference/put.bin'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: randomBytes(64),
+          Metadata: { 'customer-reference': 'cust:put-1' },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust:put-1'])
+    })
+
+    it('PutObject without one records NULL', async () => {
+      const Key = 'customer-reference/none.bin'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: randomBytes(64) }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual([null])
+    })
+
+    it('a multipart upload records the one sent when it was created', async () => {
+      const Key = 'customer-reference/multipart.bin'
+      const { UploadId } = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket,
+          Key,
+          Metadata: { 'customer-reference': 'cust-multipart' },
+        }),
+      )
+      const { ETag } = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId,
+          PartNumber: 1,
+          Body: randomBytes(64),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId,
+          MultipartUpload: { Parts: [{ ETag, PartNumber: 1 }] },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust-multipart'])
+    })
+
+    const invalid = {
+      Bucket,
+      Key: 'customer-reference/invalid.bin',
+      Metadata: { 'customer-reference': 'not valid' },
+    }
+    const rejectedAsInvalid = {
+      $metadata: { httpStatusCode: 400 },
+      name: 'InvalidArgument',
+    }
+
+    it('PutObject answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(
+          new PutObjectCommand({ ...invalid, Body: randomBytes(64) }),
+        ),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
+
+    it('CreateMultipartUpload answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(new CreateMultipartUploadCommand(invalid)),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
+  })
 })

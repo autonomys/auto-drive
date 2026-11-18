@@ -41,6 +41,7 @@ import {
   EncryptionAlgorithm,
 } from '@autonomys/auto-dag-data'
 import { S3ObjectMetadata } from '../../../infrastructure/repositories/s3/objectMappings.js'
+import { parseCustomerReference } from '../../../core/uploads/customerReference.js'
 
 const logger = createLogger('s3:controllers')
 
@@ -116,8 +117,16 @@ const getVersionId = (req: Request): string | undefined => {
 // dedicated paths and must be excluded from the captured userMetadata so they
 // are not double-stored / double-emitted. mtime has its own column; compression
 // and encryption drive the upload options (and round-trip via the IPLD flags);
-// cid is a response-only header the server sets.
-const RESERVED_META_KEYS = new Set(['mtime', 'compression', 'encryption', 'cid'])
+// cid is a response-only header the server sets. customer-reference is
+// recorded with the upload's interactions and never returned on reads.
+const CUSTOMER_REFERENCE_META_KEY = 'customer-reference'
+const RESERVED_META_KEYS = new Set([
+  'mtime',
+  'compression',
+  'encryption',
+  'cid',
+  CUSTOMER_REFERENCE_META_KEY,
+])
 
 const headerString = (
   value: string | string[] | undefined,
@@ -226,6 +235,27 @@ const rejectIfUserMetadataTooLarge = (
     Message: 'Your metadata headers exceed the maximum allowed metadata size.',
   })
   return true
+}
+
+/**
+ * The caller's optional reference for the customer an object is for (#892),
+ * sent as x-amz-meta-customer-reference on PutObject and
+ * CreateMultipartUpload. It is recorded with the upload's interactions, not
+ * stored as object metadata. Undefined once it has answered an invalid one.
+ */
+const getCustomerReference = (
+  req: Request,
+  res: Response,
+): string | null | undefined => {
+  const reference = parseCustomerReference(
+    req.headers[`x-amz-meta-${CUSTOMER_REFERENCE_META_KEY}`],
+  )
+  if (reference.isOk()) return reference.value
+  sendXML(res.status(400), 'Error', {
+    Code: 'InvalidArgument',
+    Message: reference.error.message,
+  })
+  return undefined
 }
 
 /**
@@ -990,6 +1020,8 @@ export const createMultipartUploadHandler = async (
 
   const metadata = getObjectMetadata(req)
   if (rejectIfUserMetadataTooLarge(res, metadata)) return
+  const customerReference = getCustomerReference(req, res)
+  if (customerReference === undefined) return
 
   const result = await S3UseCases.createMultipartUpload(user, {
     Bucket: bucket,
@@ -998,6 +1030,7 @@ export const createMultipartUploadHandler = async (
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
     Metadata: metadata,
+    CustomerReference: customerReference,
   })
 
   if (result.isErr()) {
@@ -1397,6 +1430,8 @@ export const putObjectHandler = async (req: Request, res: Response) => {
 
   const metadata = getObjectMetadata(req)
   if (rejectIfUserMetadataTooLarge(res, metadata)) return
+  const customerReference = getCustomerReference(req, res)
+  if (customerReference === undefined) return
 
   const result = await S3UseCases.putObject(user, {
     Bucket: bucket,
@@ -1406,6 +1441,7 @@ export const putObjectHandler = async (req: Request, res: Response) => {
     UploadOptions: uploadOptions,
     Mtime: getMtime(req),
     Metadata: metadata,
+    CustomerReference: customerReference,
   })
 
   if (result.isErr()) {
