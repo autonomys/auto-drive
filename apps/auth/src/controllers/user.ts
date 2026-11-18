@@ -12,11 +12,7 @@ import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { ApiKeyError } from '../errors/apikeys.js'
 import { OrganizationError } from '../errors/organizations.js'
 import { parseCreateApiKeyBody } from './apiKeyBody.js'
-import {
-  DeletionRequestStatus,
-  SERVICE_USER_PROVIDER,
-  UserRole,
-} from '@auto-drive/models'
+import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
 import { Web3Auth } from '../services/authManager/providers/web3.js'
 import { createLogger } from '../drivers/logger.js'
@@ -47,9 +43,10 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   if (!user) {
     return
   }
-  // Nobody signs in as a service user, not even with its API keys.
-  if (user.oauthProvider === SERVICE_USER_PROVIDER) {
-    res.status(403).json({ error: 'Not available to organization API keys' })
+  // Sessions are for signing in. API keys, a service user's included, are
+  // used as they are.
+  if (user.apiKeyId) {
+    res.status(403).json({ error: 'Not available to API keys' })
     return
   }
 

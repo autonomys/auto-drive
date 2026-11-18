@@ -285,4 +285,13 @@ describe('Organization API keys', () => {
     })
     expect(asService.status).toBe(401)
   })
+
+  it('gives no session for a personal key either', async () => {
+    const user = await onboard()
+    const key = await ApiKeysUseCases.createApiKey(user, NO_OPTIONS)
+
+    expect((await withKey(key.secret, 'POST', '/@me/accessToken')).status).toBe(
+      403,
+    )
+  })
 })
