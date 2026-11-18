@@ -278,7 +278,7 @@ objectController.post(
       return
     }
 
-    const shareResult = await handleInternalError(
+    const shareResult = await handleInternalErrorResult(
       ObjectUseCases.shareObject(user, cid, publicId),
       'Failed to share object',
     )
@@ -302,7 +302,7 @@ objectController.post(
 
     const { cid } = req.params
 
-    const deleteResult = await handleInternalError(
+    const deleteResult = await handleInternalErrorResult(
       ObjectUseCases.markAsDeleted(user, cid),
       'Failed to delete object',
     )
@@ -326,7 +326,7 @@ objectController.post(
 
     const { cid } = req.params
 
-    const restoreResult = await handleInternalError(
+    const restoreResult = await handleInternalErrorResult(
       ObjectUseCases.restoreObject(user, cid),
       'Failed to restore object',
     )
