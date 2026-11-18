@@ -2833,6 +2833,84 @@ describe('AWS S3 - SDK', () => {
       expect(page2.IsTruncated).toBe(false)
     })
 
+    it('ListObjectsV2 pages on past a folder that fills the database batch', async () => {
+      // With a delimiter, max-keys=1 reads 110 rows, so 110 keys under d/ fill
+      // the batch and page 1 resumes from d/ + U+FFFF.
+      const FoldBucket = `${BASE_PATH}/s3/fold-list`
+      const keys = [
+        ...Array.from(
+          { length: 110 },
+          (_, i) => `fold-list/d/${String(i).padStart(3, '0')}`,
+        ),
+        'fold-list/e.txt',
+      ]
+      for (let i = 0; i < keys.length; i += 10) {
+        await Promise.all(
+          keys.slice(i, i + 10).map((Key) =>
+            s3Client.send(
+              new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+            ),
+          ),
+        )
+      }
+
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.CommonPrefixes ?? []).toEqual([])
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    }, 120_000)
+
+    it('ListObjectsV2 pages in byte order, returning a folder once', async () => {
+      const OrderBucket = `${BASE_PATH}/s3/order-list`
+      for (const Key of [
+        'order-list/photos/a.jpg',
+        'order-list/photos.zip',
+        'order-list/photos/z.jpg',
+      ]) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+
+      const entries: string[] = []
+      let ContinuationToken: string | undefined
+      do {
+        const page = await s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: OrderBucket,
+            Delimiter: '/',
+            MaxKeys: 1,
+            ContinuationToken,
+          }),
+        )
+        entries.push(
+          ...(page.Contents ?? []).map((c) => c.Key!),
+          ...(page.CommonPrefixes ?? []).map((p) => p.Prefix!),
+        )
+        ContinuationToken = page.IsTruncated
+          ? page.NextContinuationToken
+          : undefined
+      } while (ContinuationToken && entries.length < 5)
+      expect(entries).toEqual(['photos.zip', 'photos/'])
+    })
+
     it.each(LISTINGS)(
       '$op without encoding-type answers 400 for a prefix XML cannot carry',
       async ({ query }) => {
