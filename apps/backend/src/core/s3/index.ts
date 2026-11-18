@@ -203,6 +203,19 @@ const listObjects = async (
   user: UserWithOrganization,
   params: ListObjectsParams,
 ): Promise<ListObjectsResult> => {
+  // S3 answers max-keys=0 with an empty page that is not truncated, but
+  // file-server's finalizer reports one as truncated whenever keys exist.
+  if (params.maxKeys === 0) {
+    return {
+      name: params.bucket,
+      prefix: params.prefix,
+      maxKeys: 0,
+      isTruncated: false,
+      nextContinuationToken: null,
+      objects: [],
+      commonPrefixes: [],
+    }
+  }
   const dbLimit = computeListObjectsDbLimit(params.maxKeys, params.delimiter)
   const allMatching = await s3ObjectMappingsRepository.listObjects(
     user.oauthProvider,
@@ -527,6 +540,15 @@ const getObjectVersions = async (
   user: UserWithOrganization,
   params: ListObjectVersionsParams,
 ): Promise<ReturnType<typeof buildListVersionsResult>> => {
+  // Same as listObjects: S3 answers max-keys=0 with an untruncated empty page.
+  if (params.maxKeys === 0) {
+    return {
+      versions: [],
+      deleteMarkers: [],
+      isTruncated: false,
+      nextKeyMarker: null,
+    }
+  }
   const rows = await s3ObjectMappingsRepository.listObjectVersions(
     user.oauthProvider,
     user.oauthUserId,

@@ -24,7 +24,12 @@ import {
 import { pipeline, Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { NextFunction, Request, Response } from 'express'
-import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
+import {
+  encodeS3Key,
+  parseMaxKeys,
+  planListingEncoding,
+  sendXML,
+} from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
 import { UploadOptions } from '@auto-drive/models'
@@ -1167,6 +1172,15 @@ export const completeMultipartUploadHandler = async (
   )
 }
 
+const sendInvalidMaxKeys = (res: Response, bucket: string, raw: unknown) =>
+  sendXML(res.status(400), 'Error', {
+    Code: 'InvalidArgument',
+    Message: 'Argument max-keys must be an integer between 0 and 2147483647',
+    ArgumentName: 'max-keys',
+    ArgumentValue: String(raw),
+    Resource: `/${bucket}/`,
+  })
+
 export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -1178,8 +1192,11 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
 
   const prefix = (req.query.prefix as string) ?? ''
   const delimiter = (req.query.delimiter as string) ?? null
-  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
-  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
+  const maxKeys = parseMaxKeys(req.query['max-keys'])
+  if (maxKeys === null) {
+    sendInvalidMaxKeys(res, bucket, req.query['max-keys'])
+    return
+  }
   const continuationToken =
     (req.query['continuation-token'] as string) ?? null
   const encodingType = (req.query['encoding-type'] as string) ?? null
@@ -1267,8 +1284,11 @@ export const listObjectVersionsHandler = async (
 
   const bucket = req.params.key.split('/')[0]
   const prefix = (req.query.prefix as string) ?? ''
-  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
-  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
+  const maxKeys = parseMaxKeys(req.query['max-keys'])
+  if (maxKeys === null) {
+    sendInvalidMaxKeys(res, bucket, req.query['max-keys'])
+    return
+  }
   const keyMarker = (req.query['key-marker'] as string) ?? null
   const encodingType = (req.query['encoding-type'] as string) ?? null
 
