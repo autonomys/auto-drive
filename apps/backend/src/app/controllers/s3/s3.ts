@@ -24,7 +24,15 @@ import {
 import { pipeline, Readable } from 'stream'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { NextFunction, Request, Response } from 'express'
-import { encodeS3Key, planListingEncoding, sendXML } from './utils.js'
+import {
+  decodeContinuationToken,
+  encodeContinuationToken,
+  encodeS3Key,
+  listingQuery,
+  parseMaxKeys,
+  planListingEncoding,
+  sendXML,
+} from './utils.js'
 import js2xmlparser from 'js2xmlparser'
 import { XMLParser } from 'fast-xml-parser'
 import { UploadOptions } from '@auto-drive/models'
@@ -1200,6 +1208,41 @@ export const completeMultipartUploadHandler = async (
   )
 }
 
+// InvalidArgument for a listing request, naming the parameter at fault.
+const sendInvalidListingArgument = (
+  res: Response,
+  bucket: string,
+  argument: { name: string; value?: string },
+  message: string,
+) =>
+  sendXML(res.status(400), 'Error', {
+    Code: 'InvalidArgument',
+    Message: message,
+    ArgumentName: argument.name,
+    // js2xmlparser writes an undefined value out as the text "undefined".
+    ...(argument.value !== undefined && { ArgumentValue: argument.value }),
+    Resource: `/${bucket}/`,
+  })
+
+// Keys may contain characters XML cannot represent; encoding-type=url is the
+// S3 mechanism for returning them. Without opt-in, reject with 400 rather than
+// throwing a 500 in the serializer.
+const sendListingNeedsUrlEncoding = (res: Response, bucket: string) =>
+  sendInvalidListingArgument(
+    res,
+    bucket,
+    { name: 'encoding-type' },
+    'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
+  )
+
+const sendInvalidMaxKeys = (res: Response, bucket: string, value: string) =>
+  sendInvalidListingArgument(
+    res,
+    bucket,
+    { name: 'max-keys', value },
+    'Provided max-keys not an integer or within integer range',
+  )
+
 export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -1209,13 +1252,27 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   // "my-bucket/" or "my-bucket" — take everything before the first '/'.
   const bucket = req.params.key.split('/')[0]
 
-  const prefix = (req.query.prefix as string) ?? ''
-  const delimiter = (req.query.delimiter as string) ?? null
-  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
-  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
-  const continuationToken =
-    (req.query['continuation-token'] as string) ?? null
-  const encodingType = (req.query['encoding-type'] as string) ?? null
+  const query = listingQuery(req)
+  const prefix = query.get('prefix') ?? ''
+  const delimiter = query.get('delimiter')
+  const rawMaxKeys = query.get('max-keys')
+  const maxKeys = parseMaxKeys(rawMaxKeys)
+  if (maxKeys === null) {
+    sendInvalidMaxKeys(res, bucket, rawMaxKeys ?? '')
+    return
+  }
+  const rawToken = query.get('continuation-token')
+  const continuationToken = rawToken ? decodeContinuationToken(rawToken) : null
+  if (rawToken && continuationToken === null) {
+    sendInvalidListingArgument(
+      res,
+      bucket,
+      { name: 'continuation-token' },
+      'The continuation token provided is incorrect',
+    )
+    return
+  }
+  const encodingType = query.get('encoding-type')
 
   const result = await S3UseCases.listObjects(user, {
     bucket,
@@ -1225,22 +1282,17 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     continuationToken,
   })
 
-  // Keys may contain characters XML cannot represent; encoding-type=url is the
-  // S3 mechanism for returning them. Without opt-in, reject with 400 rather
-  // than throwing a 500 in the serializer.
   const plan = planListingEncoding(
-    [...result.objects.map((o) => o.key), ...result.commonPrefixes],
+    [
+      result.prefix,
+      ...result.objects.map((o) => o.key),
+      ...result.commonPrefixes,
+    ],
     encodingType,
   )
 
   if (plan === 'reject') {
-    sendXML(res.status(400), 'Error', {
-      Code: 'InvalidArgument',
-      Message:
-        'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
-      ArgumentName: 'encoding-type',
-      Resource: `/${bucket}/`,
-    })
+    sendListingNeedsUrlEncoding(res, bucket)
     return
   }
 
@@ -1263,7 +1315,9 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
   }
 
   if (result.nextContinuationToken) {
-    xmlBody.NextContinuationToken = result.nextContinuationToken
+    xmlBody.NextContinuationToken = encodeContinuationToken(
+      result.nextContinuationToken,
+    )
   }
 
   if (result.objects.length > 0) {
@@ -1299,11 +1353,16 @@ export const listObjectVersionsHandler = async (
   if (!user) return
 
   const bucket = req.params.key.split('/')[0]
-  const prefix = (req.query.prefix as string) ?? ''
-  const rawMaxKeys = parseInt((req.query['max-keys'] as string) ?? '1000', 10)
-  const maxKeys = Math.min(Math.max(rawMaxKeys > 0 ? rawMaxKeys : 1000, 1), 1000)
-  const keyMarker = (req.query['key-marker'] as string) ?? null
-  const encodingType = (req.query['encoding-type'] as string) ?? null
+  const query = listingQuery(req)
+  const prefix = query.get('prefix') ?? ''
+  const rawMaxKeys = query.get('max-keys')
+  const maxKeys = parseMaxKeys(rawMaxKeys)
+  if (maxKeys === null) {
+    sendInvalidMaxKeys(res, bucket, rawMaxKeys ?? '')
+    return
+  }
+  const keyMarker = query.get('key-marker')
+  const encodingType = query.get('encoding-type')
 
   const result = await S3UseCases.getObjectVersions(user, {
     bucket,
@@ -1312,23 +1371,19 @@ export const listObjectVersionsHandler = async (
     maxKeys,
   })
 
-  // Same XML-safety contract as ListObjectsV2: keys with characters XML can't
-  // represent need encoding-type=url; without opt-in, reject rather than 500.
+  // Same XML-safety contract as ListObjectsV2. The key-marker is echoed too, and
+  // under encoding-type=url clients decode it like the keys.
   const plan = planListingEncoding(
     [
+      prefix,
+      keyMarker ?? '',
       ...result.versions.map((v) => v.key),
       ...result.deleteMarkers.map((m) => m.key),
     ],
     encodingType,
   )
   if (plan === 'reject') {
-    sendXML(res.status(400), 'Error', {
-      Code: 'InvalidArgument',
-      Message:
-        'This listing contains keys with characters that require URL encoding. Retry the request with encoding-type=url.',
-      ArgumentName: 'encoding-type',
-      Resource: `/${bucket}/`,
-    })
+    sendListingNeedsUrlEncoding(res, bucket)
     return
   }
   const encode = plan === 'encode' ? encodeS3Key : (value: string) => value
@@ -1336,7 +1391,7 @@ export const listObjectVersionsHandler = async (
   const xmlBody: Record<string, unknown> = {
     Name: bucket,
     Prefix: encode(prefix),
-    KeyMarker: keyMarker ?? '',
+    KeyMarker: encode(keyMarker ?? ''),
     MaxKeys: maxKeys,
     IsTruncated: result.isTruncated,
   }
