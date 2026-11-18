@@ -780,6 +780,61 @@ describe('AWS S3 - SDK', () => {
       expect(result.Contents ?? []).toHaveLength(0)
       expect(result.IsTruncated).toBe(false)
     })
+
+    describe('max-keys', () => {
+      const LISTINGS = [
+        { op: 'ListObjectsV2', query: 'list-type=2' },
+        { op: 'ListObjectVersions', query: 'versions' },
+      ]
+
+      it('ListObjectsV2 with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectsV2Command({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.KeyCount).toBe(0)
+        expect(result.Contents ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextContinuationToken).toBeUndefined()
+      })
+
+      it('ListObjectVersions with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectVersionsCommand({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.Versions ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextKeyMarker).toBeUndefined()
+      })
+
+      it.each(LISTINGS)(
+        '$op reads an empty max-keys as omitted',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(200)
+          const body = await res.text()
+          expect(body).toContain('<MaxKeys>1000</MaxKeys>')
+          expect(body).toContain('<Key>a.txt</Key>')
+        },
+      )
+
+      it.each(LISTINGS)(
+        '$op answers 400 InvalidArgument for a negative max-keys',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=-1`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(400)
+          const body = await res.text()
+          expect(body).toContain('<Code>InvalidArgument</Code>')
+          expect(body).toContain('<ArgumentName>max-keys</ArgumentName>')
+          expect(body).toContain('<ArgumentValue>-1</ArgumentValue>')
+        },
+      )
+    })
   })
 
   // DeleteObject soft-deletes the (bucket, key) mapping: the S3 name is hidden
