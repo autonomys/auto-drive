@@ -119,7 +119,9 @@ const byApiKey = async (
   const buckets = new Map<string, InteractionGroup[]>()
   for (const group of groups) {
     const key = group.apiKeyId ?? kindOf(group)
-    buckets.set(key, [...(buckets.get(key) ?? []), group])
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(group)
+    else buckets.set(key, [group])
   }
 
   const rows = [...buckets.values()].map((bucket): UsageByApiKey => {
@@ -162,7 +164,9 @@ const byCustomerReference = (
   for (const group of groups) {
     if (group.type !== 'upload') continue
     const key = group.customerReference
-    buckets.set(key, [...(buckets.get(key) ?? []), group])
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(group)
+    else buckets.set(key, [group])
   }
 
   const rows = [...buckets].map(
