@@ -9,8 +9,14 @@ import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalError } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 import { config } from '../../config.js'
+import { parseCustomerReference } from '../../core/uploads/customerReference.js'
 
 const logger = createLogger('http:controllers:upload')
+
+// The caller's optional reference for the customer an upload is for (#892).
+// Read when a file or folder upload is created; a file in a folder upload
+// inherits the folder's.
+const CUSTOMER_REFERENCE_HEADER = 'x-customer-reference'
 
 // apis/frontend.ts mounts this router before its body parsers, so each route
 // reads its JSON body here, after the credential check. Resolves false once it
@@ -89,12 +95,23 @@ uploadController.post(
       return
     }
 
+    const customerReference = parseCustomerReference(
+      req.headers[CUSTOMER_REFERENCE_HEADER],
+    )
+    if (customerReference.isErr()) {
+      handleError(customerReference.error, res)
+      return
+    }
+
     const uploadResult = await handleInternalError(
       UploadsUseCases.createFileUpload(
         user,
         filename,
         mimeType ?? null,
         safeUploadOptions.data,
+        null,
+        null,
+        customerReference.value,
       ),
       'Failed to create file upload',
     )
@@ -147,12 +164,21 @@ uploadController.post(
       return
     }
 
+    const customerReference = parseCustomerReference(
+      req.headers[CUSTOMER_REFERENCE_HEADER],
+    )
+    if (customerReference.isErr()) {
+      handleError(customerReference.error, res)
+      return
+    }
+
     const upload = await handleInternalError(
       UploadsUseCases.createFolderUpload(
         user,
         safeFileTree.data.name,
         safeFileTree.data,
         safeUploadOptions.data,
+        customerReference.value,
       ),
       'Failed to create folder upload',
     )
@@ -216,6 +242,14 @@ uploadController.post(
       return
     }
 
+    const customerReference = parseCustomerReference(
+      req.headers[CUSTOMER_REFERENCE_HEADER],
+    )
+    if (customerReference.isErr()) {
+      handleError(customerReference.error, res)
+      return
+    }
+
     const uploadResult = await handleInternalError(
       UploadsUseCases.createFileInFolder(
         user,
@@ -224,6 +258,7 @@ uploadController.post(
         name,
         mimeType ?? null,
         safeUploadOptions.data,
+        customerReference.value,
       ),
       'Failed to create file in folder',
     )

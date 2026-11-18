@@ -106,6 +106,7 @@ const createFileUpload = async (
   uploadOptions: FileUploadOptions | null,
   rootId?: string | null,
   relativeId?: string | null,
+  customerReference: string | null = null,
 ): Promise<FileUpload> => {
   logger.debug(
     'createFileUpload invoked (userId=%s, name=%s)',
@@ -129,6 +130,7 @@ const createFileUpload = async (
     user.oauthProvider,
     user.oauthUserId,
     uploadOptions,
+    customerReference,
   )
 
   await initFileProcessing(upload)
@@ -141,6 +143,7 @@ export const createFolderUpload = async (
   name: string,
   folderTree: FolderTreeFolder,
   uploadOptions: FileUploadOptions | null,
+  customerReference: string | null = null,
 ): Promise<FolderUpload> => {
   assertFolderTreeNamesFit(folderTree)
 
@@ -157,6 +160,7 @@ export const createFolderUpload = async (
     user.oauthProvider,
     user.oauthUserId,
     uploadOptions,
+    customerReference,
   )
 
   return mapTableToModel(result) as FolderUpload
@@ -169,6 +173,7 @@ const createFileInFolder = async (
   name: string,
   mimeType: string | null,
   uploadOptions: FileUploadOptions | null = null,
+  customerReference: string | null = null,
 ): Promise<FileUpload> => {
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (!upload) {
@@ -179,6 +184,17 @@ const createFileInFolder = async (
     throw new Error('Upload is not a folder')
   }
 
+  // A folder upload has one customer reference, set when it is created, and
+  // its files inherit it.
+  if (
+    customerReference !== null &&
+    customerReference !== upload.customer_reference
+  ) {
+    throw new BadRequestError(
+      'A file in a folder upload takes the customer reference of the folder upload',
+    )
+  }
+
   const file = await createFileUpload(
     user,
     name,
@@ -186,6 +202,7 @@ const createFileInFolder = async (
     uploadOptions,
     uploadId,
     relativeId,
+    upload.customer_reference,
   )
 
   return file

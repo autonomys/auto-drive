@@ -1,4 +1,4 @@
-import { Response } from 'express'
+import { Request, Response } from 'express'
 import js2xmlparser from 'js2xmlparser'
 
 export const sendXML = <T extends object>(
@@ -17,19 +17,44 @@ export const sendXML = <T extends object>(
   )
 }
 
+// A listing's query parameters as S3 reads them: a repeated parameter counts
+// once, by its first value, a bracketed name such as max-keys[a] is a different
+// parameter, and an unencoded '+' is a space. Express's req.query turns the
+// first two into arrays and objects instead.
+export const listingQuery = (req: Request): URLSearchParams => {
+  const queryStart = req.originalUrl.indexOf('?')
+  return new URLSearchParams(
+    queryStart === -1 ? '' : req.originalUrl.slice(queryStart + 1),
+  )
+}
+
 const DEFAULT_MAX_KEYS = 1000
+const MAX_KEYS_CAP = 1000
 const S3_MAX_KEYS_UPPER_BOUND = 2147483647
 
-// Parses max-keys the way S3 does: an empty value counts as omitted, a repeated
-// parameter uses its first value, and an integer outside 0 to 2^31 - 1 is
-// rejected. Returns null for a value S3 would reject.
-export const parseMaxKeys = (raw: unknown): number | null => {
-  const value = Array.isArray(raw) ? raw[0] : raw
-  if (value === undefined || value === '') return DEFAULT_MAX_KEYS
-  if (typeof value !== 'string' || !/^[+-]?\d+$/.test(value)) return null
+// Parses max-keys the way S3 does: an empty value counts as omitted, and an
+// integer outside 0 to 2^31 - 1 is rejected. Returns null for a value S3 would
+// reject.
+export const parseMaxKeys = (value: string | null): number | null => {
+  if (value === null || value === '') return DEFAULT_MAX_KEYS
+  if (!/^[+-]?\d+$/.test(value)) return null
   const parsed = Number(value)
   if (parsed < 0 || parsed > S3_MAX_KEYS_UPPER_BOUND) return null
-  return Math.min(Math.abs(parsed), DEFAULT_MAX_KEYS)
+  // + 0 turns the -0 that Number('-0') returns into 0.
+  return Math.min(parsed, MAX_KEYS_CAP) + 0
+}
+
+// S3 continuation tokens are opaque: clients send them back unchanged and do
+// not URL-decode them under encoding-type=url. Ours names the key a page
+// resumes after, which can hold characters XML cannot carry (file-server
+// appends U+FFFF to step past a folder), so it travels as base64url.
+export const encodeContinuationToken = (key: string): string =>
+  Buffer.from(key, 'utf8').toString('base64url')
+
+// Returns null for a token encodeContinuationToken did not produce.
+export const decodeContinuationToken = (token: string): string | null => {
+  const key = Buffer.from(token, 'base64url').toString('utf8')
+  return encodeContinuationToken(key) === token ? key : null
 }
 
 // Characters XML 1.0 cannot represent: control characters other than TAB, LF
@@ -47,8 +72,9 @@ export const encodeS3Key = (value: string): string => encodeURIComponent(value)
 
 export type ListingEncodingPlan = 'plain' | 'encode' | 'reject'
 
-// 'encode': client opted into encoding-type=url — encode every key/prefix.
-// 'reject': illegal keys present without opt-in — caller returns 400.
+// `values` is every key, prefix and marker the response body will carry.
+// 'encode': client opted into encoding-type=url — encode them all.
+// 'reject': an illegal value is present without opt-in — caller returns 400.
 // 'plain':  nothing illegal and no opt-in — render unchanged.
 export const planListingEncoding = (
   values: string[],

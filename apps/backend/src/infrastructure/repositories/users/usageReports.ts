@@ -27,6 +27,7 @@ export type InteractionGroup = {
   type: 'upload' | 'download'
   source: 'free_tier' | 'purchased'
   apiKeyId: string | null
+  customerReference: string | null
   afterAttributionStart: boolean
   count: number
   bytes: string
@@ -45,13 +46,14 @@ const getInteractionGroups = async (
     type: 'upload' | 'download'
     source: 'free_tier' | 'purchased'
     api_key_id: string | null
+    customer_reference: string | null
     after_attribution_start: boolean
     count: string
     bytes: string
     valued_bytes: string
     value: string
   }>(
-    `SELECT i.type, i.source, i.api_key_id,
+    `SELECT i.type, i.source, i.api_key_id, i.customer_reference,
             COALESCE(i.created_at >= ${local('$4')}, false)
               AS after_attribution_start,
             COUNT(*) AS count,
@@ -61,7 +63,7 @@ const getInteractionGroups = async (
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}
-     GROUP BY 1, 2, 3, 4`,
+     GROUP BY 1, 2, 3, 4, 5`,
     [accountId, from, to, attributionStart],
   )
 
@@ -69,6 +71,7 @@ const getInteractionGroups = async (
     type: row.type,
     source: row.source,
     apiKeyId: row.api_key_id,
+    customerReference: row.customer_reference,
     afterAttributionStart: row.after_attribution_start,
     count: Number(row.count),
     bytes: row.bytes,
@@ -206,6 +209,7 @@ export type InteractionRow = {
   size: string
   cid: string | null
   api_key_id: string | null
+  customer_reference: string | null
   value: string | null
 }
 
@@ -224,7 +228,8 @@ const getInteractionsPage = async (
   const result = await db.query<InteractionRow>(
     `SELECT i.id, i.created_at::text AS cursor,
             i.created_at::timestamptz AS created_at,
-            i.type, i.source, i.size, i.cid, i.api_key_id, v.value
+            i.type, i.source, i.size, i.cid, i.api_key_id,
+            i.customer_reference, v.value
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}

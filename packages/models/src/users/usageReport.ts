@@ -37,6 +37,8 @@ export type UsageReport = {
   };
   /** Sums to `uploads` and `downloads`. */
   apiKeys: UsageByApiKey[];
+  /** Sums to `uploads`. Downloads carry no customer reference. */
+  customerReferences: UsageByCustomerReference[];
   /** Credit batches granted in the range, oldest first. */
   purchases: UsagePurchase[];
   /** Null when the range starts before attribution. */
@@ -59,6 +61,16 @@ export type UsageByApiKey = {
   ai3Value: string;
   downloadCount: number;
   downloadBytes: string;
+};
+
+/** Uploads tagged with one customer reference, or with none. */
+export type UsageByCustomerReference = {
+  /** Null for uploads made without a reference. */
+  customerReference: string | null;
+  uploadCount: number;
+  uploadBytes: string;
+  purchasedBytes: string;
+  ai3Value: string;
 };
 
 export type UsagePurchase = {
@@ -109,6 +121,7 @@ export type UsageInteraction = {
   cid: string | null;
   apiKeyId: string | null;
   apiKeyName: string | null;
+  customerReference: string | null;
   /** Null when no credit batches are recorded for it. */
   ai3Value: string | null;
 };
