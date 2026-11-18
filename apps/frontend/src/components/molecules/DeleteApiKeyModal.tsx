@@ -8,35 +8,35 @@ import {
 import { Fragment, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
-import { AuthService } from 'services/auth/auth';
-import { useRouter } from 'next/navigation';
 
 export const DeleteApiKeyModal = ({
   apiKeyId,
   closeModal,
+  deleteKey,
+  onDeleted,
 }: {
   apiKeyId: string | null;
   closeModal: () => void;
+  deleteKey: (apiKeyId: string) => Promise<void>;
+  onDeleted: () => void;
 }) => {
   const isOpen = apiKeyId !== null;
-
-  const router = useRouter();
 
   const deleteApiKey = useCallback(() => {
     if (!apiKeyId) {
       return;
     }
 
-    AuthService.deleteApiKey(apiKeyId)
+    deleteKey(apiKeyId)
       .then(() => {
         toast.success('API key deleted successfully');
         closeModal();
-        router.refresh();
+        onDeleted();
       })
       .catch(() => {
         toast.error('Failed to delete API key');
       });
-  }, [apiKeyId, closeModal, router]);
+  }, [apiKeyId, closeModal, deleteKey, onDeleted]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>

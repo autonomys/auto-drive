@@ -6,6 +6,9 @@ import {
   AccountModel,
   AccountTermsChange,
   AdminAccountDetails,
+  ApiKey,
+  CreateApiKeyInput,
+  OrganizationApiKeys,
   OrganizationMembershipChange,
   OrganizationRole,
   PartnerOrganization,
@@ -568,6 +571,30 @@ export const createApiService = ({
   ): Promise<OrganizationMembershipChange[]> =>
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/membership-changes`,
+    ),
+  /** A partner organization's API keys, for its members and admins. */
+  getOrganizationApiKeys: (
+    organizationId: string,
+  ): Promise<OrganizationApiKeys> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys`,
+    ),
+  /** Organization admins: the new key, with its secret shown only now. */
+  createOrganizationApiKey: (
+    organizationId: string,
+    input: CreateApiKeyInput,
+  ): Promise<ApiKey> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys`,
+      { method: 'POST', body: input },
+    ),
+  revokeOrganizationApiKey: (
+    organizationId: string,
+    apiKeyId: string,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys/${encodeURIComponent(apiKeyId)}`,
+      { method: 'DELETE' },
     ),
   /** Admin: every change to an account's terms, newest first. */
   getAccountTermsChanges: (accountId: string): Promise<AccountTermsChange[]> =>

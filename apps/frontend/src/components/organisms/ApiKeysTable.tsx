@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react';
 import { ApiKeyCreationModal } from '../molecules/ApiKeyCreationModal';
-import { ApiKeyWithoutSecret } from '@auto-drive/models';
+import {
+  ApiKey,
+  ApiKeyWithoutSecret,
+  CreateApiKeyInput,
+} from '@auto-drive/models';
 import { DeleteApiKeyModal } from '../molecules/DeleteApiKeyModal';
 import { Loader } from 'lucide-react';
 import { Table } from '@/components/molecules/Table';
@@ -34,15 +38,24 @@ const isExpired = (d: Date | string | null): boolean => {
   return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
 };
 
-const COLUMN_COUNT = 5;
-
+/**
+ * API keys, with a create button when `createKey` is given and a delete
+ * button on each key when `deleteKey` is.
+ */
 export const ApiKeysTable = ({
   apiKeys,
   newKeyName,
+  createKey,
+  deleteKey,
+  onChanged,
 }: {
   apiKeys: ApiKeyWithoutSecret[] | undefined;
   /** From `?newKey=`: open the create dialog on load with this name. */
   newKeyName?: string;
+  createKey?: (input: CreateApiKeyInput) => Promise<ApiKey>;
+  deleteKey?: (apiKeyId: string) => Promise<void>;
+  /** Reloads the keys after one is created or deleted. */
+  onChanged: () => void;
 }) => {
   const [isCreationOpen, setIsCreationOpen] = useState(!!newKeyName);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -51,8 +64,7 @@ export const ApiKeysTable = ({
   const pathname = usePathname();
 
   // Drop `?newKey=` once its dialog closes, so a reload doesn't reopen it and
-  // the next manual "Create API Key" starts with an empty name. Navigating
-  // also re-renders the server page, which refreshes the key list.
+  // the next manual "Create API Key" starts with an empty name.
   const closeCreationModal = useCallback(() => {
     setIsCreationOpen(false);
     if (newKeyName) router.replace(pathname);
@@ -63,32 +75,43 @@ export const ApiKeysTable = ({
   const closeDeleteModal = useCallback(() => setDeleteId(null), []);
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
-
-  const refresh = useCallback(() => router.refresh(), [router]);
+  const columnCount = deleteKey ? 5 : 4;
 
   const onCreationSuccess = useCallback(() => {
     closeCreationModal();
-    refresh();
-  }, [closeCreationModal, refresh]);
+    onChanged();
+  }, [closeCreationModal, onChanged]);
 
   return (
     <div className='flex flex-col'>
-      <ApiKeyCreationModal
-        isOpen={isCreationOpen}
-        onClose={closeCreationModal}
-        onSuccess={onCreationSuccess}
-        initialName={newKeyName}
-      />
-      <DeleteApiKeyModal apiKeyId={deleteId} closeModal={closeDeleteModal} />
-      <div className='flex'>
-        <Button
-          className='mb-4 text-sm'
-          variant='lightAccent'
-          onClick={openCreationModal}
-        >
-          Create API Key
-        </Button>
-      </div>
+      {createKey && (
+        <>
+          <ApiKeyCreationModal
+            isOpen={isCreationOpen}
+            onClose={closeCreationModal}
+            onSuccess={onCreationSuccess}
+            createKey={createKey}
+            initialName={newKeyName}
+          />
+          <div className='flex'>
+            <Button
+              className='mb-4 text-sm'
+              variant='lightAccent'
+              onClick={openCreationModal}
+            >
+              Create API Key
+            </Button>
+          </div>
+        </>
+      )}
+      {deleteKey && (
+        <DeleteApiKeyModal
+          apiKeyId={deleteId}
+          closeModal={closeDeleteModal}
+          deleteKey={deleteKey}
+          onDeleted={onChanged}
+        />
+      )}
       <div className='mb-8'>
         <div className='w-full min-w-[fit-content] border-b border-gray-200 shadow sm:rounded-lg'>
           <Table>
@@ -98,7 +121,7 @@ export const ApiKeysTable = ({
                 <TableHeadCell>Key</TableHeadCell>
                 <TableHeadCell>Created</TableHeadCell>
                 <TableHeadCell>Expires</TableHeadCell>
-                <TableHeadCell>Actions</TableHeadCell>
+                {deleteKey && <TableHeadCell>Actions</TableHeadCell>}
               </TableHeadRow>
             </TableHead>
             <TableBody>
@@ -143,22 +166,24 @@ export const ApiKeysTable = ({
                           <span className='text-gray-400'>Never</span>
                         )}
                       </TableBodyCell>
-                      <TableBodyCell>
-                        <Button
-                          variant='lightDanger'
-                          className='text-sm'
-                          onClick={() => openDeleteModal(apiKey.id)}
-                        >
-                          Delete
-                        </Button>
-                      </TableBodyCell>
+                      {deleteKey && (
+                        <TableBodyCell>
+                          <Button
+                            variant='lightDanger'
+                            className='text-sm'
+                            onClick={() => openDeleteModal(apiKey.id)}
+                          >
+                            Delete
+                          </Button>
+                        </TableBodyCell>
+                      )}
                     </TableBodyRow>
                   );
                 })}
               {nonDeletedApiKeys && nonDeletedApiKeys.length === 0 && (
                 <TableBodyRow>
                   <TableBodyCell
-                    colSpan={COLUMN_COUNT}
+                    colSpan={columnCount}
                     className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
                     No API keys found
@@ -168,7 +193,7 @@ export const ApiKeysTable = ({
               {!nonDeletedApiKeys && (
                 <TableBodyRow>
                   <TableBodyCell
-                    colSpan={COLUMN_COUNT}
+                    colSpan={columnCount}
                     className='whitespace-nowrap px-6 py-4 text-center text-sm text-gray-500'
                   >
                     <span className='flex items-center justify-center'>
