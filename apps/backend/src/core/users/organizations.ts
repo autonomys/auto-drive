@@ -4,9 +4,9 @@ import {
   Account,
   AccountModel,
   ApiKey,
-  ApiKeyWithoutSecret,
   CreateApiKeyInput,
   IntentStatus,
+  OrganizationApiKeys,
   OrganizationMembershipChange,
   OrganizationRole,
   PartnerOrganization,
@@ -165,9 +165,7 @@ const addMember = async (
   const partnerAccount = await getPartnerAccount(organizationId)
   if (partnerAccount.isErr()) return err(partnerAccount.error)
 
-  const user = await AuthManager.getUserFromPublicId(publicId).catch(
-    () => null,
-  )
+  const user = await AuthManager.getUserFromPublicId(publicId).catch(() => null)
   if (!user?.organizationId) {
     return err(new NotFoundError(`User ${publicId} not found`))
   }
@@ -298,12 +296,14 @@ const getMembershipChanges = async (
  * create and revoke them. Auto Drive admins see and revoke them but can't
  * create one, which would hand them a partner's secret. Never with an API key,
  * so a key can't mint or revoke keys.
+ *
+ * Returns what the caller may do, which the list passes on to the UI.
  */
 const authorizeApiKeys = async (
   executor: UserWithOrganization,
   organizationId: string,
   action: 'list' | 'create' | 'revoke',
-): Promise<Result<void, OrganizationError>> => {
+): Promise<Result<Omit<OrganizationApiKeys, 'apiKeys'>, OrganizationError>> => {
   if (executor.apiKeyId) {
     return err(
       new ForbiddenError(
@@ -311,39 +311,52 @@ const authorizeApiKeys = async (
       ),
     )
   }
-  const asAutoDriveAdmin =
-    executor.role === UserRole.Admin && action !== 'create'
-  if (!asAutoDriveAdmin && executor.organizationId !== organizationId) {
+  const isMember = executor.organizationId === organizationId
+  const isAutoDriveAdmin = executor.role === UserRole.Admin
+  if (!isMember && !(isAutoDriveAdmin && action !== 'create')) {
     return err(new ForbiddenError('Not a member of this organization'))
   }
 
-  const needsOrganizationAdmin = action !== 'list' && !asAutoDriveAdmin
   const [partnerAccount, organization] = await Promise.all([
     getPartnerAccount(organizationId),
-    needsOrganizationAdmin ? AuthManager.getOrganization(organizationId) : null,
+    isMember ? AuthManager.getOrganization(organizationId) : null,
   ])
   if (partnerAccount.isErr()) return err(partnerAccount.error)
-  if (!organization) return ok()
-  if (organization.isErr()) return err(organization.error)
-  const isOrganizationAdmin = organization.value.memberships.some(
-    (m) =>
-      m.publicId === executor.publicId && m.role === OrganizationRole.Admin,
-  )
-  return isOrganizationAdmin
-    ? ok()
-    : err(
-        new ForbiddenError('Only organization admins can manage its API keys'),
-      )
+  let isOrganizationAdmin = false
+  if (organization) {
+    if (organization.isErr()) return err(organization.error)
+    isOrganizationAdmin = organization.value.memberships.some(
+      (m) =>
+        m.publicId === executor.publicId && m.role === OrganizationRole.Admin,
+    )
+  }
+
+  const permissions = {
+    canCreate: isOrganizationAdmin,
+    canRevoke: isOrganizationAdmin || isAutoDriveAdmin,
+  }
+  if (
+    (action === 'create' && !permissions.canCreate) ||
+    (action === 'revoke' && !permissions.canRevoke)
+  ) {
+    return err(
+      new ForbiddenError('Only organization admins can manage its API keys'),
+    )
+  }
+  return ok(permissions)
 }
 
+/** The keys, and whether the caller may create and revoke them. */
 const listApiKeys = async (
   executor: UserWithOrganization,
   organizationId: string,
-): Promise<Result<ApiKeyWithoutSecret[], OrganizationError>> => {
+): Promise<Result<OrganizationApiKeys, OrganizationError>> => {
   const allowed = await authorizeApiKeys(executor, organizationId, 'list')
   if (allowed.isErr()) return err(allowed.error)
 
-  return AuthManager.getOrganizationApiKeys(organizationId)
+  const apiKeys = await AuthManager.getOrganizationApiKeys(organizationId)
+  if (apiKeys.isErr()) return err(apiKeys.error)
+  return ok({ apiKeys: apiKeys.value, ...allowed.value })
 }
 
 /** Returns the key with its secret, which is never shown again. */

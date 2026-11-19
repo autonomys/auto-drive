@@ -13,6 +13,7 @@ import {
   Clock,
   CreditCard,
   ChartColumn,
+  KeyRound,
 } from 'lucide-react';
 import { gql, useApolloClient } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
@@ -51,6 +52,7 @@ import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
 import { PartnerTerms } from './PartnerTerms';
 import { UsageReportView } from '../UsageReport';
+import { OrganizationApiKeys } from '@/components/organisms/OrganizationApiKeys';
 
 // GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
@@ -418,6 +420,16 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           organization={account.organization}
           onChanged={() => setAccountVersion((v) => v + 1)}
         />
+      )}
+
+      {account?.isPartner && account.organization && (
+        <div className='rounded-lg border border-gray-200 bg-background p-6'>
+          <h2 className='mb-4 flex items-center gap-2 text-lg font-semibold'>
+            <KeyRound className='h-5 w-5' />
+            Organization API Keys
+          </h2>
+          <OrganizationApiKeys organizationId={account.organizationId} />
+        </div>
       )}
 
       {/* Purchased Credits */}

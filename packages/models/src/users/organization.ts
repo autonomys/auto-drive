@@ -1,3 +1,5 @@
+import { ApiKeyWithoutSecret } from "./apiKey";
+
 export type Organization = {
   id: string;
   name: string;
@@ -38,6 +40,13 @@ export type OrganizationSummary = Organization & {
 /** A partner organisation and the account its members share. */
 export type PartnerOrganization = OrganizationSummary & {
   accountId: string;
+};
+
+/** An organisation's API keys, and what the caller may do with them. */
+export type OrganizationApiKeys = {
+  apiKeys: ApiKeyWithoutSecret[];
+  canCreate: boolean;
+  canRevoke: boolean;
 };
 
 /**

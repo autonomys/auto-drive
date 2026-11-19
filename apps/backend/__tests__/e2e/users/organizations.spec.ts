@@ -151,8 +151,12 @@ describe('Partner organizations', () => {
           .mockResolvedValue(ok(undefined)),
       ]
 
+      const list = await OrganizationsUseCases.listApiKeys(
+        caller,
+        organizationId,
+      )
       const results = [
-        await OrganizationsUseCases.listApiKeys(caller, organizationId),
+        list,
         await OrganizationsUseCases.createApiKey(caller, organizationId, {
           name: 'Production',
         }),
@@ -167,6 +171,13 @@ describe('Partner organizations', () => {
       expect(auth.map((call) => call.mock.calls.length > 0)).toEqual(allowed)
       for (const result of results) {
         if (result.isErr()) expect(result.error).toBeInstanceOf(ForbiddenError)
+      }
+      // The list tells the caller what else they may do.
+      if (list.isOk()) {
+        expect(list.value).toMatchObject({
+          canCreate: allowed[1],
+          canRevoke: allowed[2],
+        })
       }
     })
 
