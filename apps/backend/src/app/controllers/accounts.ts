@@ -302,7 +302,7 @@ accountController.get(
 
 // The account's usage over [from, to), for members of its organisation and
 // Auto Drive admins: JSON, or one of its tables as CSV
-// (`format=csv&table=summary|apiKeys|purchases`).
+// (`format=csv&table=summary|apiKeys|customerReferences|purchases`).
 accountController.get(
   '/:accountId/usage-report',
   asyncSafeHandler(async (req: Request, res: Response) => {
@@ -438,7 +438,7 @@ accountController.get(
       return res.status(400).json({ error: 'Invalid date range' })
     }
 
-    const accounts = await handleInternalError(
+    const accounts = await handleInternalErrorResult(
       AccountsUseCases.getTopAccounts(user, {
         limit,
         fromDate,

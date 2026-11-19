@@ -186,8 +186,8 @@ rclone deletefile autodrive:my-archive/reports/draft.pdf
 
 **Status:** Supported. The key is hidden behind a delete marker and no longer appears in listings. The content stays on the DSN:
 
-- If no other key in your account points at the same content, the file moves to the Trash in the web app at [ai3.storage](https://ai3.storage). Restoring it there makes the key visible again.
-- Earlier versions of the key stay readable with `--s3-versions`. The version that was current when you deleted the file is listed but cannot be read; restore the file from the Trash instead.
+- If no other key in your account points at the same content, the file moves to the Trash in the web app at [ai3.storage](https://ai3.storage). Restoring it there brings the file back in the web app, but the key stays deleted. To put the key back, copy its last version onto it (see [Deleted files](workflows.md#deleted-files)).
+- Earlier versions of the key stay readable with `--s3-versions`. The version that was current when you deleted the file is listed but cannot be read until you restore the file from the Trash.
 
 ### move / moveto
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { expiryPresetToIso } from 'utils/connectApp';
+
 import {
   Transition,
   Dialog,
@@ -14,45 +16,28 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiKey } from '@auto-drive/models';
+import { ApiKey, CreateApiKeyInput } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
-import { AuthService } from 'services/auth/auth';
 
 type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'custom' | 'never';
 
 const presetToIso = (preset: ExpiryPreset, custom: string): string | null => {
-  const now = new Date();
-  switch (preset) {
-    case 'never':
-      return null;
-    case '30d':
-      now.setDate(now.getDate() + 30);
-      return now.toISOString();
-    case '60d':
-      now.setDate(now.getDate() + 60);
-      return now.toISOString();
-    case '90d':
-      now.setDate(now.getDate() + 90);
-      return now.toISOString();
-    case '1y':
-      now.setFullYear(now.getFullYear() + 1);
-      return now.toISOString();
-    case 'custom': {
-      if (!custom) {
-        throw new Error('Please select an expiry date');
-      }
-      const d = new Date(`${custom}T23:59:59`);
-      if (Number.isNaN(d.getTime())) {
-        throw new Error('Invalid expiry date');
-      }
-      if (d.getTime() <= Date.now()) {
-        throw new Error('Expiry date must be in the future');
-      }
-      return d.toISOString();
+  if (preset === 'custom') {
+    if (!custom) {
+      throw new Error('Please select an expiry date');
     }
+    const d = new Date(`${custom}T23:59:59`);
+    if (Number.isNaN(d.getTime())) {
+      throw new Error('Invalid expiry date');
+    }
+    if (d.getTime() <= Date.now()) {
+      throw new Error('Expiry date must be in the future');
+    }
+    return d.toISOString();
   }
+  return expiryPresetToIso(preset);
 };
 
 const todayPlus = (days: number): string => {
@@ -68,11 +53,13 @@ export const ApiKeyCreationModal = ({
   isOpen,
   onClose,
   onSuccess,
+  createKey,
   initialName = '',
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  createKey: (input: CreateApiKeyInput) => Promise<ApiKey>;
   initialName?: string;
 }) => {
   const [name, setName] = useState(initialName);
@@ -117,12 +104,15 @@ export const ApiKeyCreationModal = ({
     setSubmitting(true);
     const trimmed = name.trim();
     const epoch = epochRef.current;
-    AuthService.generateApiKey({
+    createKey({
       name: trimmed.length === 0 ? null : trimmed,
       expiresAt,
     })
       .then((key) => {
-        if (epochRef.current === epoch) setApiKey(key);
+        if (epochRef.current === epoch) {
+          setApiKey(key);
+          setSubmitting(false);
+        }
       })
       .catch((err: Error) => {
         if (epochRef.current === epoch) {
@@ -130,7 +120,7 @@ export const ApiKeyCreationModal = ({
           setSubmitting(false);
         }
       });
-  }, [canSubmit, name, preset, customDate]);
+  }, [canSubmit, name, preset, customDate, createKey]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -154,7 +144,12 @@ export const ApiKeyCreationModal = ({
         as='div'
         className='relative z-10'
         onClose={
-          apiKey && !hasBeenCopied ? () => {} : hasBeenCopied ? onSuccess : onClose
+          // Not while a key is being created, or it would be made unseen.
+          submitting || (apiKey && !hasBeenCopied)
+            ? () => {}
+            : hasBeenCopied
+              ? onSuccess
+              : onClose
         }
       >
         <TransitionChild

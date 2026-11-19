@@ -145,7 +145,7 @@ rclone copy --s3-version-at "2026-09-01 00:00:00" \
 
 ### Deleted files
 
-A deleted file's last version is listed by `--s3-versions` but cannot be read. Restore the file from the Trash at [ai3.storage](https://ai3.storage) instead, which makes the key visible again. A file is in the Trash when no other key in your account points at the same content; otherwise that content is still readable through the other key.
+A deleted file's last version is listed by `--s3-versions` but cannot be read while the file is in the Trash at [ai3.storage](https://ai3.storage). Restoring the file there brings it back in the web app and makes that version readable again. The key stays deleted, so a later `rclone sync` does not delete the file a second time. To put the key back, copy the version onto it as shown above. A file is in the Trash when no other key in your account points at the same content; otherwise that content is still readable through the other key.
 
 ---
 

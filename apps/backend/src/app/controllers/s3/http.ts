@@ -23,6 +23,9 @@ import {
   uploadPartHandler,
   stashContentEncoding,
 } from './s3.js'
+import { handleS3Auth } from './auth.js'
+import { config } from '../../../config.js'
+import { requestTrace } from '../../middlewares/requestTrace.js'
 
 const s3Controller = Router()
 
@@ -198,8 +201,28 @@ s3Controller.get(
   }),
 )
 
+// Authenticates every request before its body is read. The handlers call
+// handleS3Auth as before and get the same user back.
+const authenticateBeforeBody = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (await handleS3Auth(req, res)) {
+      next()
+    } else if (config.monitoring.active) {
+      // Answered here, so asyncSafeHandler will not record the request.
+      requestTrace(req, res, next)
+    }
+  } catch (err) {
+    next(err)
+  }
+}
+
 s3Controller.use(
   '/:key(*)',
+  authenticateBeforeBody,
   // Runs before the parser: moves a client Content-Encoding aside for the write
   // ops that carry it, so the parser neither inflates a stored body nor 415/400s
   // on an empty one (see above).

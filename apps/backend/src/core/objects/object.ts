@@ -17,7 +17,6 @@ import {
   metadataRepository,
   nodesRepository,
   ownershipRepository,
-  s3ObjectMappingsRepository,
 } from '../../infrastructure/repositories/index.js'
 import { OwnershipUseCases } from './ownership.js'
 import { UploadStatusUseCases } from './uploadStatus.js'
@@ -33,6 +32,7 @@ import { consumeStream } from '../../shared/utils/misc.js'
 import { DownloadUseCase } from '../../core/downloads/index.js'
 import { err, ok, Result } from 'neverthrow'
 import { FileGateway } from '../../infrastructure/services/dsn/fileGateway/index.js'
+import { config } from '../../config.js'
 import {
   ForbiddenError,
   IllegalContentError,
@@ -313,25 +313,34 @@ const shareObject = async (
   return ok()
 }
 
+const findOwnership = async (user: User, cid: string) => {
+  const ownerships = await ownershipRepository.getAllOwnerships(cid)
+  return ownerships.find(
+    (ownership) =>
+      ownership.oauth_provider === user.oauthProvider &&
+      ownership.oauth_user_id === user.oauthUserId,
+  )
+}
+
 const markAsDeleted = async (
   executor: User,
   cid: string,
 ): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to mark object as deleted (cid=%s)', cid)
-  const ownerships = await ownershipRepository.getOwnerships(cid)
-  const isUserOwner = ownerships.find(
-    (owner) =>
-      owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId,
-  )
+  const ownership = await findOwnership(executor, cid)
 
-  if (!isUserOwner) {
+  if (!ownership) {
     logger.warn(
       'User (%s) attempted to delete object without ownership (cid=%s)',
       executor.oauthUserId,
       cid,
     )
     return err(new ForbiddenError('User is not an owner of this object'))
+  }
+
+  if (ownership.marked_as_deleted) {
+    logger.debug('Object is already marked as deleted (cid=%s)', cid)
+    return ok()
   }
 
   await OwnershipUseCases.setObjectAsDeleted(executor, cid)
@@ -345,14 +354,9 @@ const restoreObject = async (
   cid: string,
 ): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to restore object (cid=%s)', cid)
-  const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid)
-  const isUserOwner = deletedOwnerships.find(
-    (owner) =>
-      owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId,
-  )
+  const ownership = await findOwnership(executor, cid)
 
-  if (!isUserOwner) {
+  if (!ownership) {
     logger.warn(
       'User (%s) attempted to restore object without ownership (cid=%s)',
       executor.oauthUserId,
@@ -361,21 +365,12 @@ const restoreObject = async (
     return err(new ForbiddenError('User is not an owner of this object'))
   }
 
-  // The trash time for this owner — S3 keys hidden at/after it are the ones this
-  // trash removed, so only those are un-hidden on restore (see
-  // restoreMappingsByCid); keys deleted individually earlier stay hidden.
-  const trashedAt = isUserOwner.marked_as_deleted
+  if (!ownership.marked_as_deleted) {
+    logger.debug('Object is not marked as deleted (cid=%s)', cid)
+    return ok()
+  }
 
   await OwnershipUseCases.restoreObject(executor, cid)
-  // Un-hide the executor's OWN S3 keys this trash removed so restoring brings the
-  // object back to its S3 name too (scoped to the executor so a dedup co-owner's
-  // keys aren't touched; no-op when there are none).
-  await s3ObjectMappingsRepository.restoreMappingsByCid(
-    executor.oauthProvider,
-    executor.oauthUserId,
-    cid,
-    trashedAt,
-  )
   logger.info('Object restored successfully (cid=%s)', cid)
 
   return ok()
@@ -414,6 +409,28 @@ const isArchived = async (cid: string) => {
   return metadata.is_archived
 }
 
+const hasAllNodeData = async (
+  metadata: OffchainMetadata,
+): Promise<boolean> => {
+  if (metadata.type === 'file') {
+    const uniqueChunkCids = [
+      ...new Set(metadata.chunks.map((chunk) => chunk.cid)),
+    ]
+    if (uniqueChunkCids.length === 0) {
+      return true
+    }
+    const count = await nodesRepository.countCidsWithData(uniqueChunkCids)
+    return count === uniqueChunkCids.length
+  }
+
+  const areNodesEncoded = await Promise.all(
+    metadata.children.map((child) =>
+      ObjectUseCases.isReconstructable(child.cid),
+    ),
+  )
+  return areNodesEncoded.every((e) => e)
+}
+
 // to remove: this will not be used after we process data with no duplicates handling
 const isReconstructable = async (cid: string): Promise<boolean> => {
   const metadata = await metadataRepository.getMetadata(cid)
@@ -422,22 +439,7 @@ const isReconstructable = async (cid: string): Promise<boolean> => {
     return false
   }
 
-  const metadataType = metadata.metadata.type
-  if (metadataType === 'file') {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.chunks.map((child) =>
-        nodesRepository.hasEncodedNode(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  } else {
-    const areNodesEncoded = await Promise.all(
-      metadata.metadata.children.map((child) =>
-        ObjectUseCases.isReconstructable(child.cid),
-      ),
-    )
-    return areNodesEncoded.every((e) => e)
-  }
+  return ObjectUseCases.hasAllNodeData(metadata.metadata)
 }
 
 const hasAllNodesArchived = async (cid: string) => {
@@ -506,16 +508,98 @@ const onObjectArchived = async (cid: string, signal?: AbortSignal) => {
   if (signal?.aborted) return
 
   await metadataRepository.markAsArchived(cid)
+  // Stripping now belongs to the reclaim sweep, which strips only what the
+  // gateway has confirmed it can serve. piece_index proves the data reached
+  // the chain; it does not prove any reader can fetch it for ~3 days yet.
+}
 
-  if (signal?.aborted) {
-    logger.warn(
-      'Archival aborted after marking metadata, before stripping node data (cid=%s)',
-      cid,
-    )
+let reclaimCursorCid: string | null = null
+let isReclaimRunning = false
+
+const reclaimArchivedNodeData = async (signal?: AbortSignal) => {
+  if (isReclaimRunning) {
+    logger.warn('Previous reclaim sweep is still running, skipping interval')
     return
   }
+  isReclaimRunning = true
 
-  await nodesRepository.removeNodeDataByRootCid(cid)
+  try {
+    const batchSize = config.reclaim.batchSize
+    const deadline = Date.now() + config.reclaim.sweepTimeoutMs
+    const maxConsecutiveFailures = config.reclaim.maxConsecutiveProbeFailures
+
+    let cids = await nodesRepository.getArchivedRootCidsWithData(
+      batchSize,
+      reclaimCursorCid,
+    )
+    if (cids.length === 0 && reclaimCursorCid !== null) {
+      reclaimCursorCid = null
+      cids = await nodesRepository.getArchivedRootCidsWithData(batchSize, null)
+    }
+    logger.info(
+      'Reclaim sweep: %d object(s) still holding node data',
+      cids.length,
+    )
+
+    let consecutiveFailures = 0
+
+    for (const cid of cids) {
+      if (signal?.aborted) return
+      if (Date.now() > deadline) {
+        logger.warn(
+          'Reclaim sweep reached wall-clock budget (%dms), stopping batch',
+          config.reclaim.sweepTimeoutMs,
+        )
+        break
+      }
+
+      reclaimCursorCid = cid
+
+      const meta = await metadataRepository.getMetadata(cid)
+      if (!meta || meta.metadata?.totalSize === undefined) {
+        continue
+      }
+      if (meta.metadata?.type === 'folder') {
+        // Skip folder roots in the sweep for now to safely preserve descendant data
+        continue
+      }
+
+      const totalSize = BigInt(meta.metadata.totalSize)
+
+      try {
+        const isRetrievable = await FileGateway.isRetrievableFromGateway(
+          cid,
+          totalSize,
+        )
+
+        if (!isRetrievable) {
+          // Unindexed object (404/normal indexing lag) — skip without tripping breaker
+          continue
+        }
+
+        consecutiveFailures = 0
+        await nodesRepository.removeNodeDataByRootCid(cid)
+        logger.info('Reclaimed node data, gateway confirmed (cid=%s)', cid)
+      } catch (error) {
+        // Gateway network, timeout, or 5xx outage
+        logger.warn(error as Error, 'Gateway probe failed (cid=%s)', cid)
+        consecutiveFailures++
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          logger.warn(
+            'Reclaim sweep encountered %d consecutive probe failures, stopping batch',
+            consecutiveFailures,
+          )
+          break
+        }
+      }
+    }
+
+    if (cids.length < batchSize) {
+      reclaimCursorCid = null
+    }
+  } finally {
+    isReclaimRunning = false
+  }
 }
 
 const publishObject = async (user: UserWithOrganization, cid: string) => {
@@ -904,5 +988,8 @@ export const ObjectUseCases = {
   authorizeDownload,
   getToBeReviewedList,
   syncingIsObjectBanned,
+  hasAllNodeData,
   isReconstructable,
+  reclaimArchivedNodeData,
 }
+

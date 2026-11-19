@@ -3,12 +3,16 @@ import { err, ok, Result } from 'neverthrow'
 import {
   Account,
   AccountModel,
+  ApiKey,
+  CreateApiKeyInput,
   IntentStatus,
+  OrganizationApiKeys,
   OrganizationMembershipChange,
   OrganizationRole,
   PartnerOrganization,
   User,
   UserRole,
+  UserWithOrganization,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
@@ -21,6 +25,7 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnusedCreditsError,
 } from '../../errors/index.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -74,7 +79,7 @@ const checkNoUnresolvedIntents = async (
 /**
  * Creates an organization and its partner account. The account is created
  * here rather than on a member's first request, so members never create it
- * concurrently.
+ * concurrently. Auth creates the organization's service user with it.
  */
 const createPartnerOrganization = async (
   executor: User,
@@ -141,15 +146,18 @@ const listPartnerOrganizations = async (
 }
 
 /**
- * Moves a user into a partner organization. Refused while their current
- * account holds purchased credits, which are not transferred, or while they
- * have unresolved payments.
+ * Moves a user into a partner organization. Refused while they have
+ * unresolved payments. Purchased credits on their current account are not
+ * transferred, so a move that would leave some behind needs
+ * `allowUnusedCredits`. Those credits stay on that account, keep their expiry,
+ * and are usable again if the user is removed from the partner organization.
  */
 const addMember = async (
   executor: User,
   organizationId: string,
   publicId: string,
   role: OrganizationRole,
+  { allowUnusedCredits = false }: { allowUnusedCredits?: boolean } = {},
 ): Promise<Result<void, OrganizationError>> => {
   const admin = requireAdmin(executor)
   if (admin.isErr()) return err(admin.error)
@@ -157,9 +165,7 @@ const addMember = async (
   const partnerAccount = await getPartnerAccount(organizationId)
   if (partnerAccount.isErr()) return err(partnerAccount.error)
 
-  const user = await AuthManager.getUserFromPublicId(publicId).catch(
-    () => null,
-  )
+  const user = await AuthManager.getUserFromPublicId(publicId).catch(() => null)
   if (!user?.organizationId) {
     return err(new NotFoundError(`User ${publicId} not found`))
   }
@@ -180,22 +186,26 @@ const addMember = async (
       ),
     )
   }
-  if (currentAccount) {
-    const { uploadBytesRemaining } =
-      await purchasedCreditsRepository.getRemainingCredits(currentAccount.id)
-    if (uploadBytesRemaining > 0n) {
-      return err(
-        new ConflictError(
-          `User's account still holds ${uploadBytesRemaining} bytes of ` +
-            'purchased credits, which are not transferred. Wait for them to ' +
-            'be used, or refund them, before moving the user.',
-        ),
-      )
-    }
-  }
 
+  // Checked before the credits so an admin is not asked to confirm leaving
+  // credits behind on a move that would then be refused anyway.
   const intents = await checkNoUnresolvedIntents(publicId)
   if (intents.isErr()) return err(intents.error)
+
+  const unusedCreditBytes = currentAccount
+    ? (await purchasedCreditsRepository.getRemainingCredits(currentAccount.id))
+        .uploadBytesRemaining
+    : 0n
+  if (unusedCreditBytes > 0n && !allowUnusedCredits) {
+    return err(
+      new UnusedCreditsError(
+        `User's account still holds ${unusedCreditBytes} bytes of purchased ` +
+          'credits, which are not transferred. They stay on that account ' +
+          'and keep expiring on schedule, unusable until the user is ' +
+          'removed from the partner organization.',
+      ),
+    )
+  }
 
   const added = await AuthManager.addOrganizationMember(
     organizationId,
@@ -209,6 +219,7 @@ const addMember = async (
     publicId,
     role,
     fromOrganizationId: user.organizationId,
+    unusedCreditBytes: unusedCreditBytes.toString(),
     by: executor.publicId,
   })
   return ok()
@@ -279,6 +290,120 @@ const getMembershipChanges = async (
   return AuthManager.getOrganizationMembershipChanges(organizationId)
 }
 
+/**
+ * Organisation API keys belong to the organisation's service user in auth, so
+ * they keep working whoever leaves. Members see them and organisation admins
+ * create and revoke them. Auto Drive admins see and revoke them but can't
+ * create one, which would hand them a partner's secret. Never with an API key,
+ * so a key can't mint or revoke keys.
+ *
+ * Returns what the caller may do, which the list passes on to the UI.
+ */
+const authorizeApiKeys = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  action: 'list' | 'create' | 'revoke',
+): Promise<Result<Omit<OrganizationApiKeys, 'apiKeys'>, OrganizationError>> => {
+  if (executor.apiKeyId) {
+    return err(
+      new ForbiddenError(
+        'Organization API keys can only be managed when signed in',
+      ),
+    )
+  }
+  const isMember = executor.organizationId === organizationId
+  const isAutoDriveAdmin = executor.role === UserRole.Admin
+  if (!isMember && !(isAutoDriveAdmin && action !== 'create')) {
+    return err(new ForbiddenError('Not a member of this organization'))
+  }
+
+  const [partnerAccount, organization] = await Promise.all([
+    getPartnerAccount(organizationId),
+    isMember ? AuthManager.getOrganization(organizationId) : null,
+  ])
+  if (partnerAccount.isErr()) return err(partnerAccount.error)
+  let isOrganizationAdmin = false
+  if (organization) {
+    if (organization.isErr()) return err(organization.error)
+    isOrganizationAdmin = organization.value.memberships.some(
+      (m) =>
+        m.publicId === executor.publicId && m.role === OrganizationRole.Admin,
+    )
+  }
+
+  const permissions = {
+    canCreate: isOrganizationAdmin,
+    canRevoke: isOrganizationAdmin || isAutoDriveAdmin,
+  }
+  if (
+    (action === 'create' && !permissions.canCreate) ||
+    (action === 'revoke' && !permissions.canRevoke)
+  ) {
+    return err(
+      new ForbiddenError('Only organization admins can manage its API keys'),
+    )
+  }
+  return ok(permissions)
+}
+
+/** The keys, and whether the caller may create and revoke them. */
+const listApiKeys = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+): Promise<Result<OrganizationApiKeys, OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'list')
+  if (allowed.isErr()) return err(allowed.error)
+
+  const apiKeys = await AuthManager.getOrganizationApiKeys(organizationId)
+  if (apiKeys.isErr()) return err(apiKeys.error)
+  return ok({ apiKeys: apiKeys.value, ...allowed.value })
+}
+
+/** Returns the key with its secret, which is never shown again. */
+const createApiKey = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  input: CreateApiKeyInput,
+): Promise<Result<ApiKey, OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'create')
+  if (allowed.isErr()) return err(allowed.error)
+
+  const created = await AuthManager.createOrganizationApiKey(
+    organizationId,
+    input,
+  )
+  if (created.isOk()) {
+    logger.info('Organization API key created', {
+      organizationId,
+      apiKeyId: created.value.id,
+      by: executor.publicId,
+    })
+  }
+  return created
+}
+
+const revokeApiKey = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  apiKeyId: string,
+): Promise<Result<void, OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'revoke')
+  if (allowed.isErr()) return err(allowed.error)
+
+  const revoked = await AuthManager.revokeOrganizationApiKey(
+    organizationId,
+    apiKeyId,
+  )
+  if (revoked.isOk()) {
+    logger.info('Organization API key revoked', {
+      organizationId,
+      apiKeyId,
+      by: executor.publicId,
+    })
+  }
+  return revoked
+}
+
 export const OrganizationsUseCases = {
   createPartnerOrganization,
   listPartnerOrganizations,
@@ -286,4 +411,7 @@ export const OrganizationsUseCases = {
   changeMemberRole,
   removeMember,
   getMembershipChanges,
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
 }

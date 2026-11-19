@@ -1,3 +1,5 @@
+import { ApiKeyWithoutSecret } from "./apiKey";
+
 export type Organization = {
   id: string;
   name: string;
@@ -11,6 +13,13 @@ export enum OrganizationRole {
   Admin = "admin",
   Member = "member",
 }
+
+/**
+ * The `oauthProvider` of a partner organisation's service user: a member that
+ * owns the organisation's API keys, so they outlive any one person. No sign-in
+ * returns this provider, so nobody can log in as it.
+ */
+export const SERVICE_USER_PROVIDER = "service";
 
 export type OrganizationMember = {
   publicId: string;
@@ -31,6 +40,13 @@ export type OrganizationSummary = Organization & {
 /** A partner organisation and the account its members share. */
 export type PartnerOrganization = OrganizationSummary & {
   accountId: string;
+};
+
+/** An organisation's API keys, and what the caller may do with them. */
+export type OrganizationApiKeys = {
+  apiKeys: ApiKeyWithoutSecret[];
+  canCreate: boolean;
+  canRevoke: boolean;
 };
 
 /**

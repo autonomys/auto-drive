@@ -31,21 +31,6 @@ const createServer = async () => {
   logger.debug('Initializing frontend API server')
   const app = express()
 
-  app.use(
-    express.json({
-      limit: config.express.requestSizeLimit,
-    }),
-  )
-  app.use(
-    express.urlencoded({
-      limit: config.express.requestSizeLimit,
-      extended: true,
-    }),
-  )
-  logger.trace(
-    'URL-encoded parser middleware configured with limit: %s',
-    config.express.requestSizeLimit,
-  )
   if (config.express.corsAllowedOrigins) {
     logger.debug(
       'Configuring CORS with allowed origins: %j',
@@ -62,12 +47,19 @@ const createServer = async () => {
     )
   }
 
+  // The upload routes read their own bodies (controllers/upload.ts), so they
+  // are mounted before the parsers below.
+  app.use('/uploads', uploadController)
+
+  // body-parser's default limit, 100 KB. The routes below take small bodies.
+  app.use(express.json())
+  app.use(express.urlencoded({ extended: true }))
+
   app.use('/objects', objectController)
   // TODO: Remove this after migration
   app.use('/subscriptions', accountController)
   app.use('/accounts', accountController)
   app.use('/organizations', organizationsController)
-  app.use('/uploads', uploadController)
   app.get(
     '/intents/price',
     asyncSafeHandler(async (_req, res) => {

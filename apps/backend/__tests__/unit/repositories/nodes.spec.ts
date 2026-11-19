@@ -482,7 +482,7 @@ describe('Nodes Repository', () => {
     expect(result?.encoded_node).toBe('test-encoded-node-published')
   })
 
-  it('should clear encoded_node on publish when metadata is already archived', async () => {
+  it('should retain encoded_node on publish even when metadata is already archived', async () => {
     const rootCid = 'test-root-cid-publish-archived'
     const headCid = 'test-head-cid-publish-archived'
     const metadata: OffchainMetadata = {
@@ -502,7 +502,7 @@ describe('Nodes Repository', () => {
       root_cid: rootCid,
       head_cid: headCid,
       type: 'file',
-      encoded_node: 'data-that-should-be-cleared',
+      encoded_node: 'data-that-should-be-retained',
       piece_index: null,
       piece_offset: null,
       block_published_on: null,
@@ -516,7 +516,7 @@ describe('Nodes Repository', () => {
 
     expect(result?.block_published_on).toBe(99999)
     expect(result?.tx_published_on).toBe('tx-recovery')
-    expect(result?.encoded_node).toBeNull()
+    expect(result?.encoded_node).toBe('data-that-should-be-retained')
   })
 
   it('should get uploaded nodes by root CID', async () => {

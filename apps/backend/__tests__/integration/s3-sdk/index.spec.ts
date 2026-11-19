@@ -1,5 +1,6 @@
 import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'zlib'
 import { createHash, randomBytes } from 'crypto'
+import { request } from 'http'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -36,7 +37,7 @@ import { config } from '../../../src/config.js'
 import { AccountsUseCases, ObjectUseCases } from '../../../src/core/index.js'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
 import { downloadService } from '../../../src/infrastructure/services/download/index.js'
-import { InteractionType } from '@auto-drive/models'
+import { InteractionType, ObjectTag } from '@auto-drive/models'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
@@ -778,6 +779,111 @@ describe('AWS S3 - SDK', () => {
       expect(result.KeyCount).toBe(0)
       expect(result.Contents ?? []).toHaveLength(0)
       expect(result.IsTruncated).toBe(false)
+    })
+
+    describe('max-keys', () => {
+      const LISTINGS = [
+        { op: 'ListObjectsV2', query: 'list-type=2' },
+        { op: 'ListObjectVersions', query: 'versions' },
+      ]
+
+      it('ListObjectsV2 with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectsV2Command({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.KeyCount).toBe(0)
+        expect(result.Contents ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextContinuationToken).toBeUndefined()
+      })
+
+      it('ListObjectVersions with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectVersionsCommand({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.Versions ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextKeyMarker).toBeUndefined()
+      })
+
+      it.each(LISTINGS)(
+        '$op reads an empty max-keys as omitted',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(200)
+          const body = await res.text()
+          expect(body).toContain('<MaxKeys>1000</MaxKeys>')
+          expect(body).toContain('<Key>a.txt</Key>')
+        },
+      )
+
+      it.each(LISTINGS)(
+        '$op answers 400 InvalidArgument for a negative max-keys',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=-1`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(400)
+          const body = await res.text()
+          expect(body).toContain('<Code>InvalidArgument</Code>')
+          expect(body).toContain('<ArgumentName>max-keys</ArgumentName>')
+          expect(body).toContain('<ArgumentValue>-1</ArgumentValue>')
+        },
+      )
+
+      // As on S3: an unencoded '+' is a space, a repeated max-keys counts by
+      // its first value, and max-keys[a] is a different parameter.
+      it.each([
+        { value: '+5', argumentValue: ' 5' },
+        { value: 'abc&max-keys=10', argumentValue: 'abc' },
+      ])(
+        'ListObjectsV2 answers 400 for max-keys=$value, echoing "$argumentValue"',
+        async ({ value, argumentValue }) => {
+          const res = await fetch(
+            `${ListBucket}?list-type=2&max-keys=${value}`,
+            { headers: { Authorization: PROBE_AUTH } },
+          )
+          expect(res.status).toBe(400)
+          expect(await res.text()).toContain(
+            `<ArgumentValue>${argumentValue}</ArgumentValue>`,
+          )
+        },
+      )
+
+      it('ListObjectsV2 ignores a bracketed max-keys', async () => {
+        const res = await fetch(`${ListBucket}?list-type=2&max-keys[a]=1`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<MaxKeys>1000</MaxKeys>')
+      })
+    })
+
+    it('reads a repeated prefix by its first value', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&prefix=subdir/&prefix=other/`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<Prefix>subdir/</Prefix>')
+      expect(body).toContain('<Key>subdir/c.txt</Key>')
+      expect(body).not.toContain('other/')
+    })
+
+    it('answers 400 InvalidArgument for a continuation token it did not issue', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&continuation-token=a.txt`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>continuation-token</ArgumentName>',
+      )
     })
   })
 
@@ -1777,6 +1883,54 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(503)
       expect(await res.text()).toContain('<Code>ServiceUnavailable</Code>')
     })
+
+    // The body parser answers this encoding 501 when it reaches the body, so a
+    // 403 shows the credentials were checked first. Sent with http.request
+    // because fetch refuses a body on GET.
+    it.each(['PUT', 'POST', 'DELETE', 'GET'])(
+      'answers an unsigned %s before reading its body',
+      async (method) => {
+        const res = await new Promise<{ status?: number; body: string }>(
+          (resolve, reject) => {
+            const req = request(
+              `${BASE_PATH}/s3/auth-test/probe.txt`,
+              {
+                method,
+                headers: {
+                  'Content-Encoding': 'aws-chunked',
+                  'Content-Length': '1',
+                },
+              },
+              (response) => {
+                let body = ''
+                response.setEncoding('utf8')
+                response.on('data', (chunk) => (body += chunk))
+                response.on('end', () =>
+                  resolve({ status: response.statusCode, body }),
+                )
+              },
+            )
+            req.on('error', reject)
+            req.end('x')
+          },
+        )
+        expect(res.status).toBe(403)
+        expect(res.body).toContain('<Code>AccessDenied</Code>')
+      },
+    )
+
+    it('authenticates a write once', async () => {
+      const lookup = jest.spyOn(AuthManager, 'getUserFromAccessToken')
+      lookup.mockClear()
+
+      const res = await fetch(`${BASE_PATH}/s3/auth-test/once.txt`, {
+        method: 'PUT',
+        headers: { Authorization: AUTH },
+        body: 'x',
+      })
+      expect(res.status).toBe(200)
+      expect(lookup).toHaveBeenCalledTimes(1)
+    })
   })
 
   // Versioned-WORM (issue #781): versioning is always on, versionId = the
@@ -1998,7 +2152,15 @@ describe('AWS S3 - SDK', () => {
         s3Client.send(
           new GetObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
         ),
-      ).rejects.toThrow()
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
+      })
+      await expect(
+        s3Client.send(
+          new HeadObjectCommand({ Bucket, Key: key, VersionId: v.VersionId }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
 
       // Retention ≠ retrieval: the version is still enumerated in the history.
       const list = await s3Client.send(
@@ -2010,6 +2172,244 @@ describe('AWS S3 - SDK', () => {
       expect(
         (list.Versions ?? []).some((ver) => ver.VersionId === v.VersionId),
       ).toBe(true)
+    })
+
+    describe('GetObject and HeadObject of a version that cannot be served', () => {
+      const getVersion = (key: string, versionId: string) =>
+        s3Client.send(
+          new GetObjectCommand({ Bucket, Key: key, VersionId: versionId }),
+        )
+      const headVersion = (key: string, versionId: string) =>
+        s3Client.send(
+          new HeadObjectCommand({ Bucket, Key: key, VersionId: versionId }),
+        )
+
+      // The SDK keeps a failed call's headers on the non-enumerable $response.
+      const rejection = async (request: Promise<unknown>) => {
+        try {
+          await request
+        } catch (e) {
+          const err = e as {
+            name: string
+            $metadata: { httpStatusCode?: number }
+            $response?: { headers: Record<string, string> }
+            Key?: string
+            VersionId?: string
+          }
+          return {
+            status: err.$metadata.httpStatusCode,
+            name: err.name,
+            headers: err.$response?.headers ?? {},
+            Key: err.Key,
+            VersionId: err.VersionId,
+          }
+        }
+        throw new Error('expected the request to be refused')
+      }
+
+      const findMarker = async (name: string) => {
+        const list = await s3Client.send(
+          new ListObjectVersionsCommand({ Bucket: VBucket, Prefix: name }),
+        )
+        return (list.DeleteMarkers ?? []).find((m) => m.Key === name)
+      }
+
+      it('answers 404 NoSuchVersion for a version the key never had', async () => {
+        const key = 'versions-test/get-unknown.txt'
+        await putVersion(key, 'get-unknown-only-version')
+        // A real CID, but a version of a different key.
+        const other = await putVersion(
+          'versions-test/get-unknown-other.txt',
+          'get-unknown-other-content',
+        )
+
+        expect(
+          await rejection(getVersion(key, other.VersionId!)),
+        ).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+          Key: 'get-unknown.txt',
+          VersionId: other.VersionId,
+        })
+        expect(
+          (await rejection(headVersion(key, other.VersionId!))).status,
+        ).toBe(404)
+      })
+
+      it('answers 405 MethodNotAllowed with delete-marker headers for a delete marker id', async () => {
+        const key = 'versions-test/get-marker.txt'
+        await putVersion(key, 'get-marker-content')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        const markerId = del.VersionId!
+        expect(markerId).toMatch(/^dm-\d+$/)
+        const marker = await findMarker('get-marker.txt')
+        expect(marker?.VersionId).toBe(markerId)
+        const markerHeaders = {
+          'x-amz-delete-marker': 'true',
+          'x-amz-version-id': markerId,
+          'last-modified': marker!.LastModified!.toUTCString(),
+        }
+
+        const get = await rejection(getVersion(key, markerId))
+        expect(get).toMatchObject({ status: 405, name: 'MethodNotAllowed' })
+        expect(get.headers).toMatchObject(markerHeaders)
+
+        const head = await rejection(headVersion(key, markerId))
+        expect(head.status).toBe(405)
+        expect(head.headers).toMatchObject(markerHeaders)
+      })
+
+      it('answers 405 for the delete marker of a key whose content was trashed in the web app', async () => {
+        // The pointer is still live, so the marker ListObjectVersions shows is
+        // dated by the newest version rather than by a DeleteObject.
+        const key = 'versions-test/get-web-trashed.txt'
+        const v = await putVersion(key, 'get-web-trashed-content')
+        await ObjectUseCases.markAsDeleted(user, v.VersionId!)
+        const marker = await findMarker('get-web-trashed.txt')
+        expect(marker?.VersionId).toMatch(/^dm-\d+$/)
+
+        const head = await rejection(headVersion(key, marker!.VersionId!))
+        expect(head.status).toBe(405)
+        expect(head.headers).toMatchObject({
+          'x-amz-delete-marker': 'true',
+          'last-modified': marker!.LastModified!.toUTCString(),
+        })
+      })
+
+      it('answers 404 NoSuchVersion for a delete marker id the key does not have', async () => {
+        const key = 'versions-test/get-foreign-marker.txt'
+        await putVersion(key, 'get-foreign-marker-live')
+        const deleted = 'versions-test/get-foreign-marker-deleted.txt'
+        await putVersion(deleted, 'get-foreign-marker-deleted')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: deleted }),
+        )
+
+        const get = await rejection(getVersion(key, del.VersionId!))
+        expect(get).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+          VersionId: del.VersionId,
+        })
+        expect(get.headers['x-amz-delete-marker']).toBeUndefined()
+        expect((await rejection(headVersion(key, del.VersionId!))).status).toBe(
+          404,
+        )
+      })
+
+      it('answers 404 NoSuchVersion for a delete marker a later write replaced', async () => {
+        // Only a key's current delete marker is kept: a write after the delete
+        // drops the marker from ListObjectVersions, so it is no longer a version.
+        const key = 'versions-test/get-stale-marker.txt'
+        await putVersion(key, 'get-stale-marker-before')
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        await putVersion(key, 'get-stale-marker-after')
+        expect(await findMarker('get-stale-marker.txt')).toBeUndefined()
+
+        expect(await rejection(getVersion(key, del.VersionId!))).toMatchObject({
+          status: 404,
+          name: 'NoSuchVersion',
+        })
+      })
+
+      it('answers 400 InvalidArgument for a version id that names no version', async () => {
+        const key = 'versions-test/get-bad-id.txt'
+        await putVersion(key, 'get-bad-id-content')
+
+        // \x01 cannot be echoed into an XML body and Postgres rejects \x00.
+        for (const id of ['\x01x', '\x00', 'abc', 'dm-', 'dm-1x', 'dm-\x01']) {
+          expect({
+            id,
+            ...(await rejection(getVersion(key, id))),
+          }).toMatchObject({ id, status: 400, name: 'InvalidArgument' })
+          expect({
+            id,
+            status: (await rejection(headVersion(key, id))).status,
+          }).toEqual({ id, status: 400 })
+        }
+      })
+
+      it('answers 404 NoSuchVersion for a key that XML cannot carry', async () => {
+        const other = await putVersion(
+          'versions-test/get-ctl-other.txt',
+          'get-ctl-other-content',
+        )
+
+        for (const char of ['\x01', '\uFFFE', '\uFFFF']) {
+          const key = `versions-test/get-ctl-${char}.txt`
+          await putVersion(key, 'get-ctl-content')
+          expect({
+            char,
+            ...(await rejection(getVersion(key, other.VersionId!))),
+          }).toMatchObject({
+            char,
+            status: 404,
+            name: 'NoSuchVersion',
+            Key: 'get-ctl-\uFFFD.txt',
+          })
+        }
+      })
+
+      it('answers 405 for the delete marker of a key with no version row', async () => {
+        const key = 'versions-test/get-no-row-marker.txt'
+        await putVersion(key, 'get-no-row-marker-content')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'get-no-row-marker.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+        const del = await s3Client.send(
+          new DeleteObjectCommand({ Bucket, Key: key }),
+        )
+        expect(del.VersionId).toMatch(/^dm-\d+$/)
+
+        const get = await rejection(getVersion(key, del.VersionId!))
+        expect(get).toMatchObject({ status: 405, name: 'MethodNotAllowed' })
+        expect(get.headers).toMatchObject({
+          'x-amz-delete-marker': 'true',
+          'x-amz-version-id': del.VersionId,
+        })
+      })
+
+      it('serves the current version by its id when it has no version row', async () => {
+        // Keys written by a pre-#781 pod during that rollout have no row.
+        const key = 'versions-test/get-no-row.txt'
+        const v = await putVersion(key, 'get-no-row-content')
+        const db = await getDatabase()
+        const deleted = await db.query(
+          'DELETE FROM "S3".object_versions WHERE bucket = $1 AND "key" = $2',
+          ['versions-test', 'get-no-row.txt'],
+        )
+        expect(deleted.rowCount).toBe(1)
+
+        const head = await headVersion(key, v.VersionId!)
+        expect(head).toMatchObject({ VersionId: v.VersionId, ETag: v.ETag })
+        const got = await getVersion(key, v.VersionId!)
+        expect(got).toMatchObject({ VersionId: v.VersionId, ETag: v.ETag })
+        expect(
+          Buffer.from(await got.Body!.transformToByteArray()).toString(),
+        ).toBe('get-no-row-content')
+      })
+
+      it('keeps answering 451 for a version whose content is banned', async () => {
+        const key = 'versions-test/get-banned.txt'
+        const v1 = await putVersion(key, 'get-banned-content')
+        await putVersion(key, 'get-banned-current')
+        await ObjectUseCases.addTag(v1.VersionId!, ObjectTag.Banned)
+
+        expect(await rejection(getVersion(key, v1.VersionId!))).toMatchObject({
+          status: 451,
+          name: 'UnavailableForLegalReasons',
+        })
+        expect((await rejection(headVersion(key, v1.VersionId!))).status).toBe(
+          451,
+        )
+      })
     })
 
     describe('CopyObject of a specific source version', () => {
@@ -2268,6 +2668,285 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(404)
       expect(res.headers.get('content-type')).toContain('application/xml')
       expect(await res.text()).toContain('<Code>NoSuchKey</Code>')
+    })
+
+    // \x19 is a control character XML 1.0 cannot represent, and the error
+    // document echoes the key.
+    const ControlCharKey = `missing-ctl\x19key-${Date.now()}.txt`
+
+    it('GetObject on a missing key with an XML-illegal character returns 404 NoSuchKey', async () => {
+      await expect(
+        s3Client.send(new GetObjectCommand({ Bucket, Key: ControlCharKey })),
+      ).rejects.toMatchObject({
+        $metadata: { httpStatusCode: 404 },
+        name: 'NoSuchKey',
+      })
+    })
+
+    it('HeadObject on a missing key with an XML-illegal character returns 404', async () => {
+      await expect(
+        s3Client.send(new HeadObjectCommand({ Bucket, Key: ControlCharKey })),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 404 } })
+    })
+
+    it('echoes an XML-illegal character in the key as U+FFFD', async () => {
+      const res = await fetch(
+        `${BASE_PATH}/s3/default/${encodeURIComponent(ControlCharKey)}`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(404)
+      const body = await res.text()
+      expect(body).toContain('<Code>NoSuchKey</Code>')
+      expect(body).toContain(ControlCharKey.replace('\x19', '\uFFFD'))
+    })
+  })
+
+  describe('Error documents echoing an XML-illegal character', () => {
+    it.each<{
+      op: string
+      method: string
+      path: string
+      headers?: Record<string, string>
+      status: number
+      code: string
+    }>([
+      {
+        op: 'GetObjectRetention of a missing key',
+        method: 'GET',
+        path: '/default/missing-ctl%19key?retention',
+        status: 404,
+        code: 'NoSuchKey',
+      },
+      {
+        op: 'CopyObject from a missing source',
+        method: 'PUT',
+        path: '/default/copy-ctl-dst.txt',
+        headers: { 'x-amz-copy-source': '/default/missing-ctl%19key' },
+        status: 404,
+        code: 'NoSuchKey',
+      },
+      {
+        op: 'UploadPart with an unparsable partNumber',
+        method: 'PUT',
+        path: '/default/part-ctl.bin?uploadId=probe&partNumber=%19',
+        status: 400,
+        code: 'InvalidArgument',
+      },
+      {
+        op: 'AbortMultipartUpload of an unknown upload id',
+        method: 'DELETE',
+        path: '/default/part-ctl.bin?uploadId=%19',
+        status: 404,
+        code: 'NoSuchUpload',
+      },
+    ])(
+      '$op answers $status $code',
+      async ({ method, path, headers, status, code }) => {
+        const res = await fetch(`${BASE_PATH}/s3${path}`, {
+          method,
+          headers: { Authorization: PROBE_AUTH, ...headers },
+        })
+        expect(res.status).toBe(status)
+        expect(await res.text()).toContain(`<Code>${code}</Code>`)
+      },
+    )
+  })
+
+  describe('Listing a key that contains U+FFFF', () => {
+    beforeAll(async () => {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: 'nonchar-list/k\uFFFF',
+          Body: Buffer.from('x'),
+        }),
+      )
+    })
+
+    it.each([
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ])(
+      '$op without encoding-type answers 400 InvalidArgument',
+      async ({ query }) => {
+        const res = await fetch(`${BASE_PATH}/s3/nonchar-list?${query}`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain('<Code>InvalidArgument</Code>')
+      },
+    )
+
+    it('ListObjectsV2 with encoding-type=url returns the key encoded', async () => {
+      const res = await fetch(
+        `${BASE_PATH}/s3/nonchar-list?list-type=2&encoding-type=url`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('<Key>k%EF%BF%BF</Key>')
+    })
+  })
+
+  // A listing echoes the prefix, the key-marker and a resume position, and each
+  // can hold a character XML cannot carry.
+  describe('Listing values echoed into the response', () => {
+    const EchoBucket = `${BASE_PATH}/s3/echo-list`
+    const LISTINGS = [
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ]
+    const list = (query: string) =>
+      fetch(`${EchoBucket}?${query}`, {
+        headers: { Authorization: PROBE_AUTH },
+      })
+
+    beforeAll(async () => {
+      for (const Key of ['echo-list/d/\x01', 'echo-list/e.txt']) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+    })
+
+    it('ListObjectsV2 pages on from a key XML cannot carry', async () => {
+      // d/\x01 folds into d/ and is the last key page 1 reads, so page 1's
+      // token names it.
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    })
+
+    it('ListObjectsV2 pages on past a folder that fills the database batch', async () => {
+      // With a delimiter, max-keys=1 reads 110 rows, so 110 keys under d/ fill
+      // the batch and page 1 resumes from d/ + U+FFFF.
+      const FoldBucket = `${BASE_PATH}/s3/fold-list`
+      const keys = [
+        ...Array.from(
+          { length: 110 },
+          (_, i) => `fold-list/d/${String(i).padStart(3, '0')}`,
+        ),
+        'fold-list/e.txt',
+      ]
+      for (let i = 0; i < keys.length; i += 10) {
+        await Promise.all(
+          keys.slice(i, i + 10).map((Key) =>
+            s3Client.send(
+              new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+            ),
+          ),
+        )
+      }
+
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.CommonPrefixes ?? []).toEqual([])
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    }, 120_000)
+
+    it('ListObjectsV2 pages in byte order, returning a folder once', async () => {
+      const OrderBucket = `${BASE_PATH}/s3/order-list`
+      for (const Key of [
+        'order-list/photos/a.jpg',
+        'order-list/photos.zip',
+        'order-list/photos/z.jpg',
+      ]) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+
+      const entries: string[] = []
+      let ContinuationToken: string | undefined
+      do {
+        const page = await s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: OrderBucket,
+            Delimiter: '/',
+            MaxKeys: 1,
+            ContinuationToken,
+          }),
+        )
+        entries.push(
+          ...(page.Contents ?? []).map((c) => c.Key!),
+          ...(page.CommonPrefixes ?? []).map((p) => p.Prefix!),
+        )
+        ContinuationToken = page.IsTruncated
+          ? page.NextContinuationToken
+          : undefined
+      } while (ContinuationToken && entries.length < 5)
+      expect(entries).toEqual(['photos.zip', 'photos/'])
+    })
+
+    it.each(LISTINGS)(
+      '$op without encoding-type answers 400 for a prefix XML cannot carry',
+      async ({ query }) => {
+        const res = await list(`${query}&max-keys=0&prefix=%01`)
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain(
+          '<ArgumentName>encoding-type</ArgumentName>',
+        )
+      },
+    )
+
+    it.each(LISTINGS)(
+      '$op with encoding-type=url echoes that prefix encoded',
+      async ({ query }) => {
+        const res = await list(
+          `${query}&max-keys=0&prefix=%01&encoding-type=url`,
+        )
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<Prefix>%01</Prefix>')
+      },
+    )
+
+    it('ListObjectVersions with encoding-type=url echoes the key-marker encoded', async () => {
+      const res = await list('versions&key-marker=d%2F%01&encoding-type=url')
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<KeyMarker>d%2F%01</KeyMarker>')
+      expect(body).toContain('<Key>e.txt</Key>')
+    })
+
+    it('ListObjectVersions without encoding-type answers 400 for that key-marker', async () => {
+      const res = await list('versions&key-marker=d%2F%01')
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>encoding-type</ArgumentName>',
+      )
     })
   })
 
@@ -2815,5 +3494,98 @@ describe('AWS S3 - SDK', () => {
         $response: { headers: { 'retry-after': '1' } },
       })
     }, 30_000)
+  })
+
+  // #892: a caller's own reference for the customer an object is for, recorded
+  // with the upload's interactions and never returned as object metadata.
+  describe('customer reference (x-amz-meta-customer-reference)', () => {
+    const referencesOf = async (cid: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{ customer_reference: string | null }>(
+        'SELECT customer_reference FROM interactions WHERE cid = $1',
+        [cid],
+      )
+      return result.rows.map((r) => r.customer_reference)
+    }
+
+    const cidOf = async (Key: string) => {
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.Metadata).not.toHaveProperty('customer-reference')
+      return head.Metadata!.cid
+    }
+
+    it('PutObject records it on the interaction', async () => {
+      const Key = 'customer-reference/put.bin'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: randomBytes(64),
+          Metadata: { 'customer-reference': 'cust:put-1' },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust:put-1'])
+    })
+
+    it('PutObject without one records NULL', async () => {
+      const Key = 'customer-reference/none.bin'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: randomBytes(64) }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual([null])
+    })
+
+    it('a multipart upload records the one sent when it was created', async () => {
+      const Key = 'customer-reference/multipart.bin'
+      const { UploadId } = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket,
+          Key,
+          Metadata: { 'customer-reference': 'cust-multipart' },
+        }),
+      )
+      const { ETag } = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId,
+          PartNumber: 1,
+          Body: randomBytes(64),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId,
+          MultipartUpload: { Parts: [{ ETag, PartNumber: 1 }] },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust-multipart'])
+    })
+
+    const invalid = {
+      Bucket,
+      Key: 'customer-reference/invalid.bin',
+      Metadata: { 'customer-reference': 'not valid' },
+    }
+    const rejectedAsInvalid = {
+      $metadata: { httpStatusCode: 400 },
+      name: 'InvalidArgument',
+    }
+
+    it('PutObject answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(
+          new PutObjectCommand({ ...invalid, Body: randomBytes(64) }),
+        ),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
+
+    it('CreateMultipartUpload answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(new CreateMultipartUploadCommand(invalid)),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
   })
 })

@@ -7,7 +7,7 @@ import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../../src/shared/utils/neverthrow.js'
-import { err } from 'neverthrow'
+import { err, ok } from 'neverthrow'
 
 describe('handleInternalError', () => {
   it('passes a thrown HttpError through unchanged', async () => {
@@ -30,6 +30,11 @@ describe('handleInternalError', () => {
     const error = result._unsafeUnwrapErr()
     expect(error).toBeInstanceOf(InternalError)
     expect(error.message).toBe('Failed to complete upload: connection reset')
+  })
+
+  it('does not compile for a Result, which handleInternalErrorResult takes', () => {
+    // @ts-expect-error the Err of a Result would be passed on as a success
+    void handleInternalError(Promise.resolve(ok('value')), 'message')
   })
 })
 

@@ -7,17 +7,30 @@ import {
   afterEach,
 } from '@jest/globals'
 import { S3UseCases } from '../../../src/core/s3/index.js'
-import { s3ObjectMappingsRepository } from '../../../src/infrastructure/repositories/index.js'
+import {
+  ownershipRepository,
+  s3ObjectMappingsRepository,
+} from '../../../src/infrastructure/repositories/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
 import { DownloadUseCase } from '../../../src/core/downloads/index.js'
 import { ObjectUseCases } from '../../../src/core/objects/object.js'
 import { UserWithOrganization } from '@auto-drive/models'
 import { ok, err } from 'neverthrow'
-import { ObjectNotFoundError, ForbiddenError } from '../../../src/errors/index.js'
+import {
+  DeleteMarkerVersionError,
+  ObjectNotFoundError,
+  ForbiddenError,
+  InvalidVersionIdError,
+  VersionNotFoundError,
+} from '../../../src/errors/index.js'
 import { config } from '../../../src/config.js'
 
 /** Quoted single-object MD5 ETag: `"<32 hex chars>"` */
 const MD5_ETAG_RE = /^"[a-f0-9]{32}"$/
+/** Version ids must parse as CIDs before any lookup runs. */
+const OLD_CID = 'bafkr6ic6xpbslpbhdq46t4jck3dx4gdjr6lrddkbqo3xur4jnf44vb2poa'
+const UNKNOWN_CID =
+  'bafkr6ihn4xsh3jvcw5p2dnmqgrsqpq3rvnmf2rbj4mfzmi5fjaw4m4osdu'
 /** Composite multipart ETag: `"<32 hex chars>-<N>"` */
 const MULTIPART_ETAG_RE = /^"[a-f0-9]{32}-\d+"$/
 /** Multipart MD5 as stored in the DB (no outer quotes): `<32 hex chars>-<N>` */
@@ -51,8 +64,22 @@ describe('S3UseCases', () => {
       ...over,
     }) as any
 
+  // Key writes and deletes run their queries on the client of a content-lock
+  // transaction; a stand-in client keeps these tests off the database.
+  const lockClient = {} as any
+
   beforeEach(() => {
     jest.clearAllMocks()
+    jest
+      .spyOn(s3ObjectMappingsRepository, 'withContentLock')
+      .mockImplementation(((
+        _p: string,
+        _u: string,
+        _c: string,
+        _mode: string,
+        fn: any,
+      ) => fn(lockClient)) as any)
+    jest.spyOn(ownershipRepository, 'restoreIfDeleted').mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -222,7 +249,7 @@ describe('S3UseCases', () => {
       const version = {
         bucket: 'my-bucket',
         key: 'file.txt',
-        cid: 'oldcid',
+        cid: OLD_CID,
         md5: 'abc123def456abc123def456abc123de',
         mtime: '111.5',
         metadata: { contentType: 'text/csv' },
@@ -239,12 +266,12 @@ describe('S3UseCases', () => {
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
-        VersionId: 'oldcid',
+        VersionId: OLD_CID,
       } as any)
 
       expect(result.isOk()).toBe(true)
       const value = result._unsafeUnwrap()
-      expect(value.cid).toBe('oldcid')
+      expect(value.cid).toBe(OLD_CID)
       expect(value.mtime).toBe('111.5')
       expect(value.objectMetadata).toEqual({ contentType: 'text/csv' })
       expect(value.lastModified).toEqual(new Date(5000))
@@ -255,26 +282,127 @@ describe('S3UseCases', () => {
         'user1',
         'my-bucket',
         'file.txt',
-        'oldcid',
+        OLD_CID,
       )
-      expect(downloadSpy).toHaveBeenCalledWith('oldcid', expect.any(Object))
+      expect(downloadSpy).toHaveBeenCalledWith(OLD_CID, expect.any(Object))
       expect(findByKeySpy).not.toHaveBeenCalled()
     })
 
-    it('returns not-found for an unknown versionId', async () => {
+    it('returns version-not-found for an unknown versionId', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
         .mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue({ cid: OLD_CID } as any)
 
       const result = await S3UseCases.getObject(mockUser, {
         Bucket: 'my-bucket',
         Key: 'file.txt',
-        VersionId: 'nope',
+        VersionId: UNKNOWN_CID,
       } as any)
 
       expect(result.isErr()).toBe(true)
-      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ObjectNotFoundError)
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(VersionNotFoundError)
     })
+
+    it('serves the current cid by its id when it has no version row', async () => {
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findVersionByCid')
+        .mockResolvedValue(null)
+      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue({
+        cid: OLD_CID,
+        md5: null,
+        mtime: '222.5',
+        metadata: null,
+        updatedAt: new Date(7000),
+      } as any)
+      const downloadSpy = jest
+        .spyOn(DownloadUseCase, 'downloadObjectByAnonymous')
+        .mockResolvedValue(ok({ read: jest.fn() }) as any)
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: OLD_CID,
+      } as any)
+
+      expect(result._unsafeUnwrap()).toMatchObject({
+        cid: OLD_CID,
+        mtime: '222.5',
+        lastModified: new Date(7000),
+      })
+      expect(downloadSpy).toHaveBeenCalledWith(OLD_CID, expect.any(Object))
+    })
+
+    it.each(['\x01x', '\x00', 'abc', 'dm-', 'dm-1x'])(
+      'refuses version id %j as invalid before any lookup',
+      async (versionId) => {
+        const findVersionSpy = jest.spyOn(
+          s3ObjectMappingsRepository,
+          'findVersionByCid',
+        )
+        const findMarkerSpy = jest.spyOn(
+          s3ObjectMappingsRepository,
+          'findDeleteMarkerTime',
+        )
+
+        const result = await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          VersionId: versionId,
+        } as any)
+
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(InvalidVersionIdError)
+        expect(findVersionSpy).not.toHaveBeenCalled()
+        expect(findMarkerSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it('refuses the current delete marker id of the key as a delete marker', async () => {
+      const markerTime = new Date('2026-11-09T12:00:00.123Z')
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findDeleteMarkerTime')
+        .mockResolvedValue(markerTime)
+      const findVersionSpy = jest.spyOn(
+        s3ObjectMappingsRepository,
+        'findVersionByCid',
+      )
+
+      const result = await S3UseCases.getObject(mockUser, {
+        Bucket: 'my-bucket',
+        Key: 'file.txt',
+        VersionId: `dm-${markerTime.getTime()}`,
+      } as any)
+
+      const error = result._unsafeUnwrapErr()
+      expect(error).toBeInstanceOf(DeleteMarkerVersionError)
+      expect(error).toMatchObject({
+        versionId: `dm-${markerTime.getTime()}`,
+        lastModified: markerTime,
+      })
+      expect(findVersionSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['a key with no delete marker', null],
+      ['a key whose marker is a different one', new Date(1_000)],
+    ])(
+      'returns version-not-found for a delete marker id on %s',
+      async (_, markerTime) => {
+        jest
+          .spyOn(s3ObjectMappingsRepository, 'findDeleteMarkerTime')
+          .mockResolvedValue(markerTime)
+
+        const result = await S3UseCases.getObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          VersionId: 'dm-2000',
+        } as any)
+
+        expect(result._unsafeUnwrapErr()).toBeInstanceOf(VersionNotFoundError)
+      },
+    )
 
     describe('picks the download path by object size', () => {
       const cap = config.params.maxAnonymousDownloadSize
@@ -346,7 +474,7 @@ describe('S3UseCases', () => {
           .mockResolvedValue({
             bucket: 'my-bucket',
             key: 'file.txt',
-            cid: 'oldcid',
+            cid: OLD_CID,
             md5: null,
             mtime: null,
             metadata: null,
@@ -358,11 +486,11 @@ describe('S3UseCases', () => {
         await S3UseCases.getObject(mockUser, {
           Bucket: 'my-bucket',
           Key: 'file.txt',
-          VersionId: 'oldcid',
+          VersionId: OLD_CID,
         } as any)
 
-        expect(getMetadata).toHaveBeenCalledWith('oldcid')
-        expect(byUser).toHaveBeenCalledWith(mockUser, 'oldcid', {
+        expect(getMetadata).toHaveBeenCalledWith(OLD_CID)
+        expect(byUser).toHaveBeenCalledWith(mockUser, OLD_CID, {
           byteRange: undefined,
         })
         expect(anonymous).not.toHaveBeenCalled()
@@ -491,6 +619,27 @@ describe('S3UseCases', () => {
       expect(result.versions.map((v) => v.key)).toEqual(['a.txt', 'b.txt'])
       expect(result.isTruncated).toBe(true)
       expect(result.nextKeyMarker).toBe('b.txt')
+    })
+
+    it('answers maxKeys=0 with an empty, untruncated page without reading versions', async () => {
+      const listSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([row({ key: 'a.txt', cid: 'a1' })] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 0,
+      })
+
+      expect(result).toEqual({
+        versions: [],
+        deleteMarkers: [],
+        isTruncated: false,
+        nextKeyMarker: null,
+      })
+      expect(listSpy).not.toHaveBeenCalled()
     })
 
     it('collapses repeated same-CID writes into one version (versionId = CID is unique per key)', async () => {
@@ -631,6 +780,7 @@ describe('S3UseCases', () => {
         expect.stringMatching(MULTIPART_MD5_RE),
         '1620000000.5',
         stashedMetadata,
+        lockClient,
       )
       expect(clearMetaSpy).toHaveBeenCalledWith('upload123')
     })
@@ -690,6 +840,7 @@ describe('S3UseCases', () => {
         null,
         null,
         null,
+        null,
       )
     })
 
@@ -736,6 +887,7 @@ describe('S3UseCases', () => {
         '6cd3556deb0da54bca060b4c39479839',
         null,
         null,
+        lockClient,
       )
     })
 
@@ -767,6 +919,7 @@ describe('S3UseCases', () => {
         expect.any(String),
         null,
         metadata,
+        lockClient,
       )
     })
   })
@@ -869,22 +1022,54 @@ describe('S3UseCases', () => {
       expect(result.isTruncated).toBe(true)
       expect(result.nextContinuationToken).toBe('b.txt')
     })
+
+    it('answers maxKeys=0 with an empty, untruncated page without reading keys', async () => {
+      const listSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjects')
+        .mockResolvedValue([makeListing('a.txt')] as any)
+
+      const result = await S3UseCases.listObjects(mockUser, {
+        bucket: 'my-bucket',
+        prefix: 'dir/',
+        delimiter: '/',
+        maxKeys: 0,
+        continuationToken: null,
+      })
+
+      expect(result).toEqual({
+        name: 'my-bucket',
+        prefix: 'dir/',
+        maxKeys: 0,
+        isTruncated: false,
+        nextContinuationToken: null,
+        objects: [],
+        commonPrefixes: [],
+      })
+      expect(listSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('deleteObject', () => {
-    it('trashes the object then hides the key when it was the caller’s last reference', async () => {
+    const hideKey = () =>
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
+        .mockResolvedValue(new Date(5000))
+    const remainingKeys = (count: number) =>
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
+        .mockResolvedValue(count)
+    const trash = (moved = true) =>
+      jest
+        .spyOn(ownershipRepository, 'markAsDeletedIfActive')
+        .mockResolvedValue(moved)
+
+    it('hides the key, then trashes the object at the key’s delete time when it was the caller’s last reference', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      const softDeleteSpy = hideKey()
+      const countSpy = remainingKeys(0)
+      const trashSpy = trash()
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -899,12 +1084,33 @@ describe('S3UseCases', () => {
         deleteMarker: true,
         versionId: 'dm-5000',
       })
-      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(s3ObjectMappingsRepository.withContentLock).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        'exclusive',
+        expect.any(Function),
+      )
       expect(softDeleteSpy).toHaveBeenCalledWith(
         'google',
         'user1',
         'my-bucket',
         'file.txt',
+        'cid123',
+        lockClient,
+      )
+      expect(countSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        lockClient,
+      )
+      expect(trashSpy).toHaveBeenCalledWith(
+        'google',
+        'user1',
+        'cid123',
+        new Date(5000),
+        lockClient,
       )
     })
 
@@ -912,17 +1118,9 @@ describe('S3UseCases', () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping({ key: 'copy.txt' }))
-      // before-hide = 2, after-hide re-check = 1 (sibling still active).
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValueOnce(2)
-        .mockResolvedValueOnce(1)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      hideKey()
+      remainingKeys(1)
+      const trashSpy = trash()
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -931,32 +1129,37 @@ describe('S3UseCases', () => {
       )
 
       expect(result.isOk()).toBe(true)
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
-    it('trashes via the race guard when a concurrent delete removed the sibling', async () => {
+    it('leaves the object alone when the key was deleted or rewritten before it could be hidden', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
-        .mockResolvedValue(mapping({ key: 'k2.txt' }))
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValueOnce(2)
-        .mockResolvedValueOnce(0)
-      const markSpy = jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(ok(undefined))
+        .mockResolvedValue(mapping())
       jest
         .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+        .mockResolvedValue(null)
+      const countSpy = remainingKeys(0)
+      const trashSpy = trash()
 
-      const result = await S3UseCases.deleteObject(mockUser, 'my-bucket', 'k2.txt')
+      const result = await S3UseCases.deleteObject(
+        mockUser,
+        'my-bucket',
+        'file.txt',
+      )
 
-      expect(result.isOk()).toBe(true)
-      expect(markSpy).toHaveBeenCalledWith(mockUser, 'cid123')
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: false,
+        versionId: null,
+      })
+      expect(countSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
     it('is a no-op with no marker when the key never existed', async () => {
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
       // No soft-deleted row either: the key never existed → no delete marker.
       jest
         .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
@@ -965,7 +1168,7 @@ describe('S3UseCases', () => {
         s3ObjectMappingsRepository,
         'softDeleteMapping',
       )
-      const markSpy = jest.spyOn(ObjectUseCases, 'markAsDeleted')
+      const trashSpy = jest.spyOn(ownershipRepository, 'markAsDeletedIfActive')
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -980,14 +1183,16 @@ describe('S3UseCases', () => {
         versionId: null,
       })
       expect(softDeleteSpy).not.toHaveBeenCalled()
-      expect(markSpy).not.toHaveBeenCalled()
+      expect(trashSpy).not.toHaveBeenCalled()
     })
 
     it('reports the existing delete marker on a repeat delete of an already-deleted key', async () => {
       // findByKey hides soft-deleted rows, so a repeat DeleteObject sees no live
       // key — but the current state IS a delete marker, so report it (no new
       // marker is created).
-      jest.spyOn(s3ObjectMappingsRepository, 'findByKey').mockResolvedValue(null)
+      jest
+        .spyOn(s3ObjectMappingsRepository, 'findByKey')
+        .mockResolvedValue(null)
       jest
         .spyOn(s3ObjectMappingsRepository, 'findSoftDeletedByKey')
         .mockResolvedValue({ deletedAt: new Date(5000) })
@@ -1011,19 +1216,13 @@ describe('S3UseCases', () => {
       expect(softDeleteSpy).not.toHaveBeenCalled()
     })
 
-    it('still succeeds when moving the object to Trash fails', async () => {
+    it('still succeeds when the object cannot be moved to Trash', async () => {
       jest
         .spyOn(s3ObjectMappingsRepository, 'findByKey')
         .mockResolvedValue(mapping())
-      jest
-        .spyOn(s3ObjectMappingsRepository, 'countActiveMappingsByCid')
-        .mockResolvedValue(1)
-      jest
-        .spyOn(ObjectUseCases, 'markAsDeleted')
-        .mockResolvedValue(err(new ForbiddenError('not an owner')))
-      const softDeleteSpy = jest
-        .spyOn(s3ObjectMappingsRepository, 'softDeleteMapping')
-        .mockResolvedValue({ cid: 'cid123', deletedAt: new Date(5000) })
+      hideKey()
+      remainingKeys(0)
+      trash(false)
 
       const result = await S3UseCases.deleteObject(
         mockUser,
@@ -1031,8 +1230,10 @@ describe('S3UseCases', () => {
         'file.txt',
       )
 
-      expect(result.isOk()).toBe(true)
-      expect(softDeleteSpy).toHaveBeenCalled()
+      expect(result._unsafeUnwrap()).toEqual({
+        deleteMarker: true,
+        versionId: 'dm-5000',
+      })
     })
   })
 
@@ -1080,6 +1281,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1139,6 +1341,7 @@ describe('S3UseCases', () => {
         source.md5,
         '111.5',
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1167,6 +1370,7 @@ describe('S3UseCases', () => {
         source.md5,
         '222.9',
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1195,6 +1399,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         source.metadata,
+        lockClient,
       )
     })
 
@@ -1223,6 +1428,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         srcMeta,
+        lockClient,
       )
     })
 
@@ -1257,6 +1463,7 @@ describe('S3UseCases', () => {
         source.md5,
         null,
         replacement,
+        lockClient,
       )
     })
 

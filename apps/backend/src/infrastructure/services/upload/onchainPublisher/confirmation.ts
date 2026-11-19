@@ -29,10 +29,42 @@ export const isStillCanonical = (
 
 /**
  * Only a genuinely `Invalid` transaction implicates the signing account itself
- * (unusable key / insufficient balance), so it is the sole failure that evicts
- * the account from the pool. Every other failure — reorg, timeout, usurped,
- * RPC/subscription/API blips, submission errors — is a chain or infrastructure
- * event: the account is healthy and must be kept (its nonce is resynced) so a
- * transient incident cannot drain the signer pool (issue #706).
+ * (unusable key / bad cryptographic state), so it is the sole failure that evicts
+ * the account from the pool permanently. Balance/fee rejections (Substrate error 1010
+ * / Inability to pay fees) are classified as `InsufficientFunds` and handled via the
+ * account manager's cooldown and rerouting mechanism rather than eviction. Every
+ * other failure — reorg, timeout, usurped, RPC/subscription/API blips, submission
+ * errors — is a chain or infrastructure event: the account is healthy and must be
+ * kept (its nonce is resynced) so transient incidents cannot drain the signer pool
+ * (issues #706, #879).
  */
 export const isAccountFault = (status?: string): boolean => status === 'Invalid'
+
+/**
+ * Detects whether a transaction submission error is caused by insufficient funds /
+ * fee payment failure (Substrate RPC error 1010 / "Inability to pay some fees").
+ *
+ * Checks structured error code first if present, falling back to message text.
+ */
+export const isInsufficientFundsError = (error: unknown): boolean => {
+  if (!error) return false
+  const msg =
+    typeof error === 'string'
+      ? error
+      : typeof error === 'object' &&
+          'message' in error &&
+          typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : ''
+  if (!msg) return false
+
+  const lower = msg.toLowerCase()
+  return (
+    lower.includes('inability to pay some fees') ||
+    lower.includes('account balance too low') ||
+    lower.includes('insufficient balance') ||
+    lower.includes('insufficient funds') ||
+    lower.includes('invalid transaction: payment') ||
+    (/\bpayment\b/i.test(msg) && lower.includes('invalid transaction'))
+  )
+}

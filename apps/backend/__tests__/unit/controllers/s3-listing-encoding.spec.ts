@@ -25,6 +25,17 @@ describe('hasXmlIllegalChars', () => {
     expect(hasXmlIllegalChars('\x0C')).toBe(true)
     expect(hasXmlIllegalChars('\x1F')).toBe(true)
   })
+
+  it('detects the noncharacters U+FFFE and U+FFFF', () => {
+    expect(hasXmlIllegalChars('k\uFFFE')).toBe(true)
+    expect(hasXmlIllegalChars('k\uFFFF')).toBe(true)
+  })
+
+  it('treats other characters XML permits as legal', () => {
+    expect(hasXmlIllegalChars('k\uFDD0')).toBe(false)
+    expect(hasXmlIllegalChars('k\uFFFD')).toBe(false)
+    expect(hasXmlIllegalChars('k\u{1F600}')).toBe(false)
+  })
 })
 
 describe('encodeS3Key', () => {

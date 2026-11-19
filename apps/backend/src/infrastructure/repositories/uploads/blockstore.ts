@@ -237,6 +237,24 @@ const deleteBlockstoreEntry = async (
   )
 }
 
+// The CIDs of an upload's nodes of one type, one per row in insertion order,
+// so a chunk that repeats in the file is listed once per occurrence. Reads no
+// node data: a completion lists every chunk of the file.
+const getCidsByType = async (
+  uploadId: string,
+  nodeType: MetadataType,
+  executor?: Executor,
+): Promise<string[]> => {
+  const db = executor ?? (await getDatabase())
+
+  const result = await db.query<{ cid: string }>(
+    'SELECT cid FROM uploads.blockstore WHERE upload_id = $1 AND node_type = $2 ORDER BY sort_id ASC',
+    [uploadId, nodeType],
+  )
+
+  return result.rows.map((row) => row.cid)
+}
+
 const deleteBlockstoreEntries = async (uploadId: string) => {
   const db = await getDatabase()
 
@@ -252,6 +270,7 @@ export const blockstoreRepository = {
   getBatchBlockstoreEntries,
   getBlockstoreEntriesWithoutData,
   getByType,
+  getCidsByType,
   getByCid,
   hasCid,
   getDistinctCids,

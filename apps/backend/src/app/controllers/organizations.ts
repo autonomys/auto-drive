@@ -7,8 +7,9 @@ import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 
-// Admin-only: partner organizations and their members. Every route checks the
-// admin role in its use case.
+// Partner organizations, their members and their API keys. Every route checks
+// its caller in its use case: Auto Drive admins manage organizations and
+// members, and organization members use the API key routes.
 export const organizationsController = Router()
 
 const roleSchema = z.nativeEnum(OrganizationRole)
@@ -94,7 +95,11 @@ organizationsController.post(
     }
 
     const body = z
-      .object({ publicId: z.string().min(1), role: roleSchema })
+      .object({
+        publicId: z.string().min(1),
+        role: roleSchema,
+        allowUnusedCredits: z.boolean().optional(),
+      })
       .safeParse(req.body)
     if (!body.success) {
       res.status(400).json({
@@ -109,6 +114,7 @@ organizationsController.post(
         req.params.organizationId,
         body.data.publicId,
         body.data.role,
+        { allowUnusedCredits: body.data.allowUnusedCredits },
       ),
       'Failed to add member',
     )
@@ -177,5 +183,88 @@ organizationsController.delete(
     }
 
     res.json(result.value)
+  }),
+)
+
+organizationsController.get(
+  '/:organizationId/api-keys',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.listApiKeys(user, req.params.organizationId),
+      'Failed to list API keys',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/:organizationId/api-keys',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    // Auth validates the name's length and that the expiry is in the future.
+    const body = z
+      .object({
+        name: z.string().nullish(),
+        expiresAt: z.string().nullish(),
+      })
+      .safeParse(req.body ?? {})
+    if (!body.success) {
+      res.status(400).json({ error: 'name and expiresAt must be strings' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.createApiKey(
+        user,
+        req.params.organizationId,
+        body.data,
+      ),
+      'Failed to create API key',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json(result.value)
+  }),
+)
+
+organizationsController.delete(
+  '/:organizationId/api-keys/:apiKeyId',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.revokeApiKey(
+        user,
+        req.params.organizationId,
+        req.params.apiKeyId,
+      ),
+      'Failed to revoke API key',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
   }),
 )

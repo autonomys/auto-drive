@@ -57,13 +57,28 @@ export class VersionNotFoundError extends HttpError {
   }
 }
 
-// A versionId that is not a CID, so it cannot name any version. Kept apart from
-// BadRequestError because S3 answers it as InvalidArgument, not InvalidRequest.
+// A versionId that is neither a CID nor a delete marker id, so it cannot name
+// any version. Kept apart from BadRequestError because S3 answers it as
+// InvalidArgument, not InvalidRequest.
 export class InvalidVersionIdError extends HttpError {
   static readonly statusCode = 400
   constructor(message: string) {
     super(InvalidVersionIdError.statusCode, message)
     this.name = 'InvalidVersionIdError'
+  }
+}
+
+// A versionId that names a delete marker, which has no content to read. S3
+// answers 405 and describes the marker in headers, so it travels with them.
+export class DeleteMarkerVersionError extends HttpError {
+  static readonly statusCode = 405
+  constructor(
+    message: string,
+    public readonly versionId: string,
+    public readonly lastModified: Date,
+  ) {
+    super(DeleteMarkerVersionError.statusCode, message)
+    this.name = 'DeleteMarkerVersionError'
   }
 }
 
@@ -168,9 +183,20 @@ export class BadRequestError extends HttpError {
 // the operation (e.g. trying to reprocess an intent that is not OVER_CAP).
 export class ConflictError extends HttpError {
   static readonly statusCode = 409
-  constructor(message: string) {
-    super(ConflictError.statusCode, message)
+  constructor(message: string, errorCode?: string) {
+    super(ConflictError.statusCode, message, errorCode)
     this.name = 'ConflictError'
+  }
+}
+
+// 409 Conflict — moving a user into a partner organization would leave their
+// purchased credits behind on their current account. An admin can confirm the
+// move anyway, so the client needs the code to offer that.
+export class UnusedCreditsError extends ConflictError {
+  static readonly code = 'UNUSED_PURCHASED_CREDITS'
+  constructor(message: string) {
+    super(message, UnusedCreditsError.code)
+    this.name = 'UnusedCreditsError'
   }
 }
 

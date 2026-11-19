@@ -311,6 +311,8 @@ describe('Async Downloads', () => {
 
     jest.spyOn(Rabbit, 'publish').mockResolvedValue()
     jest.spyOn(ObjectUseCases, 'isArchived').mockResolvedValue(true)
+    // Reads go to the gateway only once the local node data has been reclaimed
+    jest.spyOn(ObjectUseCases, 'hasAllNodeData').mockResolvedValue(false)
     const gateway = new PassThrough()
     const sources: Readable[] = [gateway]
     const gatewayFetch = jest

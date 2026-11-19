@@ -1,6 +1,9 @@
 import { config } from '../../../config.js'
 import {
+  ApiKey,
   ApiKeyName,
+  ApiKeyWithoutSecret,
+  CreateApiKeyInput,
   DeletionRequest,
   MaybeUserWithOrganization,
   Organization,
@@ -419,8 +422,31 @@ const removeOrganizationMember = (
     { method: 'DELETE', body: { actor } },
   )
 
+const getOrganizationApiKeys = (organizationId: string) =>
+  organizationRequest<ApiKeyWithoutSecret[]>(
+    `/${encodeURIComponent(organizationId)}/apiKeys`,
+  )
+
+const createOrganizationApiKey = (
+  organizationId: string,
+  input: CreateApiKeyInput,
+) =>
+  organizationRequest<ApiKey>(`/${encodeURIComponent(organizationId)}/apiKeys`, {
+    method: 'POST',
+    body: input,
+  })
+
+const revokeOrganizationApiKey = (organizationId: string, apiKeyId: string) =>
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/apiKeys/${encodeURIComponent(apiKeyId)}`,
+    { method: 'DELETE' },
+  )
+
 export const AuthManager = {
   getApiKeyNames,
+  getOrganizationApiKeys,
+  createOrganizationApiKey,
+  revokeOrganizationApiKey,
   createOrganization,
   getOrganizationSummaries,
   getOrganization,
