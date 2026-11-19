@@ -109,7 +109,10 @@ export const ApiKeyCreationModal = ({
       expiresAt,
     })
       .then((key) => {
-        if (epochRef.current === epoch) setApiKey(key);
+        if (epochRef.current === epoch) {
+          setApiKey(key);
+          setSubmitting(false);
+        }
       })
       .catch((err: Error) => {
         if (epochRef.current === epoch) {
