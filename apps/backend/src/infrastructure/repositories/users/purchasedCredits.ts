@@ -25,6 +25,7 @@ type DBPurchasedCredit = {
   granted_by: string | null
   grant_reason: string | null
   grant_period: Date | null
+  superseded_at: Date | null
   upload_bytes_original: string
   upload_bytes_remaining: string
   download_bytes_original: string
@@ -53,6 +54,7 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
       ? 'free_monthly'
       : 'free_one_time',
   grantPeriod: row.grant_period && utcDay(row.grant_period),
+  supersededAt: row.superseded_at,
   uploadBytesOriginal: BigInt(row.upload_bytes_original),
   uploadBytesRemaining: BigInt(row.upload_bytes_remaining),
   downloadBytesOriginal: BigInt(row.download_bytes_original),
@@ -152,7 +154,12 @@ const getActiveByAccountId = async (
 // ledger can never disagree with the balances. Rolling back undoes everything.
 // ---------------------------------------------------------------------------
 
-export type BatchConsumption = { purchasedCreditId: string; bytes: bigint }
+export type BatchConsumption = {
+  purchasedCreditId: string
+  bytes: bigint
+  /** The batch is free credits (no intent), not a purchase. */
+  free: boolean
+}
 
 const consumeUpTo = async (
   client: pg.PoolClient,
@@ -201,7 +208,11 @@ const consumeUpTo = async (
     )
 
     toConsume -= deduction
-    consumed.push({ purchasedCreditId: row.id, bytes: deduction })
+    consumed.push({
+      purchasedCreditId: row.id,
+      bytes: deduction,
+      free: row.intent_id === null,
+    })
   }
 
   return consumed
@@ -243,7 +254,7 @@ const getRemainingCredits = async (
          WHERE intent_id IS NULL), 0)     AS free_upload_bytes_remaining,
        COALESCE(SUM(download_bytes_remaining), 0) AS download_bytes_remaining,
        MIN(expires_at)                            AS next_expiry,
-       COUNT(*)                                   AS active_row_count
+       COUNT(*) FILTER (WHERE intent_id IS NOT NULL) AS active_row_count
      FROM purchased_credits
      WHERE account_id = $1
        AND expired = FALSE
@@ -268,8 +279,9 @@ const getRemainingCredits = async (
 
 // ---------------------------------------------------------------------------
 // getExpiringCredits
-// Returns active rows expiring within N days. System-wide — no account filter.
-// Used by the admin /credits/economics endpoint for system-level monitoring.
+// Returns active purchased rows expiring within N days. System-wide — no
+// account filter. Free credits are left out: they owe no refund, and a
+// partner's monthly free credits always expire within the month.
 // ---------------------------------------------------------------------------
 
 const getExpiringCredits = async (
@@ -279,7 +291,8 @@ const getExpiringCredits = async (
   const result = await db.query<DBPurchasedCredit>(
     `SELECT *
      FROM purchased_credits
-     WHERE expired = FALSE
+     WHERE intent_id IS NOT NULL
+       AND expired = FALSE
        AND expires_at > NOW()
        AND expires_at <= NOW() + ($1 * INTERVAL '1 day')
        AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
@@ -291,8 +304,10 @@ const getExpiringCredits = async (
 
 // ---------------------------------------------------------------------------
 // getExpiringCreditsAggregate
-// Single-query aggregate: count + byte sums for system-wide expiring credits.
-// Avoids transferring all rows into Node.js memory.
+// Single-query aggregate: count + byte sums for system-wide expiring purchased
+// credits, for the admin /credits/economics endpoint. Free credits are left
+// out, as in getExpiringCredits. Avoids transferring all rows into Node.js
+// memory.
 // ---------------------------------------------------------------------------
 
 export type ExpiringCreditsAggregate = {
@@ -315,7 +330,8 @@ const getExpiringCreditsAggregate = async (
        COALESCE(SUM(upload_bytes_remaining),   0)  AS total_upload,
        COALESCE(SUM(download_bytes_remaining), 0)  AS total_download
      FROM purchased_credits
-     WHERE expired = FALSE
+     WHERE intent_id IS NOT NULL
+       AND expired = FALSE
        AND expires_at > NOW()
        AND expires_at <= NOW() + ($1 * INTERVAL '1 day')
        AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)`,
@@ -368,9 +384,13 @@ const getExpiringCreditsByAccountId = async (
 // ---------------------------------------------------------------------------
 
 export type ExpiredCreditsSummary = {
+  /** Purchased rows marked expired. */
   expiredCount: number
   totalUploadBytesForfeited: bigint
   totalDownloadBytesForfeited: bigint
+  /** Free credit rows marked expired, kept apart: nothing was paid for them. */
+  freeExpiredCount: number
+  freeUploadBytesForfeited: bigint
 }
 
 const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
@@ -379,6 +399,8 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
     count: string
     upload_forfeited: string
     download_forfeited: string
+    free_count: string
+    free_upload_forfeited: string
   }>(
     `WITH expired AS (
        UPDATE purchased_credits
@@ -386,12 +408,17 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
        WHERE expired = FALSE
          AND expires_at <= NOW()
          AND upload_bytes_remaining > 0
-       RETURNING upload_bytes_remaining, download_bytes_remaining
+       RETURNING intent_id, upload_bytes_remaining, download_bytes_remaining
      )
      SELECT
-       COUNT(*)                                     AS count,
-       COALESCE(SUM(upload_bytes_remaining),   0)  AS upload_forfeited,
-       COALESCE(SUM(download_bytes_remaining), 0)  AS download_forfeited
+       COUNT(*) FILTER (WHERE intent_id IS NOT NULL) AS count,
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE intent_id IS NOT NULL), 0)            AS upload_forfeited,
+       COALESCE(SUM(download_bytes_remaining) FILTER (
+         WHERE intent_id IS NOT NULL), 0)            AS download_forfeited,
+       COUNT(*) FILTER (WHERE intent_id IS NULL)     AS free_count,
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE intent_id IS NULL), 0)                AS free_upload_forfeited
      FROM expired`,
   )
 
@@ -400,6 +427,8 @@ const markExpiredCredits = async (): Promise<ExpiredCreditsSummary> => {
     expiredCount: Number(row.count),
     totalUploadBytesForfeited: BigInt(row.upload_forfeited),
     totalDownloadBytesForfeited: BigInt(row.download_forfeited),
+    freeExpiredCount: Number(row.free_count),
+    freeUploadBytesForfeited: BigInt(row.free_upload_forfeited),
   }
 }
 
@@ -528,28 +557,76 @@ const createPurchasedCreditWithCapCheck = async (
 // ---------------------------------------------------------------------------
 // Free credits
 // Batches an admin grants a partner for free, with no intent. Monthly ones
-// are issued lazily, once per UTC month, and expire when the month ends;
-// the partial unique index makes concurrent issuance a no-op.
+// are issued lazily, once per UTC month and again when the monthly amount
+// changes, and expire when the month ends; the partial unique index makes
+// concurrent issuance a no-op.
 // ---------------------------------------------------------------------------
 
+// SQL for the start of the current UTC month, as a timestamp in UTC. Cast to
+// date, it is the month's grant_period.
+const CURRENT_MONTH = `date_trunc('month',
+  NOW() AT TIME ZONE 'UTC')`
+
+/**
+ * Issues a partner account's monthly free credits for the current UTC month if
+ * it has no current batch for it: its monthly amount less what the month's
+ * earlier batches (replaced by a change to the amount) gave to uploads, if
+ * that is more than 0. The amount is read from the account in the same
+ * statement, so a request holding an older copy of the account can't issue
+ * an amount an admin has just changed. The batch expires when the month ends.
+ */
 const ensureMonthlyFreeCredits = async (
   accountId: string,
-  bytes: bigint,
   client?: pg.PoolClient,
 ): Promise<void> => {
   const db = client ?? (await getDatabase())
   await db.query(
-    `INSERT INTO purchased_credits
+    `WITH monthly AS (
+       SELECT monthly_free_upload_bytes AS bytes
+       FROM accounts
+       WHERE id = $1 AND is_partner
+     ), used AS (
+       SELECT COALESCE(SUM(upload_bytes_original - upload_bytes_remaining), 0)
+                AS bytes
+       FROM purchased_credits
+       WHERE account_id = $1 AND grant_period = ${CURRENT_MONTH}::date
+     )
+     INSERT INTO purchased_credits
        (account_id, upload_bytes_original, upload_bytes_remaining,
         download_bytes_original, download_bytes_remaining,
         purchased_at, expires_at, grant_period)
-     VALUES ($1, $2, $2, 0, 0, NOW(),
-             (date_trunc('month', NOW() AT TIME ZONE 'UTC') + interval '1 month')
-               AT TIME ZONE 'UTC',
-             date_trunc('month', NOW() AT TIME ZONE 'UTC')::date)
-     ON CONFLICT (account_id, grant_period) WHERE grant_period IS NOT NULL
+     SELECT $1, monthly.bytes - used.bytes, monthly.bytes - used.bytes, 0, 0,
+            NOW(), (${CURRENT_MONTH} + interval '1 month') AT TIME ZONE 'UTC',
+            ${CURRENT_MONTH}::date
+     FROM monthly, used
+     WHERE monthly.bytes - used.bytes > 0
+     ON CONFLICT (account_id, grant_period)
+       WHERE grant_period IS NOT NULL AND superseded_at IS NULL
      DO NOTHING`,
-    [accountId, bytes.toString()],
+    [accountId],
+  )
+}
+
+/**
+ * Ends the account's current monthly free credits now, when the monthly amount
+ * changes. Run in the transaction that changes it, before
+ * ensureMonthlyFreeCredits, so the month's free credits become the new amount
+ * less what has been used this month. The ended batch keeps its remaining
+ * bytes, so usage reports count them as expired at this time.
+ */
+const supersedeMonthlyFreeCredits = async (
+  client: pg.PoolClient,
+  accountId: string,
+): Promise<void> => {
+  await client.query(
+    `UPDATE purchased_credits
+     SET superseded_at = NOW(),
+         expires_at = LEAST(expires_at, NOW()),
+         updated_at = NOW()
+     WHERE account_id = $1
+       AND grant_period = ${CURRENT_MONTH}::date
+       AND superseded_at IS NULL`,
+    [accountId],
   )
 }
 
@@ -1015,6 +1092,7 @@ export const purchasedCreditsRepository = {
   getExpiringCreditsByAccountId,
   createPurchasedCreditWithCapCheck,
   ensureMonthlyFreeCredits,
+  supersedeMonthlyFreeCredits,
   createFreeCredit,
   getFreeCreditsByAccountId,
   markExpiredCredits,

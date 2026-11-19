@@ -1,5 +1,6 @@
 import pg from 'pg'
 import { getDatabase } from '../../drivers/pg.js'
+import { purchasedCreditsRepository } from './purchasedCredits.js'
 import {
   AccountModel,
   Account,
@@ -177,7 +178,9 @@ const createAccount = async (
 
 // Writes the terms and one history row per field that actually changed, in one
 // transaction. The row is locked so the history is diffed against what was
-// really replaced.
+// really replaced. A partner's new monthly free amount applies at once, as a
+// new upload limit does: in the same transaction, this month's batch is
+// replaced by one for the new amount less what was used this month.
 const updateAccount = async (
   id: string,
   terms: AccountTerms,
@@ -210,6 +213,15 @@ const updateAccount = async (
         ],
       )
     ).rows[0]
+
+    if (
+      after.is_partner &&
+      String(before.monthly_free_upload_bytes) !==
+        String(after.monthly_free_upload_bytes)
+    ) {
+      await purchasedCreditsRepository.supersedeMonthlyFreeCredits(client, id)
+      await purchasedCreditsRepository.ensureMonthlyFreeCredits(id, client)
+    }
 
     for (const field of [
       'max_purchased_bytes',

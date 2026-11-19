@@ -34,10 +34,12 @@ import {
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
+// Every field but freeUploadBytesRemaining is about purchased credits only;
+// free credits are reported apart and never summed with them.
 export type CreditSummaryResponse = {
-  /** Across all active batches, purchased and free. */
+  /** Purchased upload bytes left. */
   uploadBytesRemaining: string;
-  /** The part of uploadBytesRemaining that is free credits. */
+  /** Free credit upload bytes left (partners only). */
   freeUploadBytesRemaining: string;
   /** Sum of upload_bytes_original across active purchased rows. */
   totalPurchasedBytesOriginal: string;
@@ -60,6 +62,8 @@ export type ExpiringCreditBatch = {
   kind: PurchasedCreditKind;
   /** Start of the UTC month of monthly free credits, else null. */
   grantPeriod: string | null;
+  /** Monthly free credits ended by a change to the monthly amount. */
+  supersededAt: string | null;
   uploadBytesOriginal: string;
   uploadBytesRemaining: string;
   downloadBytesOriginal: string;

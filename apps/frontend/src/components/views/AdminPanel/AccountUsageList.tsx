@@ -82,16 +82,17 @@ export const AccountUsageList = () => {
               <TableHeadCell>Uploads</TableHeadCell>
               <TableHeadCell>Upload size</TableHeadCell>
               <TableHeadCell>AI3 value</TableHeadCell>
-              <TableHeadCell>Free credits used</TableHeadCell>
+              <TableHeadCell>Paid with free credits</TableHeadCell>
               <TableHeadCell>Download size</TableHeadCell>
-              <TableHeadCell>Credits granted</TableHeadCell>
+              <TableHeadCell>Credits purchased</TableHeadCell>
+              <TableHeadCell>Free credits granted</TableHeadCell>
             </TableHeadRow>
           </TableHead>
           <TableBody>
             {!range || isLoading || error || !accounts?.length ? (
               <TableBodyRow>
                 <TableBodyCell
-                  colSpan={7}
+                  colSpan={8}
                   className='py-6 text-center text-gray-500'
                 >
                   {!range ? (
@@ -140,6 +141,9 @@ export const AccountUsageList = () => {
                   </TableBodyCell>
                   <TableBodyCell>{bytes(account.downloadBytes)}</TableBodyCell>
                   <TableBodyCell>{bytes(account.grantedBytes)}</TableBodyCell>
+                  <TableBodyCell>
+                    {bytes(account.freeCreditsGrantedBytes)}
+                  </TableBodyCell>
                 </TableBodyRow>
               ))
             )}

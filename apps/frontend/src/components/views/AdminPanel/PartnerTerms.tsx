@@ -218,7 +218,8 @@ const TermsModal = ({
           />
         </label>
         <label className='block text-sm text-foreground'>
-          Monthly free uploads (GiB, 0 for none, from next month if changed)
+          Monthly free uploads (GiB, 0 for none). A change applies at once: this
+          month gets the new amount less what has been used this month.
           <input
             type='text'
             className={inputClass}

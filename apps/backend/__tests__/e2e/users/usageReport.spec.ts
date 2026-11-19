@@ -128,6 +128,8 @@ describe('Usage reports', () => {
 
   // An interaction at `at`. Purchased uploads draw `from` the given batches;
   // `recorded: false` draws without consumption rows, as before attribution.
+  // Uploads with free credits draw from free batches with `source:
+  // 'free_credits'`, as registerInteraction records them.
   const interact = async (
     accountId: string,
     {
@@ -138,6 +140,7 @@ describe('Usage reports', () => {
       customerReference = null,
       from = [],
       recorded = true,
+      source = from.length > 0 ? 'purchased' : 'free_tier',
     }: {
       at: Date
       bytes: number
@@ -146,6 +149,7 @@ describe('Usage reports', () => {
       customerReference?: string | null
       from?: [string, number][]
       recorded?: boolean
+      source?: 'free_tier' | 'purchased' | 'free_credits'
     },
   ) => {
     const db = await getDatabase()
@@ -159,7 +163,7 @@ describe('Usage reports', () => {
         accountId,
         type,
         bytes,
-        from.length > 0 ? 'purchased' : 'free_tier',
+        source,
         `cid-${id}`,
         apiKeyId,
         customerReference,
@@ -319,7 +323,8 @@ describe('Usage reports', () => {
 
   // The partner timeline plus free credits: a one-time grant on day 52 and a
   // monthly batch on day 53 that ends on day 60, both drawn on, together with
-  // a purchased batch, by one upload on day 55.
+  // a purchased batch, by one upload on day 55. registerInteraction records
+  // such an upload as one interaction per source.
   const seedFree = async () => {
     const seeded = await seedPartner()
     const id = seeded.account.id
@@ -334,16 +339,24 @@ describe('Usage reports', () => {
       expiresAt: day(60),
       period: '2026-01-01',
     })
-    await interact(id, {
+    const upload = {
       at: day(55),
-      bytes: 900,
       apiKeyId: 'key-1',
       customerReference: 'cust-a',
+    }
+    await interact(id, {
+      ...upload,
+      bytes: 600,
+      source: 'free_credits',
       from: [
         [monthly, 100],
         [oneTime, 500],
-        [seeded.batches.b, 300],
       ],
+    })
+    await interact(id, {
+      ...upload,
+      bytes: 300,
+      from: [[seeded.batches.b, 300]],
     })
     return { ...seeded, free: { oneTime, monthly } }
   }
@@ -464,9 +477,9 @@ describe('Usage reports', () => {
     )
 
     // 300 purchased bytes at 5 shannons; the 600 free ones are worth nothing
-    // and are not unattributed.
+    // and are not unattributed. The upload counts once per source.
     expect(uploads).toEqual({
-      count: 1,
+      count: 2,
       bytes: '900',
       freeTierBytes: '0',
       purchasedBytes: '300',
@@ -486,7 +499,7 @@ describe('Usage reports', () => {
     expect(customerReferences).toEqual([
       {
         customerReference: 'cust-a',
-        uploadCount: 1,
+        uploadCount: 2,
         uploadBytes: '900',
         purchasedBytes: '300',
         freeCreditBytes: '600',
@@ -533,39 +546,65 @@ describe('Usage reports', () => {
     expect(
       UsageReportsUseCases.usageReportCsv(forAdmin, 'freeCredits'),
     ).toContain(',admin-pub,Pilot\r\n')
-    expect(UsageReportsUseCases.usageReportCsv(forAdmin, 'summary')).toContain(
-      'free_credit_upload_bytes,600\r\n',
-    )
+    const summary = UsageReportsUseCases.usageReportCsv(forAdmin, 'summary')
+    expect(summary).toContain('free_credit_upload_bytes,600\r\n')
+    expect(summary).toContain('free_credit_granted_bytes,700\r\n')
+    expect(summary).toContain('purchased_granted_bytes,0\r\n')
   })
 
-  it('keeps the balance identity with free and purchased credits', async () => {
+  it('balances purchased and free credits apart, each keeping the identity', async () => {
     const { account } = await seedFree()
 
-    // Free credits are granted and consumed like purchases; the monthly batch
-    // ends used up, so nothing more expires.
-    const { balance } = await report(admin, account.id, day(10), NOW)
+    // The purchased balance is the partner timeline's plus the 300 bytes the
+    // day-55 upload drew from batch b. The monthly free batch ends used up,
+    // so no free credits expire.
+    const { balance, freeCreditBalance } = await report(
+      admin,
+      account.id,
+      day(10),
+      NOW,
+    )
     expect(balance).toEqual({
       opening: '900',
-      granted: '4000',
-      consumed: '2000',
+      granted: '3300',
+      consumed: '1400',
       expired: '1200',
       refunded: '400',
-      closing: '1300',
+      closing: '1200',
+    })
+    expect(freeCreditBalance).toEqual({
+      opening: '0',
+      granted: '700',
+      consumed: '600',
+      expired: '0',
+      refunded: '0',
+      closing: '100',
     })
     const remaining = await purchasedCreditsRepository.getRemainingCredits(
       account.id,
     )
-    expect(balance?.closing).toBe(remaining.uploadBytesRemaining.toString())
+    expect(balance?.closing).toBe(
+      remaining.purchasedUploadBytesRemaining.toString(),
+    )
+    expect(freeCreditBalance?.closing).toBe(
+      remaining.freeUploadBytesRemaining.toString(),
+    )
 
     const days = [10, 45, 50, 52, 53, 54, 55, 56, 60, 61, 79]
     for (const from of days) {
       for (const to of days.filter((d) => d > from)) {
-        const { balance } = await report(admin, account.id, day(from), day(to))
-        expect({ from, to, holds: balanceHolds(balance!) }).toEqual({
-          from,
-          to,
-          holds: true,
-        })
+        const report_ = await report(admin, account.id, day(from), day(to))
+        for (const [kind, b] of [
+          ['purchased', report_.balance],
+          ['free', report_.freeCreditBalance],
+        ] as const) {
+          expect({ from, to, kind, holds: balanceHolds(b!) }).toEqual({
+            from,
+            to,
+            kind,
+            holds: true,
+          })
+        }
       }
     }
   })
@@ -586,17 +625,32 @@ describe('Usage reports', () => {
       })
     )._unsafeUnwrap()
 
-    expect(interactions).toEqual([
-      expect.objectContaining({ ai3Value: '1500', freeCreditBytes: '600' }),
-    ])
-    expect(UsageReportsUseCases.usageInteractionsCsv(interactions)).toContain(
-      ',0.0000000000000015,600\r\n',
+    // The ledger names the source of each part of the upload.
+    expect(interactions).toHaveLength(2)
+    expect(interactions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'free_credits',
+          bytes: '600',
+          ai3Value: '0',
+        }),
+        expect.objectContaining({
+          source: 'purchased',
+          bytes: '300',
+          ai3Value: '1500',
+        }),
+      ]),
     )
+    const csv = UsageReportsUseCases.usageInteractionsCsv(interactions)
+    expect(csv).toMatch(/,upload,free_credits,600,.*,0\r\n/)
+    expect(csv).toMatch(/,upload,purchased,300,.*,0\.0000000000000015\r\n/)
     expect(summary).toMatchObject({
       accountId: account.id,
       ai3Value: '1500',
       freeCreditBytes: '600',
-      grantedBytes: '700',
+      // Nothing was purchased in the range.
+      grantedBytes: '0',
+      freeCreditsGrantedBytes: '700',
     })
   })
 
@@ -705,7 +759,10 @@ describe('Usage reports', () => {
       },
     ])
     const total = (field: 'uploadBytes' | 'purchasedBytes' | 'ai3Value') =>
-      customerReferences.reduce((sum, row) => sum + BigInt(row[field]), BigInt(0))
+      customerReferences.reduce(
+        (sum, row) => sum + BigInt(row[field]),
+        BigInt(0),
+      )
     expect(total('uploadBytes')).toBe(BigInt(uploads.bytes))
     expect(total('purchasedBytes')).toBe(BigInt(uploads.purchasedBytes))
     expect(total('ai3Value')).toBe(BigInt(uploads.ai3Value))
@@ -823,7 +880,8 @@ describe('Usage reports', () => {
 
     expect(summary).toContain('upload_bytes,1150\r\n')
     expect(summary).toContain('ai3_value,0.0000000000000038\r\n')
-    expect(summary).toContain('closing_balance_bytes,1500\r\n')
+    expect(summary).toContain('purchased_closing_balance_bytes,1500\r\n')
+    expect(summary).toContain('free_credit_closing_balance_bytes,0\r\n')
     // A key name a spreadsheet would run is quoted as text.
     expect(apiKeys).toContain('"\'=HYPERLINK(""x"")"')
     // 2.5 USDC for 10,000 shannons of AI3.
@@ -877,7 +935,7 @@ describe('Usage reports', () => {
     expect(interactions[0].customerReference).toBeNull()
     expect(
       UsageReportsUseCases.usageInteractionsCsv([interactions[2]]),
-    ).toContain(',cust-b,0.0000000000000029,0\r\n')
+    ).toContain(',cust-b,0.0000000000000029\r\n')
   })
 
   // Whether the planner picks an index depends on the table's size, so the
@@ -981,6 +1039,7 @@ describe('Usage reports', () => {
         freeCreditBytes: '0',
         downloadBytes: '4000',
         grantedBytes: '4300',
+        freeCreditsGrantedBytes: '0',
       },
     ])
     const nonAdmin = { role: UserRole.User } as User

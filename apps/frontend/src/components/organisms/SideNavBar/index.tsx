@@ -91,13 +91,10 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   // progress bar even when the buy-credits UI is hidden.
   const purchasedBytesRemaining = useMemo(() => {
     if (!creditSummary) return 0;
-    // uploadBytesRemaining is a decimal-string bigint from the API, and
-    // includes free credits. Max safe value is 100 GiB which is well within
-    // Number's safe range.
-    return (
-      Number(creditSummary.uploadBytesRemaining) -
-      Number(creditSummary.freeUploadBytesRemaining ?? 0)
-    );
+    // uploadBytesRemaining is a decimal-string bigint from the API, purchased
+    // credits only. Max safe value is 100 GiB which is well within Number's
+    // safe range.
+    return Number(creditSummary.uploadBytesRemaining);
   }, [creditSummary]);
 
   // Free credits granted to a partner. Read from the account, so they show
@@ -166,7 +163,9 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={freeRemaining}
             freeCreditBytesRemaining={freeCreditBytesRemaining}
-            purchasedBytesRemaining={hasBuyCreditsFeature ? purchasedBytesRemaining : 0}
+            purchasedBytesRemaining={
+              hasBuyCreditsFeature ? purchasedBytesRemaining : 0
+            }
             purchasedBytesTotal={hasBuyCreditsFeature ? purchasedBytesTotal : 0}
             nextExpiryDate={nextExpiryDate}
             creditHistoryHref={creditHistoryHref}

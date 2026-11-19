@@ -188,18 +188,17 @@ const initAccount = async (
  * Issues a partner's monthly free credits for the current UTC month if they
  * have not been issued yet. Run wherever upload credits are read or used, so
  * there is no scheduler and no month without a batch while one is needed. A
- * change to the monthly amount applies from the next month's batch.
+ * change to the monthly amount applies at once (see updateAccount in the
+ * accounts repository), as a change to a regular account's upload limit does.
  */
 const ensureMonthlyFreeCredits = async (
   account: Pick<Account, 'id' | 'isPartner' | 'monthlyFreeUploadBytes'>,
   client?: pg.PoolClient,
 ): Promise<void> => {
+  // Skips the query for regular accounts. The amount issued is read from the
+  // account again when issuing.
   if (!account.isPartner || account.monthlyFreeUploadBytes <= 0) return
-  await purchasedCreditsRepository.ensureMonthlyFreeCredits(
-    account.id,
-    BigInt(account.monthlyFreeUploadBytes),
-    client,
-  )
+  await purchasedCreditsRepository.ensureMonthlyFreeCredits(account.id, client)
 }
 
 const getPendingCreditsByAccountAndType = async (
@@ -368,7 +367,7 @@ const registerInteraction = async (
     size,
   )
 
-  // One transaction for the whole interaction: drawing down purchased batches,
+  // One transaction for the whole interaction: drawing down credit batches,
   // the free-tier guard, and writing the interactions with their per-batch
   // consumption rows. Any failure rolls all of it back, so the ledger never
   // disagrees with the balances and nothing needs a compensating refund.
@@ -377,8 +376,9 @@ const registerInteraction = async (
   try {
     await client.query('BEGIN')
 
-    // consumeUpTo locks the account's purchased rows until commit, which
-    // serialises concurrent uploads against the purchased pool.
+    // consumeUpTo locks the account's credit batches (purchased, and a
+    // partner's free credits) until commit, which serialises concurrent
+    // uploads against them.
     //
     // Downloads use only the free-tier guard below. Purchased download bytes
     // are not allocated on purchase or consumed here.
@@ -397,12 +397,12 @@ const registerInteraction = async (
             size,
           )
         : []
-    const fromPurchased = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
-    const fromFree = size - fromPurchased
+    const fromCredits = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
+    const fromFreeTier = size - fromCredits
 
-    // Guard: a request that only received a partial purchased allocation must
+    // Guard: a request that only received a partial credit allocation must
     // not silently overflow into free-tier credits it does not own.
-    if (fromFree > BigInt(0)) {
+    if (fromFreeTier > BigInt(0)) {
       const now = new Date()
       const start =
         account.model === AccountModel.Monthly
@@ -430,11 +430,11 @@ const registerInteraction = async (
       const freeAvailable =
         freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
 
-      if (fromFree > freeAvailable) {
+      if (fromFreeTier > freeAvailable) {
         logger.warn(
-          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFreeTier=%d, freeAvailable=%d)',
           account.id,
-          fromFree,
+          fromFreeTier,
           freeAvailable,
         )
         throw new PaymentRequiredError(
@@ -443,12 +443,19 @@ const registerInteraction = async (
       }
     }
 
-    if (fromPurchased > BigInt(0)) {
+    // One interaction per source, so the ledger itself tells uploads paid with
+    // a partner's free credits from uploads paid with purchased credits.
+    for (const [source, batches] of [
+      [InteractionSource.FreeCredits, consumed.filter((c) => c.free)],
+      [InteractionSource.Purchased, consumed.filter((c) => !c.free)],
+    ] as const) {
+      const bytes = batches.reduce((acc, c) => acc + c.bytes, BigInt(0))
+      if (bytes === BigInt(0)) continue
       const interactionId = await InteractionsUseCases.createInteraction(
         account.id,
         type,
-        fromPurchased,
-        InteractionSource.Purchased,
+        bytes,
+        source,
         cid,
         user.apiKeyId,
         customerReference,
@@ -456,23 +463,23 @@ const registerInteraction = async (
       )
       await interactionsRepository.createCreditConsumption(
         interactionId,
-        consumed,
+        batches,
         client,
       )
     }
 
-    if (fromFree > BigInt(0)) {
+    if (fromFreeTier > BigInt(0)) {
       logger.debug(
-        'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
+        'Covering remainder from free-tier (accountId=%s, fromCredits=%d, fromFreeTier=%d)',
         account.id,
-        fromPurchased,
-        fromFree,
+        fromCredits,
+        fromFreeTier,
       )
 
       await InteractionsUseCases.createInteraction(
         account.id,
         type,
-        fromFree,
+        fromFreeTier,
         InteractionSource.FreeTier,
         cid,
         user.apiKeyId,

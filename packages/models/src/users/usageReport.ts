@@ -18,13 +18,16 @@ export type UsageReport = {
    */
   attributionStart: string | null;
   uploads: {
-    /** An upload split between purchased and free credits counts twice. */
+    /**
+     * An upload split between sources (free tier, purchased credits, free
+     * credits) counts once per source.
+     */
     count: number;
     bytes: string;
     freeTierBytes: string;
     /** Bytes paid with purchased credits, including `unattributedBytes`. */
     purchasedBytes: string;
-    /** Bytes drawn from free credits an admin granted. They have no AI3 value. */
+    /** Bytes paid with free credits an admin granted. They have no AI3 value. */
     freeCreditBytes: string;
     /**
      * Purchased bytes with no record of the batches they came from, i.e.
@@ -46,8 +49,15 @@ export type UsageReport = {
   purchases: UsagePurchase[];
   /** Free credit batches granted in the range, oldest first. */
   freeCredits: UsageFreeCredit[];
-  /** Null when the range starts before attribution. */
+  /**
+   * Purchased credits only. Null when the range starts before attribution.
+   */
   balance: CreditBalance | null;
+  /**
+   * Free credits only; `refunded` is always 0. Null when the range starts
+   * before attribution.
+   */
+  freeCreditBalance: CreditBalance | null;
 };
 
 export type UsageByApiKey = {
@@ -123,9 +133,8 @@ export type UsageFreeCredit = {
 };
 
 /**
- * Upload bytes in credit batches, purchased and free: opening + granted −
- * consumed − expired − refunded = closing. `granted` is purchases plus free
- * credits.
+ * Upload bytes in one kind of credit batch, purchased or free: opening +
+ * granted − consumed − expired − refunded = closing.
  */
 export type CreditBalance = {
   opening: string;
@@ -141,16 +150,14 @@ export type UsageInteraction = {
   id: string;
   createdAt: string;
   type: "upload" | "download";
-  source: "free_tier" | "purchased";
+  source: "free_tier" | "purchased" | "free_credits";
   bytes: string;
   cid: string | null;
   apiKeyId: string | null;
   apiKeyName: string | null;
   customerReference: string | null;
-  /** Null when no credit batches are recorded for it. */
+  /** Null when no credit batches are recorded for it. 0 for free credits. */
   ai3Value: string | null;
-  /** Bytes it drew from free credits. */
-  freeCreditBytes: string;
 };
 
 /** One account's headline figures, for the admin list. */
@@ -162,8 +169,11 @@ export type AccountUsageSummary = {
   uploadCount: number;
   uploadBytes: string;
   ai3Value: string;
+  /** Bytes uploaded with free credits. */
   freeCreditBytes: string;
   downloadBytes: string;
-  /** Purchases and free credits. */
+  /** Bytes of credits purchased in the range. */
   grantedBytes: string;
+  /** Bytes of free credits granted in the range. */
+  freeCreditsGrantedBytes: string;
 };

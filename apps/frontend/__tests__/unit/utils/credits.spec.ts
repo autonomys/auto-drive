@@ -189,7 +189,7 @@ describe('getBatchStatus', () => {
     jest.useRealTimers()
   })
 
-  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string }> = {}) => ({
+  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string; supersededAt: string | null }> = {}) => ({
     expired: false,
     uploadBytesRemaining: '1048576',
     expiresAt: '2026-12-01T00:00:00Z',
@@ -221,6 +221,15 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('depleted')
   })
 
+  it('returns "replaced" for monthly free credits ended by a change to the amount', () => {
+    const replaced = { supersededAt: '2026-05-20T00:00:00Z', expiresAt: '2026-05-20T00:00:00Z' }
+    expect(getBatchStatus(makeBatch(replaced))).toBe('replaced')
+    // Even once the expiry job has flagged its leftover as expired.
+    expect(getBatchStatus(makeBatch({ ...replaced, expired: true }))).toBe('replaced')
+    // A replaced batch that was used up is still just depleted.
+    expect(getBatchStatus(makeBatch({ ...replaced, uploadBytesRemaining: '0' }))).toBe('depleted')
+  })
+
   it('returns "expired" when the batch is expired with bytes remaining', () => {
     expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '1048576' }))).toBe('expired')
   })
@@ -236,7 +245,7 @@ describe('getBatchStatus', () => {
 
 describe('describeBatchKind', () => {
   it('labels purchases and one-time free credits', () => {
-    expect(describeBatchKind({ kind: 'purchase', grantPeriod: null })).toBe('Purchased')
+    expect(describeBatchKind({ kind: 'purchase', grantPeriod: null })).toBe('Purchased credits')
     expect(describeBatchKind({ kind: 'free_one_time', grantPeriod: null })).toBe('Free credits')
   })
 

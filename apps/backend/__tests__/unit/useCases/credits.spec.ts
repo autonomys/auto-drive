@@ -64,6 +64,7 @@ const makeCreditRow = (
   intentId: 'intent-1',
   kind: 'purchase',
   grantPeriod: null,
+  supersededAt: null,
   uploadBytesOriginal: BigInt(1024 * 1024 * 1024), // 1 GiB
   uploadBytesRemaining: BigInt(1024 * 1024 * 1024),
   downloadBytesOriginal: BigInt(1024 * 1024 * 1024),

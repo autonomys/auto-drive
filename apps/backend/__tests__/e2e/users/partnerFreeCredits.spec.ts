@@ -138,6 +138,21 @@ describe('Partner free credits', () => {
   const upload = (member: UserWithOrganization, bytes: bigint) =>
     AccountsUseCases.registerInteraction(member, InteractionType.Upload, bytes)
 
+  // The interactions ledger: what each upload was charged against.
+  const ledger = async (accountId: string) => {
+    const db = await getDatabase()
+    const { rows } = await db.query<{ source: string; size: string }>(
+      `SELECT source, size FROM interactions
+       WHERE account_id = $1
+       ORDER BY created_at, source`,
+      [accountId],
+    )
+    return rows.map((r) => [r.source, Number(r.size)])
+  }
+
+  const freeCreditsLeft = async (member: UserWithOrganization) =>
+    (await CreditsUseCases.getSummary(member)).freeUploadBytesRemaining
+
   describe('monthly free credits', () => {
     it('issues one batch per UTC month, however often and concurrently it is asked for', async () => {
       const { member, account } = await createMonthlyPartner(100)
@@ -231,15 +246,92 @@ describe('Partner free credits', () => {
       expect(await consumption(account.id)).toEqual([['free', 100]])
     })
 
-    it('keeps the current batch when the monthly amount changes', async () => {
+    it('applies a change to the amount at once: the new amount less what was used this month', async () => {
       const { member, account } = await createMonthlyPartner(100)
-      await AccountsUseCases.ensureMonthlyFreeCredits(account)
+      await upload(member, 30n)
 
       await setTerms(account.id, { monthlyFreeUploadBytes: 200 })
+      expect(await freeCreditsLeft(member)).toBe(170n)
 
-      const summary = await CreditsUseCases.getSummary(member)
-      expect(summary.freeUploadBytesRemaining).toBe(100n)
-      expect(await batches(account.id)).toHaveLength(1)
+      // Lowered below what was used: nothing is left, and nothing more can be
+      // uploaded with them.
+      await setTerms(account.id, { monthlyFreeUploadBytes: 20 })
+      expect(await freeCreditsLeft(member)).toBe(0n)
+      await expect(upload(member, 1n)).rejects.toBeInstanceOf(
+        PaymentRequiredError,
+      )
+
+      await setTerms(account.id, { monthlyFreeUploadBytes: 0 })
+      expect(await freeCreditsLeft(member)).toBe(0n)
+
+      await setTerms(account.id, { monthlyFreeUploadBytes: 100 })
+      expect(await freeCreditsLeft(member)).toBe(70n)
+      await upload(member, 70n)
+      expect(await freeCreditsLeft(member)).toBe(0n)
+
+      // Each change ended the month's batch and issued the rest of the month
+      // as a new one; the ended ones stay, with what they had left.
+      const monthly = (await batches(account.id)).sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+      )
+      expect(
+        monthly.map((b) => [
+          Number(b.uploadBytesOriginal),
+          Number(b.uploadBytesRemaining),
+          b.supersededAt !== null,
+        ]),
+      ).toEqual([
+        [100, 70, true],
+        [170, 170, true],
+        [70, 0, false],
+      ])
+      for (const ended of monthly.filter((b) => b.supersededAt)) {
+        expect(ended.expiresAt.getTime()).toBe(ended.supersededAt!.getTime())
+      }
+    })
+
+    it('changes as the upload limit of a regular account does', async () => {
+      const { member, account } = await createMonthlyPartner(100)
+      const regular = createMockUser()
+      const regularAccount = await AccountsUseCases.getOrCreateAccount(regular)
+      const setRegularLimit = (bytes: number) =>
+        AccountsUseCases.updateAccount(
+          admin,
+          regularAccount.id,
+          AccountModel.Monthly,
+          bytes,
+          1000,
+        )
+      await setRegularLimit(100)
+      await upload(member, 30n)
+      await upload(regular, 30n)
+
+      for (const bytes of [200, 20, 0, 100]) {
+        await setTerms(account.id, { monthlyFreeUploadBytes: bytes })
+        await setRegularLimit(bytes)
+        expect(
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            member,
+            InteractionType.Upload,
+          ),
+        ).toBe(
+          await AccountsUseCases.getPendingCreditsByUserAndType(
+            regular,
+            InteractionType.Upload,
+          ),
+        )
+      }
+    })
+
+    it('issues the month at once when it is first set mid-month', async () => {
+      const { member, account } = await createPartner()
+
+      await setTerms(account.id, { monthlyFreeUploadBytes: 100 })
+
+      expect(await batches(account.id)).toMatchObject([
+        { kind: 'free_monthly', uploadBytesRemaining: 100n },
+      ])
+      expect(await freeCreditsLeft(member)).toBe(100n)
     })
   })
 
@@ -253,6 +345,11 @@ describe('Partner free credits', () => {
       expect(await consumption(account.id)).toEqual([
         ['free', 100],
         ['purchase', 50],
+      ])
+      // The ledger records the two parts apart.
+      expect(await ledger(account.id)).toEqual([
+        ['free_credits', 100],
+        ['purchased', 50],
       ])
     })
 
@@ -374,7 +471,8 @@ describe('Partner free credits', () => {
         maxPurchasableBytes: cap,
         canPurchase: true,
         freeUploadBytesRemaining: cap,
-        uploadBytesRemaining: cap,
+        // Purchased credits only.
+        uploadBytesRemaining: 0n,
       })
       expect(
         (
@@ -500,5 +598,28 @@ describe('Partner free credits', () => {
     await expect(insert(month)).rejects.toThrow(
       /purchased_credits_account_grant_period_key/,
     )
+    // A replaced batch leaves room for the month's next one.
+    await db.query(
+      `UPDATE purchased_credits SET superseded_at = NOW()
+       WHERE account_id = $1`,
+      [account.id],
+    )
+    await insert(month)
+  })
+
+  it('leaves free credits out of the admin economics', async () => {
+    const { member, account } = await createMonthlyPartner(100)
+    await grant(account.id, 200, 10)
+    await setTerms(account.id, { creditExpiryDays: 10 })
+    await purchase(account.id, member.publicId, 50n)
+
+    const economics = (
+      await CreditsUseCases.getEconomics(admin)
+    )._unsafeUnwrap()
+
+    expect(economics).toMatchObject({
+      totalExpiringWithin30Days: 1,
+      totalExpiringUploadBytes: 50n,
+    })
   })
 })

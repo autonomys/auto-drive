@@ -78,7 +78,7 @@ export const accounts = {
                     type: 'integer',
                     minimum: 0,
                     description:
-                      'Free upload bytes issued to a partner account each UTC calendar month, used before purchased credits and expiring at the end of the month. 0 for none. A change applies from the next month. Partner accounts only.',
+                      'Free upload bytes issued to a partner account each UTC calendar month, used before purchased credits and expiring at the end of the month. 0 for none. A change applies at once, as a change to the upload limit of a regular account does: the free credits of the month become the new amount less what has been used this month. Partner accounts only.',
                   },
                   reason: { type: 'string', maxLength: 500 },
                 },
@@ -232,6 +232,13 @@ export const accounts = {
             format: 'date-time',
             nullable: true,
             description: 'Start of the UTC month, for monthly free credits.',
+          },
+          supersededAt: {
+            type: 'string',
+            format: 'date-time',
+            nullable: true,
+            description:
+              'Monthly free credits only: when a change to the monthly amount ended this batch and a batch for the rest of the month replaced it.',
           },
           grantedBy: {
             type: 'string',

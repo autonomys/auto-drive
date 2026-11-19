@@ -6,10 +6,7 @@ import { useNetwork } from '../../contexts/network';
 import { ExpiringCreditBatch } from '../../services/api';
 import { SessionContext } from 'next-auth/react';
 import { useContext } from 'react';
-import {
-  daysUntilExpiry,
-  sumExpiringUploadBytes,
-} from '../../utils/credits';
+import { daysUntilExpiry, sumExpiringUploadBytes } from '../../utils/credits';
 import { BannerShell } from '../organisms/BannerNotifications/BannerShell';
 
 /**
@@ -55,13 +52,16 @@ export const ExpiryWarningBanner = () => {
 
   return (
     <BannerShell criticality={BannerCriticality.Warning}>
-      <h3 className='font-semibold text-sm'>Credits expiring soon!</h3>
+      <h3 className='text-sm font-semibold'>
+        Purchased credits expiring soon!
+      </h3>
       <p className='mt-1 text-sm'>
         {totalMB > 0 ? `${totalMB.toFixed(0)} MiB of` : 'Some of your'}{' '}
         purchased storage credits will expire
         {daysLeft !== null && daysLeft > 0
           ? ` in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
-          : ' today'}. Use them before they expire.
+          : ' today'}
+        . Use them before they expire.
       </p>
     </BannerShell>
   );

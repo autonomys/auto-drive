@@ -64,6 +64,7 @@ describe('Free credit routes', () => {
     intentId: null,
     kind: 'free_one_time',
     grantPeriod: null,
+    supersededAt: null,
     uploadBytesOriginal: 5n,
     uploadBytesRemaining: 5n,
     downloadBytesOriginal: 0n,

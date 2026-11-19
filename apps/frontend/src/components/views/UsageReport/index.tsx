@@ -8,6 +8,7 @@ import utc from 'dayjs/plugin/utc';
 import { Download, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import {
+  CreditBalance,
   UsageByApiKey,
   UsageByCustomerReference,
   UsageReport,
@@ -105,8 +106,17 @@ const KeyLabel = ({ row }: { row: UsageByApiKey }) => {
   );
 };
 
-const Balance = ({ report }: { report: UsageReport }) => {
-  const { balance, attributionStart } = report;
+// Purchased and free credits are balanced apart, so neither is taken for the
+// other.
+const Balance = ({
+  balance,
+  attributionStart,
+  free,
+}: {
+  balance: CreditBalance | null;
+  attributionStart: string | null;
+  free: boolean;
+}) => {
   if (!balance) {
     return (
       <p className='text-sm text-gray-500'>
@@ -119,10 +129,15 @@ const Balance = ({ report }: { report: UsageReport }) => {
   return (
     <div className='grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6'>
       <Stat label='Opening' value={bytes(balance.opening)} />
-      <Stat label='Granted' value={`+ ${bytes(balance.granted)}`} />
+      <Stat
+        label={free ? 'Granted' : 'Purchased'}
+        value={`+ ${bytes(balance.granted)}`}
+      />
       <Stat label='Consumed' value={`− ${bytes(balance.consumed)}`} />
       <Stat label='Expired' value={`− ${bytes(balance.expired)}`} />
-      <Stat label='Refunded' value={`− ${bytes(balance.refunded)}`} />
+      {!free && (
+        <Stat label='Refunded' value={`− ${bytes(balance.refunded)}`} />
+      )}
       <Stat label='Closing' value={bytes(balance.closing)} />
     </div>
   );
@@ -380,6 +395,14 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
   };
 
   const unattributed = report ? BigInt(report.uploads.unattributedBytes) : null;
+  // Free credits are shown only for an account that had any in the range.
+  const hasFreeCredits =
+    !!report &&
+    (BigInt(report.uploads.freeCreditBytes) > BigInt(0) ||
+      report.freeCredits.length > 0 ||
+      Object.values(report.freeCreditBalance ?? {}).some(
+        (value) => BigInt(value) > BigInt(0),
+      ));
 
   return (
     <div className='space-y-6'>
@@ -427,8 +450,15 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             <Stat
               label='Paid with purchased credits'
               value={bytes(report.uploads.purchasedBytes)}
-              hint={`${bytes(report.uploads.freeCreditBytes)} free credits, ${bytes(report.uploads.freeTierBytes)} free tier`}
+              hint={`${bytes(report.uploads.freeTierBytes)} free tier`}
             />
+            {hasFreeCredits && (
+              <Stat
+                label='Paid with free credits'
+                value={bytes(report.uploads.freeCreditBytes)}
+                hint='Granted at no cost, so no AI3 value'
+              />
+            )}
             <Stat
               label='AI3 value'
               value={ai3(report.uploads.ai3Value)}
@@ -448,9 +478,23 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             </p>
           )}
 
-          <Section title='Credit balance'>
-            <Balance report={report} />
+          <Section title='Purchased credit balance'>
+            <Balance
+              balance={report.balance}
+              attributionStart={report.attributionStart}
+              free={false}
+            />
           </Section>
+
+          {hasFreeCredits && (
+            <Section title='Free credit balance'>
+              <Balance
+                balance={report.freeCreditBalance}
+                attributionStart={report.attributionStart}
+                free
+              />
+            </Section>
+          )}
 
           <Section title='By API key'>
             <ApiKeysTable rows={report.apiKeys} />

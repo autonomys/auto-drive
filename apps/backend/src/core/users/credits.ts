@@ -31,17 +31,20 @@ const EXPIRING_WITHIN_DAYS = 30
 // Returned by GET /credits/summary.
 // ---------------------------------------------------------------------------
 
+// Purchased credits and free credits are reported apart and never summed, so
+// neither can be taken for the other: every field but freeUploadBytesRemaining
+// is about purchased credits.
 export type CreditSummary = {
-  /** Across all active rows, purchased and free. */
+  /** Purchased upload bytes left across active purchased rows. */
   uploadBytesRemaining: bigint
-  /** The part of uploadBytesRemaining that is free credits. */
+  /** Free credit upload bytes left (partners only). */
   freeUploadBytesRemaining: bigint
   /** Total originally-purchased upload bytes across active purchased rows. */
   totalPurchasedBytesOriginal: bigint
   downloadBytesRemaining: bigint
   /** Soonest expires_at across active purchased rows, or null when none. */
   nextExpiryDate: Date | null
-  /** Number of active (non-expired) purchase rows. */
+  /** Number of active (non-expired) purchased rows. */
   batchCount: number
   /**
    * True when the user can still make a purchase without exceeding the cap.
@@ -81,7 +84,7 @@ const getSummary = async (
   const canPurchase = maxPurchasableBytes > 0n
 
   return {
-    uploadBytesRemaining: summary.uploadBytesRemaining,
+    uploadBytesRemaining: summary.purchasedUploadBytesRemaining,
     freeUploadBytesRemaining: summary.freeUploadBytesRemaining,
     totalPurchasedBytesOriginal: summary.purchasedUploadBytesOriginal,
     downloadBytesRemaining: summary.downloadBytesRemaining,

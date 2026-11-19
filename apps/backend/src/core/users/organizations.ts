@@ -194,7 +194,7 @@ const addMember = async (
 
   const unusedCreditBytes = currentAccount
     ? (await purchasedCreditsRepository.getRemainingCredits(currentAccount.id))
-        .uploadBytesRemaining
+        .purchasedUploadBytesRemaining
     : 0n
   if (unusedCreditBytes > 0n && !allowUnusedCredits) {
     return err(

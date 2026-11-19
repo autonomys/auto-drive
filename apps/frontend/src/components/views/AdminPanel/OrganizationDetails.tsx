@@ -347,6 +347,11 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                 <p className='mt-1 font-medium'>
                   {formatBytes(Number(account.pendingUploadCredits))}
                 </p>
+                {account.freeUploadCredits > 0 && (
+                  <p className='mt-1 text-xs text-gray-500'>
+                    incl. {formatBytes(account.freeUploadCredits)} free credits
+                  </p>
+                )}
               </div>
               <div className='rounded-lg border border-gray-200 p-4'>
                 <p className='text-xs text-gray-500'>Download Credits</p>

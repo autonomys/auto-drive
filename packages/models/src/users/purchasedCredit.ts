@@ -12,6 +12,11 @@ export const PurchasedCreditSchema = z.object({
   kind: z.enum(["purchase", "free_one_time", "free_monthly"]),
   /** The UTC month (its first day) of monthly free credits, else null. */
   grantPeriod: z.date().nullable(),
+  /**
+   * Monthly free credits only: when a change to the monthly amount ended this
+   * batch early and a batch for the rest of the month replaced it.
+   */
+  supersededAt: z.date().nullable(),
   uploadBytesOriginal: z.bigint(),
   uploadBytesRemaining: z.bigint(),
   downloadBytesOriginal: z.bigint(),
@@ -61,6 +66,7 @@ export type AdminFreeCredit = PurchasedCredit & {
  * (non-expired) rows, purchased and free. Returned by getRemainingCredits().
  */
 export type PurchasedCreditSummary = {
+  /** Purchased and free: what the upload gate lets an account use. */
   uploadBytesRemaining: bigint;
   /** Sum of upload_bytes_original across all active (non-expired) rows. */
   uploadBytesOriginal: bigint;
@@ -69,23 +75,28 @@ export type PurchasedCreditSummary = {
   purchasedUploadBytesOriginal: bigint;
   /** The soonest expires_at across active purchased rows. */
   purchasedNextExpiryDate: Date | null;
+  /** Free rows only. */
   freeUploadBytesRemaining: bigint;
   downloadBytesRemaining: bigint;
-  /** The soonest expires_at across active rows — used for expiry warnings. */
+  /** The soonest expires_at across active rows, purchased and free. */
   nextExpiryDate: Date | null;
+  /** Active purchased rows. */
   activeRowCount: number;
 };
 
 /**
- * Tracks whether an interaction was charged against purchased credits or
- * against the account's free / one-off allocation. `purchased` means drawn
- * from credit batches, which include a partner's free credits.
+ * What an interaction was charged against: the account's free / one-off
+ * allocation (`free_tier`, i.e. its upload or download limit), credits it
+ * purchased (`purchased`), or free credits an admin granted a partner
+ * (`free_credits`). An upload drawing on more than one is recorded as one
+ * interaction per source.
  *
  * Stored in interactions.source. Required so the free-balance calculation
  * (upload_limit - sum(interactions)) only counts free_tier rows and is not
- * distorted by interactions that were already paid for by purchased credits.
+ * distorted by interactions that were already paid for with credits.
  */
 export enum InteractionSource {
   FreeTier = "free_tier",
   Purchased = "purchased",
+  FreeCredits = "free_credits",
 }
