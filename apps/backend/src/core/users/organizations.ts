@@ -3,12 +3,16 @@ import { err, ok, Result } from 'neverthrow'
 import {
   Account,
   AccountModel,
+  ApiKey,
+  ApiKeyWithoutSecret,
+  CreateApiKeyInput,
   IntentStatus,
   OrganizationMembershipChange,
   OrganizationRole,
   PartnerOrganization,
   User,
   UserRole,
+  UserWithOrganization,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
@@ -75,7 +79,7 @@ const checkNoUnresolvedIntents = async (
 /**
  * Creates an organization and its partner account. The account is created
  * here rather than on a member's first request, so members never create it
- * concurrently.
+ * concurrently. Auth creates the organization's service user with it.
  */
 const createPartnerOrganization = async (
   executor: User,
@@ -288,6 +292,105 @@ const getMembershipChanges = async (
   return AuthManager.getOrganizationMembershipChanges(organizationId)
 }
 
+/**
+ * Organisation API keys belong to the organisation's service user in auth, so
+ * they keep working whoever leaves. Members see them and organisation admins
+ * create and revoke them. Auto Drive admins see and revoke them but can't
+ * create one, which would hand them a partner's secret. Never with an API key,
+ * so a key can't mint or revoke keys.
+ */
+const authorizeApiKeys = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  action: 'list' | 'create' | 'revoke',
+): Promise<Result<void, OrganizationError>> => {
+  if (executor.apiKeyId) {
+    return err(
+      new ForbiddenError(
+        'Organization API keys can only be managed when signed in',
+      ),
+    )
+  }
+  const asAutoDriveAdmin =
+    executor.role === UserRole.Admin && action !== 'create'
+  if (!asAutoDriveAdmin && executor.organizationId !== organizationId) {
+    return err(new ForbiddenError('Not a member of this organization'))
+  }
+
+  const needsOrganizationAdmin = action !== 'list' && !asAutoDriveAdmin
+  const [partnerAccount, organization] = await Promise.all([
+    getPartnerAccount(organizationId),
+    needsOrganizationAdmin ? AuthManager.getOrganization(organizationId) : null,
+  ])
+  if (partnerAccount.isErr()) return err(partnerAccount.error)
+  if (!organization) return ok()
+  if (organization.isErr()) return err(organization.error)
+  const isOrganizationAdmin = organization.value.memberships.some(
+    (m) =>
+      m.publicId === executor.publicId && m.role === OrganizationRole.Admin,
+  )
+  return isOrganizationAdmin
+    ? ok()
+    : err(
+        new ForbiddenError('Only organization admins can manage its API keys'),
+      )
+}
+
+const listApiKeys = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+): Promise<Result<ApiKeyWithoutSecret[], OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'list')
+  if (allowed.isErr()) return err(allowed.error)
+
+  return AuthManager.getOrganizationApiKeys(organizationId)
+}
+
+/** Returns the key with its secret, which is never shown again. */
+const createApiKey = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  input: CreateApiKeyInput,
+): Promise<Result<ApiKey, OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'create')
+  if (allowed.isErr()) return err(allowed.error)
+
+  const created = await AuthManager.createOrganizationApiKey(
+    organizationId,
+    input,
+  )
+  if (created.isOk()) {
+    logger.info('Organization API key created', {
+      organizationId,
+      apiKeyId: created.value.id,
+      by: executor.publicId,
+    })
+  }
+  return created
+}
+
+const revokeApiKey = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  apiKeyId: string,
+): Promise<Result<void, OrganizationError>> => {
+  const allowed = await authorizeApiKeys(executor, organizationId, 'revoke')
+  if (allowed.isErr()) return err(allowed.error)
+
+  const revoked = await AuthManager.revokeOrganizationApiKey(
+    organizationId,
+    apiKeyId,
+  )
+  if (revoked.isOk()) {
+    logger.info('Organization API key revoked', {
+      organizationId,
+      apiKeyId,
+      by: executor.publicId,
+    })
+  }
+  return revoked
+}
+
 export const OrganizationsUseCases = {
   createPartnerOrganization,
   listPartnerOrganizations,
@@ -295,4 +398,7 @@ export const OrganizationsUseCases = {
   changeMemberRole,
   removeMember,
   getMembershipChanges,
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
 }

@@ -2,13 +2,19 @@ import pg from 'pg'
 import { v4 } from 'uuid'
 import {
   User,
+  ApiKey,
+  ApiKeyWithoutSecret,
   Organization,
   OrganizationMembershipChange,
   OrganizationRole,
   OrganizationSummary,
   OrganizationWithMembers,
+  SERVICE_USER_PROVIDER,
+  UserRole,
+  userFromTable,
 } from '@auto-drive/models'
 import {
+  apiKeysRepository,
   organizationMembersRepository,
   organizationMembershipChangesRepository,
   organizationRole,
@@ -16,12 +22,14 @@ import {
   usersRepository,
 } from '../repositories/index.js'
 import { deriveUserPublicId } from './users.js'
+import { ApiKeysUseCases } from './apikeys.js'
 import { withTransaction } from '../drivers/pg.js'
 import {
   OrganizationConflictError,
   OrganizationNotFoundError,
   OrganizationValidationError,
 } from '../errors/organizations.js'
+import { ApiKeyNotFoundError } from '../errors/apikeys.js'
 
 const getOrganizationByUser = async (user: User): Promise<Organization> => {
   const membership =
@@ -103,6 +111,37 @@ const getOrganization = async (
   }
 }
 
+// A partner organisation's service user owns its API keys, so they keep
+// working whoever leaves. It is identified by the organisation.
+const serviceUserOf = (organizationId: string): User =>
+  userFromTable({
+    oauthProvider: SERVICE_USER_PROVIDER,
+    oauthUserId: organizationId,
+    publicId: deriveUserPublicId(SERVICE_USER_PROVIDER, organizationId),
+    role: UserRole.User,
+  })
+
+const createServiceUser = async (organizationId: string, db: pg.Client) => {
+  const user = serviceUserOf(organizationId)
+  await usersRepository.createUser(
+    user.oauthProvider,
+    user.oauthUserId,
+    undefined,
+    undefined,
+    user.publicId,
+    user.role,
+    db,
+  )
+  await organizationMembersRepository.addMemberToOrganization(
+    organizationId,
+    user.oauthProvider,
+    user.oauthUserId,
+    OrganizationRole.Member,
+    db,
+  )
+}
+
+// Only the backend creates organisations, each for a partner.
 const createOrganization = async (name: string): Promise<Organization> => {
   const trimmed = name.trim()
   if (!trimmed || trimmed.length > 100) {
@@ -111,11 +150,66 @@ const createOrganization = async (name: string): Promise<Organization> => {
     )
   }
 
-  const organization = await organizationsRepository.createOrganization(
-    v4(),
-    trimmed,
-  )
-  return { id: organization.id, name: organization.name }
+  return withTransaction(async (db) => {
+    const organization = await organizationsRepository.createOrganization(
+      v4(),
+      trimmed,
+      db,
+    )
+    await createServiceUser(organization.id, db)
+    return { id: organization.id, name: organization.name }
+  })
+}
+
+const listApiKeys = (organizationId: string): Promise<ApiKeyWithoutSecret[]> =>
+  ApiKeysUseCases.getApiKeysByUser(serviceUserOf(organizationId))
+
+const createApiKey = async (
+  organizationId: string,
+  options: { name: string | null; expiresAt: Date | null },
+): Promise<ApiKey> => {
+  const organization =
+    await organizationsRepository.getOrganizationById(organizationId)
+  if (!organization) {
+    throw new OrganizationNotFoundError('Organization not found')
+  }
+  if (organization.archived_at) {
+    throw new OrganizationConflictError('Organization is archived')
+  }
+
+  // Partners created before service users get theirs with their first key.
+  const serviceUser = serviceUserOf(organizationId)
+  const serviceUserExists = () =>
+    usersRepository.getUserByOAuthInformation(
+      serviceUser.oauthProvider,
+      serviceUser.oauthUserId,
+    )
+  if (!(await serviceUserExists())) {
+    try {
+      await withTransaction((db) => createServiceUser(organizationId, db))
+    } catch (error) {
+      // A concurrent first key may have created it.
+      if (!(await serviceUserExists())) throw error
+    }
+  }
+
+  return ApiKeysUseCases.createApiKey(serviceUser, options)
+}
+
+const revokeApiKey = async (
+  organizationId: string,
+  apiKeyId: string,
+): Promise<void> => {
+  const apiKey = await apiKeysRepository.getApiKeyById(apiKeyId)
+  // Any other key, a member's own included, is not this organisation's.
+  if (
+    apiKey?.oauthProvider !== SERVICE_USER_PROVIDER ||
+    apiKey.oauthUserId !== organizationId
+  ) {
+    throw new ApiKeyNotFoundError()
+  }
+
+  await apiKeysRepository.deleteApiKey(apiKeyId)
 }
 
 const getOrganizationSummaries = async (
@@ -143,6 +237,12 @@ const getMemberUser = async (publicId: string) => {
   const user = await usersRepository.getUserByPublicId(publicId)
   if (!user) {
     throw new OrganizationNotFoundError(`User ${publicId} not found`)
+  }
+  // It holds its organisation's API keys, so it stays there as it is.
+  if (user.oauth_provider === SERVICE_USER_PROVIDER) {
+    throw new OrganizationConflictError(
+      'A service user cannot be moved or have its role changed',
+    )
   }
   return user
 }
@@ -357,4 +457,7 @@ export const OrganizationsUseCases = {
   changeMemberRole,
   removeMember,
   getMembershipChanges,
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
 }
