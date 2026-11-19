@@ -70,7 +70,7 @@ docker build -f docker/auto-drive-test/Dockerfile -t auto-drive-test .
 
 ## Client tests
 
-The `S3 Test Image` workflow builds the image on every pull request that touches the backend, auth, S3 or nginx, and runs rclone's S3 backend integration suite in full plus the S3 smoke scripts in `scripts/live-integration/` against it. Pull requests test amd64; images from `main` and releases are built and tested on both amd64 and arm64, then published as one multi-arch image tagged `latest` (from `main`), the 8-character commit, and the release tag. Each architecture is also available as `<commit>-amd64` and `<commit>-arm64`.
+The `S3 Test Image` workflow builds the image on every pull request that touches the backend, auth, S3 or nginx, and runs rclone's integration suites plus the S3 smoke scripts in `scripts/live-integration/` against it. The rclone suites are the S3 backend suite in full and the others rclone runs against remotes: `fs/operations`, `fs/sync`, `cmd/bisync`, `cmd/gitannex` and `vfs`. Pull requests test amd64; images from `main` and releases are built and tested on both amd64 and arm64 (arm64 runs only the S3 backend suite and the smoke scripts), then published as one multi-arch image tagged `latest` (from `main`), the 8-character commit, and the release tag. Each architecture is also available as `<commit>-amd64` and `<commit>-arm64`.
 
 To run the same tests locally against a running container, with a checkout of rclone that includes the Autonomys provider, Go, the AWS CLI v2 and jq:
 
@@ -78,4 +78,4 @@ To run the same tests locally against a running container, with a checkout of rc
 docker/auto-drive-test/client-tests.sh <path to rclone source>
 ```
 
-The ignore list for rclone's suite is in `rclone-test-all.yaml`.
+The list of rclone suites and the failures they ignore are in `rclone-test-all.yaml`.

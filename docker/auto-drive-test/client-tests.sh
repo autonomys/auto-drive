@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs rclone's S3 backend integration suite and the repository's S3 smoke
-# scripts against a running auto-drive-test container.
+# Runs the rclone integration suites listed in rclone-test-all.yaml and the
+# repository's S3 smoke scripts against a running auto-drive-test container.
 #
 # Usage: client-tests.sh <rclone source checkout>
 #
@@ -8,6 +8,8 @@
 #   AUTO_DRIVE_TEST_ENDPOINT       default http://127.0.0.1:28640
 #   AUTO_DRIVE_TEST_ACCESS_KEY_ID  default the image's access key ID
 #   OUTPUT_DIR                     default ./client-test-output
+#   RCLONE_TESTS                   comma-separated test paths from
+#                                  rclone-test-all.yaml, default all
 #
 # Needs Go, the AWS CLI v2 and jq.
 set -uo pipefail
@@ -47,8 +49,8 @@ step() {
 }
 
 step "Build rclone" bash -c "cd '$RCLONE_SRC' && go build -o '$OUT/bin/rclone' ."
-step "rclone S3 backend suite" bash -c "cd '$RCLONE_SRC' && go run ./fstest/test_all \
-  -config '$HERE/rclone-test-all.yaml' -remotes TestS3Autonomys: -maxtries 3 -output '$OUT/test_all'"
+step "rclone integration suites" bash -c "cd '$RCLONE_SRC' && go run ./fstest/test_all \
+  -config '$HERE/rclone-test-all.yaml' -remotes TestS3Autonomys: -tests '${RCLONE_TESTS:-}' -maxtries 3 -output '$OUT/test_all'"
 
 export AUTO_DRIVE_ENDPOINT=$ENDPOINT AUTO_DRIVE_API_KEY=$KEY RCLONE_REMOTE=TestS3Autonomys
 export PATH=$OUT/bin:$PATH
