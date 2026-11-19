@@ -3,6 +3,7 @@ import {
   AccountUsageSummary,
   PaymentMethod,
   UsageByApiKey,
+  UsageByCustomerReference,
   UsageInteraction,
   UsagePurchase,
   UsageReport,
@@ -118,7 +119,9 @@ const byApiKey = async (
   const buckets = new Map<string, InteractionGroup[]>()
   for (const group of groups) {
     const key = group.apiKeyId ?? kindOf(group)
-    buckets.set(key, [...(buckets.get(key) ?? []), group])
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(group)
+    else buckets.set(key, [group])
   }
 
   const rows = [...buckets.values()].map((bucket): UsageByApiKey => {
@@ -150,6 +153,41 @@ const byApiKey = async (
       rank[a.kind] - rank[b.kind] ||
       Number(BigInt(b.uploadBytes) - BigInt(a.uploadBytes)) ||
       (a.apiKeyId ?? '').localeCompare(b.apiKeyId ?? ''),
+  )
+}
+
+// Uploads only: a download is not made for a customer reference.
+const byCustomerReference = (
+  groups: InteractionGroup[],
+): UsageByCustomerReference[] => {
+  const buckets = new Map<string | null, InteractionGroup[]>()
+  for (const group of groups) {
+    if (group.type !== 'upload') continue
+    const key = group.customerReference
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(group)
+    else buckets.set(key, [group])
+  }
+
+  const rows = [...buckets].map(
+    ([customerReference, bucket]): UsageByCustomerReference => ({
+      customerReference,
+      uploadCount: bucket.reduce((total, g) => total + g.count, 0),
+      uploadBytes: sum(bucket.map((g) => g.bytes)),
+      purchasedBytes: sum(
+        bucket.filter((g) => g.source === 'purchased').map((g) => g.bytes),
+      ),
+      ai3Value: sum(bucket.map((g) => g.value)),
+    }),
+  )
+
+  // References first, most upload bytes first; uploads without one last.
+  return rows.sort(
+    (a, b) =>
+      Number(a.customerReference === null) -
+        Number(b.customerReference === null) ||
+      Number(BigInt(b.uploadBytes) - BigInt(a.uploadBytes)) ||
+      (a.customerReference ?? '').localeCompare(b.customerReference ?? ''),
   )
 }
 
@@ -227,6 +265,7 @@ const getUsageReport = async (
       bytes: sum(downloads.map((g) => g.bytes)),
     },
     apiKeys: await byApiKey(groups),
+    customerReferences: byCustomerReference(groups),
     purchases: purchases.map(toPurchase),
     balance,
   })
@@ -281,6 +320,7 @@ const getUsageInteractions = async (
           cid: row.cid,
           apiKeyId: row.api_key_id,
           apiKeyName: row.api_key_id ? names.get(row.api_key_id)! : null,
+          customerReference: row.customer_reference,
           ai3Value: row.value,
         }),
       )
@@ -359,7 +399,12 @@ const usdcPerAi3 = (purchase: UsagePurchase) =>
       )
     : null
 
-export const USAGE_REPORT_TABLES = ['summary', 'apiKeys', 'purchases'] as const
+export const USAGE_REPORT_TABLES = [
+  'summary',
+  'apiKeys',
+  'customerReferences',
+  'purchases',
+] as const
 export type UsageReportTable = (typeof USAGE_REPORT_TABLES)[number]
 
 const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
@@ -415,6 +460,23 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           key.downloadBytes,
         ]),
       )
+    case 'customerReferences':
+      return toCsv(
+        [
+          'customer_reference',
+          'upload_count',
+          'upload_bytes',
+          'purchased_upload_bytes',
+          'ai3_value',
+        ],
+        report.customerReferences.map((row) => [
+          row.customerReference,
+          row.uploadCount,
+          row.uploadBytes,
+          row.purchasedBytes,
+          ai3(row.ai3Value),
+        ]),
+      )
     case 'purchases':
       return toCsv(
         [
@@ -466,6 +528,7 @@ export const USAGE_INTERACTIONS_CSV_HEADER = csvRow([
   'cid',
   'api_key_id',
   'api_key_name',
+  'customer_reference',
   'ai3_value',
 ])
 
@@ -481,6 +544,7 @@ const usageInteractionsCsv = (interactions: UsageInteraction[]) =>
         i.cid,
         i.apiKeyId,
         i.apiKeyName,
+        i.customerReference,
         ai3(i.ai3Value),
       ]),
     )

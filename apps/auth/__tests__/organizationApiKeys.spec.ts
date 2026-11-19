@@ -21,6 +21,8 @@ import {
   usersRepository,
 } from '../src/repositories/index.js'
 import { userController } from '../src/controllers/user.js'
+import { organizationController } from '../src/controllers/organization.js'
+import { config } from '../src/config.js'
 import { ApiKeyNotFoundError } from '../src/errors/apikeys.js'
 import {
   OrganizationConflictError,
@@ -49,6 +51,7 @@ describe('Organization API keys', () => {
     const app = express()
     app.use(express.json())
     app.use('/users', userController)
+    app.use('/organizations', organizationController)
     server = app.listen(0)
     await new Promise((resolve) => server.once('listening', resolve))
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -284,5 +287,45 @@ describe('Organization API keys', () => {
       },
     })
     expect(asService.status).toBe(401)
+  })
+
+  it('gives no session for a personal key either', async () => {
+    const user = await onboard()
+    const key = await ApiKeysUseCases.createApiKey(user, NO_OPTIONS)
+
+    expect((await withKey(key.secret, 'POST', '/@me/accessToken')).status).toBe(
+      403,
+    )
+  })
+
+  it('serves organization keys only to the backend', async () => {
+    const call = (method: string, path: string, secret?: string) =>
+      fetch(`${baseUrl}/organizations/${organizationId}/apiKeys${path}`, {
+        method,
+        headers: {
+          'content-type': 'application/json',
+          ...(secret ? { authorization: `Bearer ${secret}` } : {}),
+        },
+        body:
+          method === 'POST'
+            ? JSON.stringify({ name: 'Production' })
+            : undefined,
+      })
+
+    for (const [method, path] of [
+      ['GET', ''],
+      ['POST', ''],
+      ['DELETE', '/any-key'],
+    ]) {
+      expect((await call(method, path)).status).toBe(401)
+      expect((await call(method, path, 'not-the-secret')).status).toBe(401)
+    }
+    expect(await OrganizationsUseCases.listApiKeys(organizationId)).toEqual([])
+
+    const created = await call('POST', '', config.apiSecret)
+    expect(created.status).toBe(201)
+    const { id } = await created.json()
+    expect((await call('GET', '', config.apiSecret)).status).toBe(200)
+    expect((await call('DELETE', `/${id}`, config.apiSecret)).status).toBe(204)
   })
 })

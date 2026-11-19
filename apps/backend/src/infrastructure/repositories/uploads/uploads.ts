@@ -14,6 +14,7 @@ export type UploadEntry = {
   oauth_provider: string
   oauth_user_id: string
   upload_options: FileUploadOptions | null
+  customer_reference: string | null
   // Always selected (every read is SELECT *) but previously untyped. Every status
   // transition that anything waits on sets it explicitly — updateUploadEntry,
   // claimUploadForCompletion, releaseUploadCompletionClaim,
@@ -41,11 +42,12 @@ export const createUploadEntry = async (
   oauth_provider: string,
   oauth_user_id: string,
   upload_options: FileUploadOptions | null,
+  customer_reference: string | null = null,
 ): Promise<UploadEntry> => {
   const db = await getDatabase()
 
   const result = await db.query(
-    'INSERT INTO uploads.uploads (id, type, status, name, file_tree, mime_type, root_upload_id, relative_id, oauth_provider, oauth_user_id, upload_options) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+    'INSERT INTO uploads.uploads (id, type, status, name, file_tree, mime_type, root_upload_id, relative_id, oauth_provider, oauth_user_id, upload_options, customer_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
     [
       id,
       type,
@@ -58,6 +60,7 @@ export const createUploadEntry = async (
       oauth_provider,
       oauth_user_id,
       upload_options,
+      customer_reference,
     ],
   )
 

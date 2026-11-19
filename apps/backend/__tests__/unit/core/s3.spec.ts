@@ -621,6 +621,27 @@ describe('S3UseCases', () => {
       expect(result.nextKeyMarker).toBe('b.txt')
     })
 
+    it('answers maxKeys=0 with an empty, untruncated page without reading versions', async () => {
+      const listSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjectVersions')
+        .mockResolvedValue([row({ key: 'a.txt', cid: 'a1' })] as any)
+
+      const result = await S3UseCases.getObjectVersions(mockUser, {
+        bucket: 'b',
+        prefix: '',
+        keyMarker: null,
+        maxKeys: 0,
+      })
+
+      expect(result).toEqual({
+        versions: [],
+        deleteMarkers: [],
+        isTruncated: false,
+        nextKeyMarker: null,
+      })
+      expect(listSpy).not.toHaveBeenCalled()
+    })
+
     it('collapses repeated same-CID writes into one version (versionId = CID is unique per key)', async () => {
       // The repo returns newest-first; the same CID recurs when identical content
       // is written more than once (e.g. an mtime-only copy-to-self / SetModTime).
@@ -819,6 +840,7 @@ describe('S3UseCases', () => {
         null,
         null,
         null,
+        null,
       )
     })
 
@@ -999,6 +1021,31 @@ describe('S3UseCases', () => {
       expect(result.objects.map((o) => o.key)).toEqual(['a.txt', 'b.txt'])
       expect(result.isTruncated).toBe(true)
       expect(result.nextContinuationToken).toBe('b.txt')
+    })
+
+    it('answers maxKeys=0 with an empty, untruncated page without reading keys', async () => {
+      const listSpy = jest
+        .spyOn(s3ObjectMappingsRepository, 'listObjects')
+        .mockResolvedValue([makeListing('a.txt')] as any)
+
+      const result = await S3UseCases.listObjects(mockUser, {
+        bucket: 'my-bucket',
+        prefix: 'dir/',
+        delimiter: '/',
+        maxKeys: 0,
+        continuationToken: null,
+      })
+
+      expect(result).toEqual({
+        name: 'my-bucket',
+        prefix: 'dir/',
+        maxKeys: 0,
+        isTruncated: false,
+        nextContinuationToken: null,
+        objects: [],
+        commonPrefixes: [],
+      })
+      expect(listSpy).not.toHaveBeenCalled()
     })
   })
 
