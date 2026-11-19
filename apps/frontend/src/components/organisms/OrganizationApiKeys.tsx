@@ -32,7 +32,7 @@ export const OrganizationApiKeys = ({
           !data.canCreate &&
           ' Only organization admins can create them.'}
       </p>
-      {isError ? (
+      {isError && !data ? (
         <p className='text-sm text-gray-500'>
           Failed to load the organization&apos;s API keys.
         </p>
