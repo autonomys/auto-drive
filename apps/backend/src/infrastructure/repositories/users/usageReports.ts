@@ -9,13 +9,17 @@ import { getDatabase } from '../../drivers/pg.js'
 // would also keep its indexes from being used.
 const local = (param: string) => `${param}::timestamptz::timestamp`
 
-// The bytes an interaction drew from purchased batches, and their AI3 value at
-// each batch's price. Both NULL when it has no consumption rows.
+// The bytes an interaction drew from credit batches, their AI3 value at each
+// batch's price, and the bytes among them from free credits, which have no
+// intent and are valued at 0. All NULL when it has no consumption rows;
+// free_bytes also when it drew on no free credits.
 const CONSUMPTION = `LEFT JOIN LATERAL (
-    SELECT SUM(c.bytes) AS bytes, SUM(c.bytes * it.shannons_per_byte) AS value
+    SELECT SUM(c.bytes) AS bytes,
+           SUM(c.bytes * COALESCE(it.shannons_per_byte, 0)) AS value,
+           SUM(c.bytes) FILTER (WHERE pc.intent_id IS NULL) AS free_bytes
     FROM interaction_credit_consumption c
     JOIN purchased_credits pc ON pc.id = c.purchased_credit_id
-    JOIN intents it ON it.id = pc.intent_id
+    LEFT JOIN intents it ON it.id = pc.intent_id
     WHERE c.interaction_id = i.id
   ) v ON true`
 
@@ -33,6 +37,7 @@ export type InteractionGroup = {
   bytes: string
   valuedBytes: string
   value: string
+  freeBytes: string
 }
 
 const getInteractionGroups = async (
@@ -52,6 +57,7 @@ const getInteractionGroups = async (
     bytes: string
     valued_bytes: string
     value: string
+    free_bytes: string
   }>(
     `SELECT i.type, i.source, i.api_key_id, i.customer_reference,
             COALESCE(i.created_at >= ${local('$4')}, false)
@@ -59,7 +65,8 @@ const getInteractionGroups = async (
             COUNT(*) AS count,
             SUM(i.size) AS bytes,
             COALESCE(SUM(v.bytes), 0) AS valued_bytes,
-            COALESCE(SUM(v.value), 0) AS value
+            COALESCE(SUM(v.value), 0) AS value,
+            COALESCE(SUM(v.free_bytes), 0) AS free_bytes
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}
@@ -77,6 +84,7 @@ const getInteractionGroups = async (
     bytes: row.bytes,
     valuedBytes: row.valued_bytes,
     value: row.value,
+    freeBytes: row.free_bytes,
   }))
 }
 
@@ -100,7 +108,8 @@ export type PurchaseRow = {
   refunded_upload_bytes: string | null
 }
 
-// Batches granted to the account in the range, whoever paid for them.
+// Batches purchased for the account in the range, whoever paid for them. Free
+// credits have no intent and are left out.
 const getPurchases = async (
   accountId: string,
   from: Date,
@@ -125,8 +134,9 @@ const getPurchases = async (
   return result.rows
 }
 
-// The account's purchased upload bytes at `from` and `to`, and what moved in
-// between.
+// The account's upload bytes in credit batches at `from` and `to`, and what
+// moved in between. Batches are purchases and free credits alike, so `granted`
+// is both.
 //
 // Balances are worked back from each batch's current state, so they are exact
 // for any time from which every consumption is recorded, i.e. from attribution
@@ -211,6 +221,7 @@ export type InteractionRow = {
   api_key_id: string | null
   customer_reference: string | null
   value: string | null
+  free_bytes: string
 }
 
 // One page of the account's interactions in the range, in time order, after
@@ -229,7 +240,8 @@ const getInteractionsPage = async (
     `SELECT i.id, i.created_at::text AS cursor,
             i.created_at::timestamptz AS created_at,
             i.type, i.source, i.size, i.cid, i.api_key_id,
-            i.customer_reference, v.value
+            i.customer_reference, v.value,
+            COALESCE(v.free_bytes, 0)::text AS free_bytes
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}
@@ -248,6 +260,7 @@ export type AccountSummaryRow = {
   upload_count: string
   upload_bytes: string
   ai3_value: string
+  free_credit_bytes: string
   download_bytes: string
   granted_bytes: string
 }
@@ -268,6 +281,7 @@ const getAccountSummaries = async (
               COALESCE(SUM(i.size) FILTER (WHERE i.type = 'upload'), 0)
                 AS upload_bytes,
               COALESCE(SUM(v.value), 0) AS ai3_value,
+              COALESCE(SUM(v.free_bytes), 0) AS free_credit_bytes,
               COALESCE(SUM(i.size) FILTER (WHERE i.type = 'download'), 0)
                 AS download_bytes
        FROM interactions i
@@ -286,6 +300,7 @@ const getAccountSummaries = async (
             COALESCE(u.upload_count, 0) AS upload_count,
             COALESCE(u.upload_bytes, 0) AS upload_bytes,
             COALESCE(u.ai3_value, 0) AS ai3_value,
+            COALESCE(u.free_credit_bytes, 0) AS free_credit_bytes,
             COALESCE(u.download_bytes, 0) AS download_bytes,
             COALESCE(g.granted_bytes, 0) AS granted_bytes
      FROM accounts a
@@ -300,9 +315,46 @@ const getAccountSummaries = async (
   return result.rows
 }
 
+export type FreeCreditRow = {
+  batch_id: string
+  kind: 'free_one_time' | 'free_monthly'
+  purchased_at: Date
+  granted_by: string | null
+  grant_reason: string | null
+  grant_period: string | null
+  upload_bytes_original: string
+  expires_at: Date
+}
+
+// Free credit batches granted to the account in the range.
+const getFreeCredits = async (
+  accountId: string,
+  from: Date,
+  to: Date,
+): Promise<FreeCreditRow[]> => {
+  const db = await getDatabase()
+  const result = await db.query<FreeCreditRow>(
+    `SELECT id AS batch_id,
+            CASE WHEN grant_period IS NULL THEN 'free_one_time'
+                 ELSE 'free_monthly' END AS kind,
+            purchased_at, granted_by, grant_reason,
+            to_char(grant_period, 'YYYY-MM-DD') AS grant_period,
+            upload_bytes_original, expires_at
+     FROM purchased_credits
+     WHERE account_id = $1
+       AND intent_id IS NULL
+       AND purchased_at >= $2
+       AND purchased_at < $3
+     ORDER BY purchased_at, id`,
+    [accountId, from, to],
+  )
+  return result.rows
+}
+
 export const usageReportsRepository = {
   getInteractionGroups,
   getPurchases,
+  getFreeCredits,
   getBalance,
   getInteractionsPage,
   getAccountSummaries,

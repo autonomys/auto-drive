@@ -3,7 +3,15 @@ import { z } from "zod";
 export const PurchasedCreditSchema = z.object({
   id: z.string().uuid(),
   accountId: z.string(),
-  intentId: z.string(),
+  /** The payment intent of a purchase. Null for free credits. */
+  intentId: z.string().nullable(),
+  /**
+   * `purchase`: paid for. `free_one_time`: granted once by an admin.
+   * `free_monthly`: a partner's monthly free credits.
+   */
+  kind: z.enum(["purchase", "free_one_time", "free_monthly"]),
+  /** The UTC month (its first day) of monthly free credits, else null. */
+  grantPeriod: z.date().nullable(),
   uploadBytesOriginal: z.bigint(),
   uploadBytesRemaining: z.bigint(),
   downloadBytesOriginal: z.bigint(),
@@ -39,15 +47,29 @@ export const PurchasedCreditSchema = z.object({
 
 export type PurchasedCredit = z.infer<typeof PurchasedCreditSchema>;
 
+export type PurchasedCreditKind = PurchasedCredit["kind"];
+
+/** Free credits as admins see them: with who granted them and why. */
+export type AdminFreeCredit = PurchasedCredit & {
+  /** Admin publicId, for one-time free credits. */
+  grantedBy: string | null;
+  grantReason: string | null;
+};
+
 /**
- * Aggregate view of an account's remaining purchased credits across all
- * active (non-expired) rows. Returned by getRemainingPurchasedCredits()
- * and used by the per-account cap enforcement check.
+ * Aggregate view of an account's remaining credits across all active
+ * (non-expired) rows, purchased and free. Returned by getRemainingCredits().
  */
 export type PurchasedCreditSummary = {
   uploadBytesRemaining: bigint;
   /** Sum of upload_bytes_original across all active (non-expired) rows. */
   uploadBytesOriginal: bigint;
+  /** Purchased rows only: what the per-account cap is enforced on. */
+  purchasedUploadBytesRemaining: bigint;
+  purchasedUploadBytesOriginal: bigint;
+  /** The soonest expires_at across active purchased rows. */
+  purchasedNextExpiryDate: Date | null;
+  freeUploadBytesRemaining: bigint;
   downloadBytesRemaining: bigint;
   /** The soonest expires_at across active rows — used for expiry warnings. */
   nextExpiryDate: Date | null;
@@ -56,7 +78,8 @@ export type PurchasedCreditSummary = {
 
 /**
  * Tracks whether an interaction was charged against purchased credits or
- * against the account's free / one-off allocation.
+ * against the account's free / one-off allocation. `purchased` means drawn
+ * from credit batches, which include a partner's free credits.
  *
  * Stored in interactions.source. Required so the free-balance calculation
  * (upload_limit - sum(interactions)) only counts free_tier rows and is not

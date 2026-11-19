@@ -4,6 +4,7 @@ import {
   PaymentMethod,
   UsageByApiKey,
   UsageByCustomerReference,
+  UsageFreeCredit,
   UsageInteraction,
   UsagePurchase,
   UsageReport,
@@ -22,6 +23,7 @@ import {
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import {
+  FreeCreditRow,
   InteractionGroup,
   InteractionRow,
   PurchaseRow,
@@ -76,6 +78,20 @@ const getReadableAccount = async (
 
 const sum = (values: string[]): string =>
   values.reduce((total, value) => total + BigInt(value), BigInt(0)).toString()
+
+// Uploads drawn from credit batches are split into purchased bytes and free
+// credit bytes. Purchased bytes include those from before attribution, whose
+// batches are unknown.
+const splitUploads = (uploads: InteractionGroup[]) => {
+  const fromBatches = uploads.filter((g) => g.source === 'purchased')
+  const freeCreditBytes = sum(fromBatches.map((g) => g.freeBytes))
+  return {
+    purchasedBytes: (
+      BigInt(sum(fromBatches.map((g) => g.bytes))) - BigInt(freeCreditBytes)
+    ).toString(),
+    freeCreditBytes,
+  }
+}
 
 // Names come from auth and are a convenience: when it can't give them, the
 // report goes without them rather than failing.
@@ -136,9 +152,7 @@ const byApiKey = async (
       deleted: key?.deleted ?? false,
       uploadCount: uploads.reduce((total, g) => total + g.count, 0),
       uploadBytes: sum(uploads.map((g) => g.bytes)),
-      purchasedBytes: sum(
-        uploads.filter((g) => g.source === 'purchased').map((g) => g.bytes),
-      ),
+      ...splitUploads(uploads),
       ai3Value: sum(uploads.map((g) => g.value)),
       downloadCount: downloads.reduce((total, g) => total + g.count, 0),
       downloadBytes: sum(downloads.map((g) => g.bytes)),
@@ -174,9 +188,7 @@ const byCustomerReference = (
       customerReference,
       uploadCount: bucket.reduce((total, g) => total + g.count, 0),
       uploadBytes: sum(bucket.map((g) => g.bytes)),
-      purchasedBytes: sum(
-        bucket.filter((g) => g.source === 'purchased').map((g) => g.bytes),
-      ),
+      ...splitUploads(bucket),
       ai3Value: sum(bucket.map((g) => g.value)),
     }),
   )
@@ -211,6 +223,17 @@ const toPurchase = (row: PurchaseRow): UsagePurchase => ({
   refundedBytes: row.refunded_upload_bytes,
 })
 
+// Who granted free credits, and why, is for admins only.
+const toFreeCredit = (row: FreeCreditRow, admin: boolean): UsageFreeCredit => ({
+  batchId: row.batch_id,
+  kind: row.kind,
+  grantedAt: row.purchased_at.toISOString(),
+  period: row.grant_period,
+  bytes: row.upload_bytes_original,
+  expiresAt: row.expires_at.toISOString(),
+  ...(admin && { grantedBy: row.granted_by, reason: row.grant_reason }),
+})
+
 const getUsageReport = async (
   executor: UserWithOrganization,
   accountId: string,
@@ -225,7 +248,7 @@ const getUsageReport = async (
 
   const { from, to } = resolved.value
   const { attributionStart } = config.usageReports
-  const [groups, purchases, balance] = await Promise.all([
+  const [groups, purchases, freeCredits, balance] = await Promise.all([
     usageReportsRepository.getInteractionGroups(
       accountId,
       from,
@@ -233,6 +256,7 @@ const getUsageReport = async (
       attributionStart,
     ),
     usageReportsRepository.getPurchases(accountId, from, to),
+    usageReportsRepository.getFreeCredits(accountId, from, to),
     attributionStart && from >= attributionStart
       ? usageReportsRepository.getBalance(accountId, from, to)
       : null,
@@ -253,7 +277,7 @@ const getUsageReport = async (
       freeTierBytes: sum(
         uploads.filter((g) => g.source === 'free_tier').map((g) => g.bytes),
       ),
-      purchasedBytes: sum(purchased.map((g) => g.bytes)),
+      ...splitUploads(uploads),
       unattributedBytes: (
         BigInt(sum(purchased.map((g) => g.bytes))) -
         BigInt(sum(purchased.map((g) => g.valuedBytes)))
@@ -267,6 +291,9 @@ const getUsageReport = async (
     apiKeys: await byApiKey(groups),
     customerReferences: byCustomerReference(groups),
     purchases: purchases.map(toPurchase),
+    freeCredits: freeCredits.map((row) =>
+      toFreeCredit(row, executor.role === UserRole.Admin),
+    ),
     balance,
   })
 }
@@ -322,6 +349,7 @@ const getUsageInteractions = async (
           apiKeyName: row.api_key_id ? names.get(row.api_key_id)! : null,
           customerReference: row.customer_reference,
           ai3Value: row.value,
+          freeCreditBytes: row.free_bytes,
         }),
       )
 
@@ -373,6 +401,7 @@ const adminGetAccountUsageSummaries = async (
       uploadCount: Number(row.upload_count),
       uploadBytes: row.upload_bytes,
       ai3Value: row.ai3_value,
+      freeCreditBytes: row.free_credit_bytes,
       downloadBytes: row.download_bytes,
       grantedBytes: row.granted_bytes,
     })),
@@ -404,6 +433,7 @@ export const USAGE_REPORT_TABLES = [
   'apiKeys',
   'customerReferences',
   'purchases',
+  'freeCredits',
 ] as const
 export type UsageReportTable = (typeof USAGE_REPORT_TABLES)[number]
 
@@ -420,6 +450,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
         ['upload_bytes', uploads.bytes],
         ['free_tier_upload_bytes', uploads.freeTierBytes],
         ['purchased_upload_bytes', uploads.purchasedBytes],
+        ['free_credit_upload_bytes', uploads.freeCreditBytes],
         ['unattributed_upload_bytes', uploads.unattributedBytes],
         ['ai3_value', ai3(uploads.ai3Value)],
         ['download_count', downloads.count],
@@ -443,6 +474,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           'upload_count',
           'upload_bytes',
           'purchased_upload_bytes',
+          'free_credit_upload_bytes',
           'ai3_value',
           'download_count',
           'download_bytes',
@@ -455,6 +487,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           key.uploadCount,
           key.uploadBytes,
           key.purchasedBytes,
+          key.freeCreditBytes,
           ai3(key.ai3Value),
           key.downloadCount,
           key.downloadBytes,
@@ -467,6 +500,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           'upload_count',
           'upload_bytes',
           'purchased_upload_bytes',
+          'free_credit_upload_bytes',
           'ai3_value',
         ],
         report.customerReferences.map((row) => [
@@ -474,6 +508,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           row.uploadCount,
           row.uploadBytes,
           row.purchasedBytes,
+          row.freeCreditBytes,
           ai3(row.ai3Value),
         ]),
       )
@@ -516,6 +551,29 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           purchase.refundedBytes,
         ]),
       )
+    case 'freeCredits':
+      return toCsv(
+        [
+          'batch_id',
+          'kind',
+          'granted_at',
+          'period',
+          'bytes',
+          'expires_at',
+          'granted_by',
+          'reason',
+        ],
+        report.freeCredits.map((credit) => [
+          credit.batchId,
+          credit.kind,
+          credit.grantedAt,
+          credit.period,
+          credit.bytes,
+          credit.expiresAt,
+          credit.grantedBy,
+          credit.reason,
+        ]),
+      )
   }
 }
 
@@ -530,6 +588,7 @@ export const USAGE_INTERACTIONS_CSV_HEADER = csvRow([
   'api_key_name',
   'customer_reference',
   'ai3_value',
+  'free_credit_bytes',
 ])
 
 const usageInteractionsCsv = (interactions: UsageInteraction[]) =>
@@ -546,6 +605,7 @@ const usageInteractionsCsv = (interactions: UsageInteraction[]) =>
         i.apiKeyName,
         i.customerReference,
         ai3(i.ai3Value),
+        i.freeCreditBytes,
       ]),
     )
     .join('')

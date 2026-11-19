@@ -8,6 +8,8 @@ interface CreditLimitsProps {
   uploadLimit: number;
   renewalDate: Date;
   model: AccountModel;
+  /** Free credits a partner was granted, left to use. */
+  freeCreditBytesRemaining?: number;
   /**
    * Bytes remaining across all active purchased-credit rows.
    * Only passed (non-zero) when the buyCredits feature flag is active.
@@ -35,6 +37,7 @@ export const AccountInformation = ({
   uploadPending = 0,
   uploadLimit = 1000,
   renewalDate,
+  freeCreditBytesRemaining = 0,
   purchasedBytesRemaining = 0,
   purchasedBytesTotal = 0,
   nextExpiryDate = null,
@@ -90,6 +93,21 @@ export const AccountInformation = ({
           </div>
         )}
       </div>
+
+      {/* ── Free credits section ──────────────────────────────────────────── */}
+      {freeCreditBytesRemaining > 0 && (
+        <div className='space-y-2 border-t border-border pt-4'>
+          <div className='flex items-center justify-between'>
+            <span className='text-xs font-medium'>Free credits</span>
+            <span className='text-xs font-medium'>
+              {formatBytes(freeCreditBytesRemaining, 2)} left
+            </span>
+          </div>
+          <div className='text-xs text-muted-foreground'>
+            Used before purchased credits
+          </div>
+        </div>
+      )}
 
       {/* ── Purchased credits section (feature-flag gated) ────────────────── */}
       {hasPurchasedCredits && (

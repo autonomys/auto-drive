@@ -5,6 +5,7 @@
 
 import {
   PaymentMethod,
+  PurchasedCreditKind,
   USD_RATE_SCALE,
   USDC_DECIMALS,
 } from '@auto-drive/models';
@@ -128,6 +129,25 @@ export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
   return 'active';
+};
+
+/**
+ * What a credit batch is: a purchase, or free credits an admin granted.
+ * Monthly free credits name their UTC month.
+ */
+export const describeBatchKind = (batch: {
+  kind: PurchasedCreditKind;
+  grantPeriod: string | null;
+}): string => {
+  if (batch.kind === 'purchase') return 'Purchased';
+  if (batch.kind === 'free_one_time') return 'Free credits';
+  if (!batch.grantPeriod) return 'Monthly free credits';
+  const month = new Date(batch.grantPeriod).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  return `Monthly free credits, ${month}`;
 };
 
 // ---------------------------------------------------------------------------

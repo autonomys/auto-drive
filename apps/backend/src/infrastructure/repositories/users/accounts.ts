@@ -17,6 +17,7 @@ type DBAccount = {
   is_partner: boolean
   max_purchased_bytes: string | null
   credit_expiry_days: number | null
+  monthly_free_upload_bytes: string
 }
 
 type DBAccountTermsChange = {
@@ -38,6 +39,7 @@ export type AccountTerms = {
   downloadLimit: number
   maxPurchasedBytes: number | null
   creditExpiryDays: number | null
+  monthlyFreeUploadBytes: number
 }
 
 type DBAccountWithTotalSize = DBAccount & {
@@ -55,6 +57,7 @@ const mapRows = (rows: DBAccount[]): Account[] => {
     maxPurchasedBytes:
       row.max_purchased_bytes === null ? null : Number(row.max_purchased_bytes),
     creditExpiryDays: row.credit_expiry_days,
+    monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
   }))
 }
 
@@ -71,6 +74,7 @@ const mapRowsWithSize = (
     maxPurchasedBytes:
       row.max_purchased_bytes === null ? null : Number(row.max_purchased_bytes),
     creditExpiryDays: row.credit_expiry_days,
+    monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
     totalSize: Number(row.total_size),
   }))
 }
@@ -194,13 +198,14 @@ const updateAccount = async (
 
     const after = (
       await client.query<DBAccount>(
-        'UPDATE accounts SET "model" = $1, "upload_limit" = $2, "download_limit" = $3, max_purchased_bytes = $4, credit_expiry_days = $5 WHERE id = $6 RETURNING *',
+        'UPDATE accounts SET "model" = $1, "upload_limit" = $2, "download_limit" = $3, max_purchased_bytes = $4, credit_expiry_days = $5, monthly_free_upload_bytes = $6 WHERE id = $7 RETURNING *',
         [
           terms.model,
           terms.uploadLimit,
           terms.downloadLimit,
           terms.maxPurchasedBytes,
           terms.creditExpiryDays,
+          terms.monthlyFreeUploadBytes,
           id,
         ],
       )
@@ -209,6 +214,7 @@ const updateAccount = async (
     for (const field of [
       'max_purchased_bytes',
       'credit_expiry_days',
+      'monthly_free_upload_bytes',
       'upload_limit',
       'download_limit',
       'model',

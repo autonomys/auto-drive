@@ -197,6 +197,37 @@ describe('Usage reports', () => {
     )
   }
 
+  // A free credit batch granted at `at`: monthly if it has a period, else
+  // one-time.
+  const grantFree = async (
+    accountId: string,
+    {
+      bytes,
+      at,
+      expiresAt,
+      period = null,
+    }: { bytes: number; at: Date; expiresAt: Date; period?: string | null },
+  ) => {
+    const db = await getDatabase()
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO purchased_credits (account_id, upload_bytes_original,
+         upload_bytes_remaining, download_bytes_original,
+         download_bytes_remaining, purchased_at, expires_at, granted_by,
+         grant_reason, grant_period)
+       VALUES ($1, $2, $2, 0, 0, $3, $4, $5, $6, $7) RETURNING id`,
+      [
+        accountId,
+        bytes,
+        at,
+        expiresAt,
+        period ? null : 'admin-pub',
+        period ? null : 'Pilot',
+        period,
+      ],
+    )
+    return result.rows[0].id
+  }
+
   // A partner account with a timeline that exercises every balance movement.
   // Attribution starts on day 10.
   const seedPartner = async () => {
@@ -284,6 +315,37 @@ describe('Usage reports', () => {
     await refund(d, day(50))
 
     return { ...partner, alice, bob, batches: { a, b, c, d } }
+  }
+
+  // The partner timeline plus free credits: a one-time grant on day 52 and a
+  // monthly batch on day 53 that ends on day 60, both drawn on, together with
+  // a purchased batch, by one upload on day 55.
+  const seedFree = async () => {
+    const seeded = await seedPartner()
+    const id = seeded.account.id
+    const oneTime = await grantFree(id, {
+      bytes: 600,
+      at: day(52),
+      expiresAt: NOW,
+    })
+    const monthly = await grantFree(id, {
+      bytes: 100,
+      at: day(53),
+      expiresAt: day(60),
+      period: '2026-01-01',
+    })
+    await interact(id, {
+      at: day(55),
+      bytes: 900,
+      apiKeyId: 'key-1',
+      customerReference: 'cust-a',
+      from: [
+        [monthly, 100],
+        [oneTime, 500],
+        [seeded.batches.b, 300],
+      ],
+    })
+    return { ...seeded, free: { oneTime, monthly } }
   }
 
   const report = async (
@@ -391,6 +453,153 @@ describe('Usage reports', () => {
     }
   })
 
+  it('reports bytes from free credits apart, at no AI3 value', async () => {
+    const { account, member, free } = await seedFree()
+
+    const { uploads, apiKeys, customerReferences, purchases } = await report(
+      member(),
+      account.id,
+      day(50),
+      NOW,
+    )
+
+    // 300 purchased bytes at 5 shannons; the 600 free ones are worth nothing
+    // and are not unattributed.
+    expect(uploads).toEqual({
+      count: 1,
+      bytes: '900',
+      freeTierBytes: '0',
+      purchasedBytes: '300',
+      freeCreditBytes: '600',
+      unattributedBytes: '0',
+      ai3Value: '1500',
+    })
+    expect(apiKeys).toEqual([
+      expect.objectContaining({
+        apiKeyId: 'key-1',
+        uploadBytes: '900',
+        purchasedBytes: '300',
+        freeCreditBytes: '600',
+        ai3Value: '1500',
+      }),
+    ])
+    expect(customerReferences).toEqual([
+      {
+        customerReference: 'cust-a',
+        uploadCount: 1,
+        uploadBytes: '900',
+        purchasedBytes: '300',
+        freeCreditBytes: '600',
+        ai3Value: '1500',
+      },
+    ])
+    expect(purchases.map((p) => p.batchId)).not.toContain(free.oneTime)
+  })
+
+  it('lists free credit grants, with who made them and why for admins only', async () => {
+    const { account, member, free } = await seedFree()
+    const grants = [
+      {
+        batchId: free.oneTime,
+        kind: 'free_one_time',
+        grantedAt: day(52).toISOString(),
+        period: null,
+        bytes: '600',
+        expiresAt: NOW.toISOString(),
+      },
+      {
+        batchId: free.monthly,
+        kind: 'free_monthly',
+        grantedAt: day(53).toISOString(),
+        period: '2026-01-01',
+        bytes: '100',
+        expiresAt: day(60).toISOString(),
+      },
+    ]
+
+    const forMember = await report(member(), account.id, day(50), NOW)
+    const forAdmin = await report(admin, account.id, day(50), NOW)
+
+    expect(forMember.freeCredits).toEqual(grants)
+    expect(forAdmin.freeCredits).toEqual([
+      { ...grants[0], grantedBy: 'admin-pub', reason: 'Pilot' },
+      { ...grants[1], grantedBy: null, reason: null },
+    ])
+    expect(
+      UsageReportsUseCases.usageReportCsv(forMember, 'freeCredits').split(
+        '\r\n',
+      )[1],
+    ).toMatch(/,free_one_time,.*,600,.*,,$/)
+    expect(
+      UsageReportsUseCases.usageReportCsv(forAdmin, 'freeCredits'),
+    ).toContain(',admin-pub,Pilot\r\n')
+    expect(UsageReportsUseCases.usageReportCsv(forAdmin, 'summary')).toContain(
+      'free_credit_upload_bytes,600\r\n',
+    )
+  })
+
+  it('keeps the balance identity with free and purchased credits', async () => {
+    const { account } = await seedFree()
+
+    // Free credits are granted and consumed like purchases; the monthly batch
+    // ends used up, so nothing more expires.
+    const { balance } = await report(admin, account.id, day(10), NOW)
+    expect(balance).toEqual({
+      opening: '900',
+      granted: '4000',
+      consumed: '2000',
+      expired: '1200',
+      refunded: '400',
+      closing: '1300',
+    })
+    const remaining = await purchasedCreditsRepository.getRemainingCredits(
+      account.id,
+    )
+    expect(balance?.closing).toBe(remaining.uploadBytesRemaining.toString())
+
+    const days = [10, 45, 50, 52, 53, 54, 55, 56, 60, 61, 79]
+    for (const from of days) {
+      for (const to of days.filter((d) => d > from)) {
+        const { balance } = await report(admin, account.id, day(from), day(to))
+        expect({ from, to, holds: balanceHolds(balance!) }).toEqual({
+          from,
+          to,
+          holds: true,
+        })
+      }
+    }
+  })
+
+  it('carries free credit bytes into the export and the admin list', async () => {
+    const { account } = await seedFree()
+    const range = { from: day(50), to: NOW }
+
+    const result = (
+      await UsageReportsUseCases.getUsageInteractions(admin, account.id, range)
+    )._unsafeUnwrap()
+    const interactions: UsageInteraction[] = []
+    for await (const page of result.pages) interactions.push(...page)
+    const [summary] = (
+      await UsageReportsUseCases.adminGetAccountUsageSummaries(admin, range, {
+        partnersOnly: true,
+        limit: 100,
+      })
+    )._unsafeUnwrap()
+
+    expect(interactions).toEqual([
+      expect.objectContaining({ ai3Value: '1500', freeCreditBytes: '600' }),
+    ])
+    expect(UsageReportsUseCases.usageInteractionsCsv(interactions)).toContain(
+      ',0.0000000000000015,600\r\n',
+    )
+    expect(summary).toMatchObject({
+      accountId: account.id,
+      ai3Value: '1500',
+      freeCreditBytes: '600',
+      grantedBytes: '700',
+    })
+  })
+
   it('has no balance for a range starting before attribution', async () => {
     const { account } = await seedPartner()
 
@@ -412,6 +621,7 @@ describe('Usage reports', () => {
       bytes: '1250',
       freeTierBytes: '50',
       purchasedBytes: '1200',
+      freeCreditBytes: '0',
       unattributedBytes: '100',
       ai3Value: '3800',
     })
@@ -474,6 +684,7 @@ describe('Usage reports', () => {
         uploadCount: 1,
         uploadBytes: '700',
         purchasedBytes: '700',
+        freeCreditBytes: '0',
         ai3Value: '2900',
       },
       {
@@ -481,6 +692,7 @@ describe('Usage reports', () => {
         uploadCount: 2,
         uploadBytes: '350',
         purchasedBytes: '300',
+        freeCreditBytes: '0',
         ai3Value: '600',
       },
       {
@@ -488,6 +700,7 @@ describe('Usage reports', () => {
         uploadCount: 2,
         uploadBytes: '200',
         purchasedBytes: '200',
+        freeCreditBytes: '0',
         ai3Value: '300',
       },
     ])
@@ -618,10 +831,10 @@ describe('Usage reports', () => {
       ',usdc_eth,2.5,250000000000000,',
     )
     expect(customerReferences.split('\r\n')).toEqual([
-      'customer_reference,upload_count,upload_bytes,purchased_upload_bytes,ai3_value',
-      'cust-b,1,700,700,0.0000000000000029',
-      'cust-a,2,350,300,0.0000000000000006',
-      ',1,100,100,0.0000000000000003',
+      'customer_reference,upload_count,upload_bytes,purchased_upload_bytes,free_credit_upload_bytes,ai3_value',
+      'cust-b,1,700,700,0,0.0000000000000029',
+      'cust-a,2,350,300,0,0.0000000000000006',
+      ',1,100,100,0,0.0000000000000003',
       '',
     ])
   })
@@ -664,7 +877,7 @@ describe('Usage reports', () => {
     expect(interactions[0].customerReference).toBeNull()
     expect(
       UsageReportsUseCases.usageInteractionsCsv([interactions[2]]),
-    ).toContain(',cust-b,0.0000000000000029\r\n')
+    ).toContain(',cust-b,0.0000000000000029,0\r\n')
   })
 
   // Whether the planner picks an index depends on the table's size, so the
@@ -765,6 +978,7 @@ describe('Usage reports', () => {
         uploadCount: 5,
         uploadBytes: '1250',
         ai3Value: '3800',
+        freeCreditBytes: '0',
         downloadBytes: '4000',
         grantedBytes: '4300',
       },

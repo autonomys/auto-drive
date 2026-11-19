@@ -73,6 +73,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
@@ -103,6 +104,7 @@ describe('AccountsUseCases', () => {
           downloadLimit: 5000,
           maxPurchasedBytes: null,
           creditExpiryDays: null,
+          monthlyFreeUploadBytes: 0,
         },
         'pub1',
         undefined,
@@ -120,6 +122,7 @@ describe('AccountsUseCases', () => {
         downloadLimit: 1000,
         maxPurchasedBytes: 5000,
         creditExpiryDays: 30,
+        monthlyFreeUploadBytes: 0,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       const updateSpy = jest
@@ -172,6 +175,7 @@ describe('AccountsUseCases', () => {
         isPartner: true,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
         uploadLimit: 0,
         downloadLimit: 1000,
       })
@@ -217,6 +221,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
 
       jest
@@ -246,6 +251,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
 
       const initSpy = jest
@@ -276,6 +282,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
 
       const initSpy = jest
@@ -297,6 +304,7 @@ describe('AccountsUseCases', () => {
       isPartner: false,
       maxPurchasedBytes: null,
       creditExpiryDays: null,
+      monthlyFreeUploadBytes: 0,
       uploadLimit: 1000,
       downloadLimit: 1000,
     }
@@ -487,6 +495,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
       const member = {
         publicId: 'pub1',
@@ -530,6 +539,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
@@ -588,6 +598,7 @@ describe('AccountsUseCases', () => {
       isPartner: false,
       maxPurchasedBytes: null,
       creditExpiryDays: null,
+      monthlyFreeUploadBytes: 0,
     }
 
     beforeEach(() => {
@@ -627,6 +638,7 @@ describe('AccountsUseCases', () => {
         ...account,
         pendingUploadCredits: 15,
         pendingDownloadCredits: 10,
+        freeUploadCredits: 0,
         members: [],
         organization: null,
         defaultCreditTerms: {
@@ -680,6 +692,7 @@ describe('AccountsUseCases', () => {
       isPartner: false,
       maxPurchasedBytes: null,
       creditExpiryDays: null,
+      monthlyFreeUploadBytes: 0,
     }
 
     beforeEach(() => {
@@ -774,6 +787,7 @@ describe('AccountsUseCases', () => {
                 isPartner: false,
                 maxPurchasedBytes: null,
                 creditExpiryDays: null,
+                monthlyFreeUploadBytes: 0,
               }
             : null,
         )
@@ -822,6 +836,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       })
       jest
         .spyOn(
@@ -848,8 +863,10 @@ describe('AccountsUseCases', () => {
           isPartner: false,
           maxPurchasedBytes: null,
           creditExpiryDays: null,
+          monthlyFreeUploadBytes: 0,
           pendingUploadCredits: 100,
           pendingDownloadCredits: 50,
+          freeUploadCredits: 0,
         },
       })
     })
@@ -864,6 +881,7 @@ describe('AccountsUseCases', () => {
         isPartner: false,
         maxPurchasedBytes: null,
         creditExpiryDays: null,
+        monthlyFreeUploadBytes: 0,
       }
       jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
         { publicId: 'pub1', organizationId: 'org1' },
@@ -913,6 +931,7 @@ describe('AccountsUseCases', () => {
           isPartner: false,
           maxPurchasedBytes: null,
           creditExpiryDays: null,
+          monthlyFreeUploadBytes: 0,
         }))
       jest
         .spyOn(

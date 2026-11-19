@@ -7,6 +7,7 @@ import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
   daysUntilExpiry,
+  describeBatchKind,
   getBatchStatus,
   STATUS_CLASSES,
   STATUS_LABEL,
@@ -80,7 +81,7 @@ const BatchCard = ({ batch }: { batch: ExpiringCreditBatch }) => {
       </div>
 
       <div className='mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground'>
-        <span>Purchased</span>
+        <span>{describeBatchKind(batch)}</span>
         <span className='text-right'>{formatDate(batch.purchasedAt)}</span>
         <span>Expires</span>
         <span className='text-right'>

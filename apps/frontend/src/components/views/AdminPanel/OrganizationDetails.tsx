@@ -51,6 +51,7 @@ import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
 import { PartnerTerms } from './PartnerTerms';
+import { PartnerFreeCredits } from './PartnerFreeCredits';
 import { UsageReportView } from '../UsageReport';
 import { OrganizationApiKeys } from '@/components/organisms/OrganizationApiKeys';
 
@@ -409,6 +410,13 @@ export const OrganizationDetails = ({ accountId }: Props) => {
 
       {account?.isPartner && (
         <PartnerTerms
+          account={account}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
+
+      {account?.isPartner && (
+        <PartnerFreeCredits
           account={account}
           onChanged={() => setAccountVersion((v) => v + 1)}
         />

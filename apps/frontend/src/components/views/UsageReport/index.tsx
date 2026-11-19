@@ -26,7 +26,7 @@ import {
 } from '@/components/molecules/Table/TableBody';
 import { formatBytes } from '@/utils/number';
 import { formatCid } from '@/utils/table';
-import { describePayment, formatAi3 } from '@/utils/credits';
+import { describeBatchKind, describePayment, formatAi3 } from '@/utils/credits';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   defaultUsageDays,
@@ -48,6 +48,7 @@ const EXPORTS = [
   { label: 'API keys', table: 'apiKeys' },
   { label: 'Customer references', table: 'customerReferences' },
   { label: 'Purchases', table: 'purchases' },
+  { label: 'Free credits', table: 'freeCredits' },
   { label: 'Interactions', table: 'interactions' },
   { label: 'JSON', table: 'report' },
 ] as const;
@@ -136,6 +137,7 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
           <TableHeadCell>Uploads</TableHeadCell>
           <TableHeadCell>Upload size</TableHeadCell>
           <TableHeadCell>Purchased</TableHeadCell>
+          <TableHeadCell>Free credits</TableHeadCell>
           <TableHeadCell>AI3 value</TableHeadCell>
           <TableHeadCell>Downloads</TableHeadCell>
           <TableHeadCell>Download size</TableHeadCell>
@@ -150,6 +152,7 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
             <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
             <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.freeCreditBytes)}</TableBodyCell>
             <TableBodyCell>{ai3(row.ai3Value)}</TableBodyCell>
             <TableBodyCell>{row.downloadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.downloadBytes)}</TableBodyCell>
@@ -158,7 +161,7 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
         {rows.length === 0 && (
           <TableBodyRow>
             <TableBodyCell
-              colSpan={7}
+              colSpan={8}
               className='py-6 text-center text-gray-500'
             >
               No activity in this range
@@ -183,6 +186,7 @@ const CustomerReferencesTable = ({
           <TableHeadCell>Uploads</TableHeadCell>
           <TableHeadCell>Upload size</TableHeadCell>
           <TableHeadCell>Purchased</TableHeadCell>
+          <TableHeadCell>Free credits</TableHeadCell>
           <TableHeadCell>AI3 value</TableHeadCell>
         </TableHeadRow>
       </TableHead>
@@ -201,6 +205,7 @@ const CustomerReferencesTable = ({
             <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
             <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.freeCreditBytes)}</TableBodyCell>
             <TableBodyCell>{ai3(row.ai3Value)}</TableBodyCell>
           </TableBodyRow>
         ))}
@@ -264,7 +269,7 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
               colSpan={6}
               className='py-6 text-center text-gray-500'
             >
-              No credits granted in this range
+              No credits purchased in this range
             </TableBodyCell>
           </TableBodyRow>
         )}
@@ -273,10 +278,52 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
   </div>
 );
 
+// Who granted the credits and why reach admins only.
+const FreeCreditsTable = ({ report }: { report: UsageReport }) => {
+  const admin = report.freeCredits.some((credit) => 'grantedBy' in credit);
+  return (
+    <div className='overflow-x-auto'>
+      <Table className='min-w-full'>
+        <TableHead>
+          <TableHeadRow>
+            <TableHeadCell>Granted</TableHeadCell>
+            <TableHeadCell>Kind</TableHeadCell>
+            <TableHeadCell>Size</TableHeadCell>
+            <TableHeadCell>Expires</TableHeadCell>
+            {admin && <TableHeadCell>By</TableHeadCell>}
+            {admin && <TableHeadCell>Reason</TableHeadCell>}
+          </TableHeadRow>
+        </TableHead>
+        <TableBody>
+          {report.freeCredits.map((credit) => (
+            <TableBodyRow key={credit.batchId}>
+              <TableBodyCell>{day(credit.grantedAt)}</TableBodyCell>
+              <TableBodyCell>
+                {describeBatchKind({
+                  kind: credit.kind,
+                  grantPeriod: credit.period,
+                })}
+              </TableBodyCell>
+              <TableBodyCell>{bytes(credit.bytes)}</TableBodyCell>
+              <TableBodyCell>{day(credit.expiresAt)}</TableBodyCell>
+              {admin && (
+                <TableBodyCell className='font-mono text-xs'>
+                  {credit.grantedBy ? formatCid(credit.grantedBy) : '—'}
+                </TableBodyCell>
+              )}
+              {admin && <TableBodyCell>{credit.reason ?? '—'}</TableBodyCell>}
+            </TableBodyRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
 /**
  * An account's usage over whole UTC days: uploads and downloads, split by API
- * key and by customer reference, with the credits granted and the
- * purchased-credit balance.
+ * key and by customer reference, with the credits purchased and granted for
+ * free and the credit balance.
  */
 export const UsageReportView = ({ accountId }: { accountId: string }) => {
   const { api } = useNetwork();
@@ -380,7 +427,7 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             <Stat
               label='Paid with purchased credits'
               value={bytes(report.uploads.purchasedBytes)}
-              hint={`${bytes(report.uploads.freeTierBytes)} free tier`}
+              hint={`${bytes(report.uploads.freeCreditBytes)} free credits, ${bytes(report.uploads.freeTierBytes)} free tier`}
             />
             <Stat
               label='AI3 value'
@@ -401,7 +448,7 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             </p>
           )}
 
-          <Section title='Purchased credit balance'>
+          <Section title='Credit balance'>
             <Balance report={report} />
           </Section>
 
@@ -417,9 +464,15 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             </Section>
           )}
 
-          <Section title='Credits granted'>
+          <Section title='Credits purchased'>
             <PurchasesTable report={report} />
           </Section>
+
+          {report.freeCredits.length > 0 && (
+            <Section title='Free credits granted'>
+              <FreeCreditsTable report={report} />
+            </Section>
+          )}
         </>
       )}
     </div>

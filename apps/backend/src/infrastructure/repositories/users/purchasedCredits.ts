@@ -1,4 +1,5 @@
 import {
+  AdminFreeCredit,
   IntentStatus,
   PaymentMethod,
   PurchasedCredit,
@@ -19,7 +20,11 @@ const logger = createLogger('repositories:purchasedCredits')
 type DBPurchasedCredit = {
   id: string
   account_id: string
-  intent_id: string
+  // Null for free credits, which have granted_by or grant_period instead.
+  intent_id: string | null
+  granted_by: string | null
+  grant_reason: string | null
+  grant_period: Date | null
   upload_bytes_original: string
   upload_bytes_remaining: string
   download_bytes_original: string
@@ -34,10 +39,20 @@ type DBPurchasedCredit = {
   updated_at: Date
 }
 
+// pg reads a date column as local midnight; this is that day at UTC midnight.
+const utcDay = (date: Date) =>
+  new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+
 const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
   id: row.id,
   accountId: row.account_id,
   intentId: row.intent_id,
+  kind: row.intent_id
+    ? 'purchase'
+    : row.grant_period
+      ? 'free_monthly'
+      : 'free_one_time',
+  grantPeriod: row.grant_period && utcDay(row.grant_period),
   uploadBytesOriginal: BigInt(row.upload_bytes_original),
   uploadBytesRemaining: BigInt(row.upload_bytes_remaining),
   downloadBytesOriginal: BigInt(row.download_bytes_original),
@@ -53,6 +68,12 @@ const mapRow = (row: DBPurchasedCredit): PurchasedCredit => ({
       : BigInt(row.refunded_upload_bytes),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+})
+
+const mapFreeCredit = (row: DBPurchasedCredit): AdminFreeCredit => ({
+  ...mapRow(row),
+  grantedBy: row.granted_by,
+  grantReason: row.grant_reason,
 })
 
 // ---------------------------------------------------------------------------
@@ -96,8 +117,8 @@ const createPurchasedCredit = async (
 
 // ---------------------------------------------------------------------------
 // getActiveByAccountId
-// Returns non-expired rows with remaining bytes, ordered FIFO:
-// soonest-expiry first, then oldest purchase within the same expiry window.
+// Returns non-expired rows with remaining bytes in consumption order (see
+// consumeUpTo).
 // ---------------------------------------------------------------------------
 
 const getActiveByAccountId = async (
@@ -111,7 +132,7 @@ const getActiveByAccountId = async (
        AND expired = FALSE
        AND expires_at > NOW()
        AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)
-     ORDER BY expires_at ASC, purchased_at ASC`,
+     ORDER BY (intent_id IS NOT NULL), expires_at ASC, purchased_at ASC`,
     [accountId],
   )
   return result.rows.map(mapRow)
@@ -119,9 +140,11 @@ const getActiveByAccountId = async (
 
 // ---------------------------------------------------------------------------
 // consumeUpTo
-// Consumes up to `bytes` from purchased credit rows in FIFO order
-// (soonest-expiry first) and returns what it took from each row. Never fails —
-// if fewer than `bytes` are available it drains whatever exists.
+// Consumes up to `bytes` from credit rows and returns what it took from each
+// row. Free credits go first, so a partner never pays for bytes while it holds
+// free ones; within free and within purchased rows, soonest expiry first, then
+// oldest. Never fails — if fewer than `bytes` are available it drains whatever
+// exists.
 //
 // Runs on the caller's client, inside the caller's transaction: the rows stay
 // locked FOR UPDATE until the caller commits, and the caller writes the
@@ -151,7 +174,7 @@ const consumeUpTo = async (
        AND expired = FALSE
        AND expires_at > NOW()
        AND ${remainingCol} > 0
-     ORDER BY expires_at ASC, purchased_at ASC
+     ORDER BY (intent_id IS NOT NULL), expires_at ASC, purchased_at ASC
      FOR UPDATE`,
     [accountId],
   )
@@ -186,8 +209,10 @@ const consumeUpTo = async (
 
 // ---------------------------------------------------------------------------
 // getRemainingCredits
-// Single-query aggregate: total remaining purchased bytes + nearest expiry.
-// Used by cap enforcement and the credits summary API endpoint.
+// Single-query aggregate: total remaining bytes + nearest expiry, over all
+// active rows and over purchased and free rows apart. The cap is enforced on
+// the purchased figures only. Used by cap enforcement, the upload gate and
+// the credits summary API endpoint.
 // ---------------------------------------------------------------------------
 
 const getRemainingCredits = async (
@@ -197,6 +222,10 @@ const getRemainingCredits = async (
   const result = await db.query<{
     upload_bytes_remaining: string
     upload_bytes_original: string
+    purchased_upload_bytes_remaining: string
+    purchased_upload_bytes_original: string
+    purchased_next_expiry: Date | null
+    free_upload_bytes_remaining: string
     download_bytes_remaining: string
     next_expiry: Date | null
     active_row_count: string
@@ -204,6 +233,14 @@ const getRemainingCredits = async (
     `SELECT
        COALESCE(SUM(upload_bytes_remaining),   0) AS upload_bytes_remaining,
        COALESCE(SUM(upload_bytes_original),    0) AS upload_bytes_original,
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE intent_id IS NOT NULL), 0) AS purchased_upload_bytes_remaining,
+       COALESCE(SUM(upload_bytes_original) FILTER (
+         WHERE intent_id IS NOT NULL), 0) AS purchased_upload_bytes_original,
+       MIN(expires_at) FILTER (
+         WHERE intent_id IS NOT NULL)     AS purchased_next_expiry,
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE intent_id IS NULL), 0)     AS free_upload_bytes_remaining,
        COALESCE(SUM(download_bytes_remaining), 0) AS download_bytes_remaining,
        MIN(expires_at)                            AS next_expiry,
        COUNT(*)                                   AS active_row_count
@@ -219,6 +256,10 @@ const getRemainingCredits = async (
   return {
     uploadBytesRemaining: BigInt(row.upload_bytes_remaining),
     uploadBytesOriginal: BigInt(row.upload_bytes_original),
+    purchasedUploadBytesRemaining: BigInt(row.purchased_upload_bytes_remaining),
+    purchasedUploadBytesOriginal: BigInt(row.purchased_upload_bytes_original),
+    purchasedNextExpiryDate: row.purchased_next_expiry ?? null,
+    freeUploadBytesRemaining: BigInt(row.free_upload_bytes_remaining),
     downloadBytesRemaining: BigInt(row.download_bytes_remaining),
     nextExpiryDate: row.next_expiry ?? null,
     activeRowCount: Number(row.active_row_count),
@@ -386,7 +427,8 @@ const getByAccountId = async (
 // Atomically checks the per-account cap and inserts a new credit row in a
 // single transaction, using a PostgreSQL advisory lock keyed to the account
 // to serialize concurrent calls. Returns err('cap_exceeded') if the purchase
-// would push upload remaining over the cap.
+// would push purchased upload remaining over the cap; free credits don't
+// count toward it.
 // The same transaction moves the intent from CONFIRMED to COMPLETED, and
 // returns err('intent_not_confirmed') without inserting if it has left
 // CONFIRMED, e.g. because the buyer's deletion expired it.
@@ -424,6 +466,7 @@ const createPurchasedCreditWithCapCheck = async (
          COALESCE(SUM(download_bytes_remaining), 0) AS download_bytes_remaining
        FROM purchased_credits
        WHERE account_id = $1
+         AND intent_id IS NOT NULL
          AND expired = FALSE
          AND expires_at > NOW()
          AND (upload_bytes_remaining > 0 OR download_bytes_remaining > 0)`,
@@ -483,6 +526,75 @@ const createPurchasedCreditWithCapCheck = async (
 }
 
 // ---------------------------------------------------------------------------
+// Free credits
+// Batches an admin grants a partner for free, with no intent. Monthly ones
+// are issued lazily, once per UTC month, and expire when the month ends;
+// the partial unique index makes concurrent issuance a no-op.
+// ---------------------------------------------------------------------------
+
+const ensureMonthlyFreeCredits = async (
+  accountId: string,
+  bytes: bigint,
+  client?: pg.PoolClient,
+): Promise<void> => {
+  const db = client ?? (await getDatabase())
+  await db.query(
+    `INSERT INTO purchased_credits
+       (account_id, upload_bytes_original, upload_bytes_remaining,
+        download_bytes_original, download_bytes_remaining,
+        purchased_at, expires_at, grant_period)
+     VALUES ($1, $2, $2, 0, 0, NOW(),
+             (date_trunc('month', NOW() AT TIME ZONE 'UTC') + interval '1 month')
+               AT TIME ZONE 'UTC',
+             date_trunc('month', NOW() AT TIME ZONE 'UTC')::date)
+     ON CONFLICT (account_id, grant_period) WHERE grant_period IS NOT NULL
+     DO NOTHING`,
+    [accountId, bytes.toString()],
+  )
+}
+
+const createFreeCredit = async (params: {
+  accountId: string
+  uploadBytes: bigint
+  expiresInDays: number
+  grantedBy: string
+  reason: string
+}): Promise<AdminFreeCredit> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit>(
+    `INSERT INTO purchased_credits
+       (account_id, upload_bytes_original, upload_bytes_remaining,
+        download_bytes_original, download_bytes_remaining,
+        expires_at, granted_by, grant_reason)
+     VALUES ($1, $2, $2, 0, 0, NOW() + ($3 * INTERVAL '1 day'), $4, $5)
+     RETURNING *`,
+    [
+      params.accountId,
+      params.uploadBytes.toString(),
+      params.expiresInDays,
+      params.grantedBy,
+      params.reason,
+    ],
+  )
+  return mapFreeCredit(result.rows[0])
+}
+
+/** The account's free batches, both kinds, newest first. */
+const getFreeCreditsByAccountId = async (
+  accountId: string,
+): Promise<AdminFreeCredit[]> => {
+  const db = await getDatabase()
+  const result = await db.query<DBPurchasedCredit>(
+    `SELECT *
+     FROM purchased_credits
+     WHERE account_id = $1 AND intent_id IS NULL
+     ORDER BY purchased_at DESC, id`,
+    [accountId],
+  )
+  return result.rows.map(mapFreeCredit)
+}
+
+// ---------------------------------------------------------------------------
 // UUID guard
 // purchased_credits.id is a UUID column; comparing it against a malformed
 // string (or casting one via ::uuid[]) makes Postgres throw, which would
@@ -505,6 +617,7 @@ const UUID_REGEX =
 // This mirrors the UI guard so the API cannot be used to record a refund on
 // a used-up batch. Download bytes are deliberately ignored — they are not
 // allocated, consumed or enforced anywhere in the app.
+// Free credits are rejected with `free`: there was no payment to refund.
 // Returns the updated row so the caller can echo it back to the client.
 // Malformed (non-UUID) ids are reported as not found.
 // ---------------------------------------------------------------------------
@@ -517,6 +630,8 @@ const markAsRefunded = async (
   row: PurchasedCredit | null
   /** True when the row exists, is not refunded, but has 0 upload bytes left. */
   notRefundable?: boolean
+  /** True when the row is free credits, which are never refunded. */
+  free?: boolean
 }> => {
   if (!UUID_REGEX.test(id)) {
     return { found: false, row: null }
@@ -532,6 +647,7 @@ const markAsRefunded = async (
          refund_tx_hash           = $2,
          updated_at               = NOW()
      WHERE id = $1
+       AND intent_id IS NOT NULL
        AND refunded_at IS NULL
        AND upload_bytes_remaining > 0
      RETURNING *`,
@@ -545,10 +661,16 @@ const markAsRefunded = async (
   const existing = await db.query<{
     id: string
     refunded_at: Date | null
-  }>('SELECT id, refunded_at FROM purchased_credits WHERE id = $1', [id])
+    intent_id: string | null
+  }>('SELECT id, refunded_at, intent_id FROM purchased_credits WHERE id = $1', [
+    id,
+  ])
 
   if (existing.rows.length === 0) {
     return { found: false, row: null }
+  }
+  if (existing.rows[0].intent_id === null) {
+    return { found: true, row: null, free: true }
   }
 
   // Already refunded → idempotent no-op. Not refunded but skipped by the
@@ -566,6 +688,7 @@ const markAsRefunded = async (
 // transaction hash on each row (one AI3 transfer can cover several batches).
 // All-or-nothing on existence: if any id does not exist the transaction is
 // rolled back and missingIds is returned so the caller can 404 precisely.
+// Likewise for free credits, which are never refunded: freeIds.
 // All batches that are actually going to be refunded must belong to the
 // SAME account AND have been paid from the SAME purchasing wallet (the
 // intent's from_address) — one on-chain AI3 refund transfer goes back to a
@@ -596,6 +719,8 @@ export type BatchRefundResult = {
    * existing callers/mocks; absent means none.
    */
   nonRefundableIds?: string[]
+  /** Ids of free credit rows, which are never refunded. Absent means none. */
+  freeIds?: string[]
 }
 
 const markManyAsRefunded = async (
@@ -628,15 +753,16 @@ const markManyAsRefunded = async (
     const existing = await client.query<{
       id: string
       account_id: string
+      intent_id: string | null
       refunded_at: Date | null
       upload_bytes_remaining: string
       from_address: string | null
     }>(
-      `SELECT pc.id, pc.account_id, pc.refunded_at,
+      `SELECT pc.id, pc.account_id, pc.intent_id, pc.refunded_at,
               pc.upload_bytes_remaining,
               i.from_address
        FROM purchased_credits pc
-       JOIN intents i ON i.id = pc.intent_id
+       LEFT JOIN intents i ON i.id = pc.intent_id
        WHERE pc.id = ANY($1::uuid[])
        ORDER BY pc.id
        FOR UPDATE OF pc`,
@@ -669,6 +795,21 @@ const markManyAsRefunded = async (
         refundedRows: [],
         alreadyRefundedIds: [],
         nonRefundableIds,
+      }
+    }
+
+    const freeIds = existing.rows
+      .filter((r) => r.intent_id === null)
+      .map((r) => r.id)
+    if (freeIds.length > 0) {
+      await client.query('ROLLBACK')
+      return {
+        missingIds: [],
+        accountIds,
+        walletAddresses,
+        refundedRows: [],
+        alreadyRefundedIds: [],
+        freeIds,
       }
     }
 
@@ -873,6 +1014,9 @@ export const purchasedCreditsRepository = {
   getExpiringCreditsAggregate,
   getExpiringCreditsByAccountId,
   createPurchasedCreditWithCapCheck,
+  ensureMonthlyFreeCredits,
+  createFreeCredit,
+  getFreeCreditsByAccountId,
   markExpiredCredits,
   getByAccountId,
   getAllWithUserPublicId,

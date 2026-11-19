@@ -32,18 +32,21 @@ const EXPIRING_WITHIN_DAYS = 30
 // ---------------------------------------------------------------------------
 
 export type CreditSummary = {
+  /** Across all active rows, purchased and free. */
   uploadBytesRemaining: bigint
-  /** Total originally-purchased upload bytes across all active (non-expired) rows. */
+  /** The part of uploadBytesRemaining that is free credits. */
+  freeUploadBytesRemaining: bigint
+  /** Total originally-purchased upload bytes across active purchased rows. */
   totalPurchasedBytesOriginal: bigint
   downloadBytesRemaining: bigint
-  /** Soonest expires_at across active rows, or null when no active credits. */
+  /** Soonest expires_at across active purchased rows, or null when none. */
   nextExpiryDate: Date | null
   /** Number of active (non-expired) purchase rows. */
   batchCount: number
   /**
    * True when the user can still make a purchase without exceeding the cap.
-   * Cap is enforced on upload bytes only — download credits are not allocated
-   * on purchase right now, so only uploadBytesRemaining is checked.
+   * Cap is enforced on purchased upload bytes only — free credits don't count
+   * toward it, and download credits are not allocated on purchase right now.
    */
   canPurchase: boolean
   /** Maximum bytes the user could purchase right now without hitting the cap. */
@@ -63,6 +66,7 @@ const getSummary = async (
   user: UserWithOrganization,
 ): Promise<CreditSummary> => {
   const account = await AccountsUseCases.getOrCreateAccount(user)
+  await AccountsUseCases.ensureMonthlyFreeCredits(account)
   const summary = await purchasedCreditsRepository.getRemainingCredits(
     account.id,
   )
@@ -70,17 +74,18 @@ const getSummary = async (
   const terms = AccountsUseCases.getCreditTerms(account)
   const cap = terms.maxBytes
 
-  // Cap is enforced on upload bytes only. Download credits are not allocated
-  // on purchase right now so there is no download cap to check.
-  const maxPurchasableBytes =
-    cap > summary.uploadBytesRemaining ? cap - summary.uploadBytesRemaining : 0n
+  // Cap is enforced on purchased upload bytes only. Download credits are not
+  // allocated on purchase right now so there is no download cap to check.
+  const held = summary.purchasedUploadBytesRemaining
+  const maxPurchasableBytes = cap > held ? cap - held : 0n
   const canPurchase = maxPurchasableBytes > 0n
 
   return {
     uploadBytesRemaining: summary.uploadBytesRemaining,
-    totalPurchasedBytesOriginal: summary.uploadBytesOriginal,
+    freeUploadBytesRemaining: summary.freeUploadBytesRemaining,
+    totalPurchasedBytesOriginal: summary.purchasedUploadBytesOriginal,
     downloadBytesRemaining: summary.downloadBytesRemaining,
-    nextExpiryDate: summary.nextExpiryDate,
+    nextExpiryDate: summary.purchasedNextExpiryDate,
     batchCount: summary.activeRowCount,
     canPurchase,
     maxPurchasableBytes,
@@ -253,8 +258,9 @@ const validateRefundTxHash = (
 // returns ok() so the UI can safely retry on network errors (the original
 // refund_tx_hash is preserved).
 // Returns 403 for non-admin callers, 404 if the batch does not exist,
-// 400 if the transaction hash is missing or malformed, or if the batch is
-// depleted (0 upload bytes remaining — nothing forfeited, no refund owed).
+// 400 if the transaction hash is missing or malformed, if the batch is
+// depleted (0 upload bytes remaining — nothing forfeited, no refund owed),
+// or if it is free credits (nothing was paid).
 // ---------------------------------------------------------------------------
 
 const refundBatch = async (
@@ -275,10 +281,14 @@ const refundBatch = async (
     return err(txHashResult.error)
   }
 
-  const { found, row, notRefundable } =
+  const { found, row, notRefundable, free } =
     await purchasedCreditsRepository.markAsRefunded(batchId, txHashResult.value)
   if (!found) {
     return err(new NotFoundError('Credit batch not found'))
+  }
+
+  if (free) {
+    return err(new BadRequestError('Free credits cannot be refunded'))
   }
 
   if (notRefundable) {
@@ -322,8 +332,8 @@ const refundBatch = async (
 // and are excluded from both checks, so retries succeed even if the
 // already-refunded rows belong to different accounts or wallets.
 // Returns 403 for non-admin callers, 400 if the transaction hash is missing
-// or malformed, if no batch ids are provided, or if any batch is depleted
-// (0 upload bytes remaining — no refund is owed on it).
+// or malformed, if no batch ids are provided, if any batch is depleted
+// (0 upload bytes remaining — no refund is owed on it) or is free credits.
 // ---------------------------------------------------------------------------
 
 export type RefundBatchesSummary = {
@@ -377,6 +387,14 @@ const refundBatches = async (
     return err(
       new NotFoundError(
         `Credit batches not found: ${result.missingIds.join(', ')}`,
+      ),
+    )
+  }
+
+  if (result.freeIds && result.freeIds.length > 0) {
+    return err(
+      new BadRequestError(
+        `Free credits cannot be refunded: ${result.freeIds.join(', ')}`,
       ),
     )
   }

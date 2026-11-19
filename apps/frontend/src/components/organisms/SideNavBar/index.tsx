@@ -91,10 +91,18 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   // progress bar even when the buy-credits UI is hidden.
   const purchasedBytesRemaining = useMemo(() => {
     if (!creditSummary) return 0;
-    // uploadBytesRemaining is a decimal-string bigint from the API.
-    // Max safe value is 100 GiB which is well within Number's safe range.
-    return Number(creditSummary.uploadBytesRemaining);
+    // uploadBytesRemaining is a decimal-string bigint from the API, and
+    // includes free credits. Max safe value is 100 GiB which is well within
+    // Number's safe range.
+    return (
+      Number(creditSummary.uploadBytesRemaining) -
+      Number(creditSummary.freeUploadBytesRemaining ?? 0)
+    );
   }, [creditSummary]);
+
+  // Free credits granted to a partner. Read from the account, so they show
+  // whether or not the buy-credits feature is on.
+  const freeCreditBytesRemaining = account?.freeUploadCredits ?? 0;
 
   // Total bytes originally purchased (sum of upload_bytes_original for active rows).
   // Used to render a "X used out of Y total" progress bar in the purchased credits section.
@@ -106,10 +114,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     return Number(creditSummary.totalPurchasedBytesOriginal);
   }, [creditSummary]);
 
-  // account.pendingUploadCredits = freeRemaining + purchasedRemaining.
-  // Strip out the purchased portion so the free-quota progress bar only
+  // account.pendingUploadCredits = freeRemaining + purchasedRemaining +
+  // free credits. Strip out the credits so the free-quota progress bar only
   // reflects the free allocation.
-  const freeRemaining = (account?.pendingUploadCredits ?? 0) - purchasedBytesRemaining;
+  const freeRemaining =
+    (account?.pendingUploadCredits ?? 0) -
+    purchasedBytesRemaining -
+    freeCreditBytesRemaining;
 
   const nextExpiryDate = useMemo(() => {
     if (!hasBuyCreditsFeature || !creditSummary?.nextExpiryDate) return null;
@@ -154,6 +165,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={freeRemaining}
+            freeCreditBytesRemaining={freeCreditBytesRemaining}
             purchasedBytesRemaining={hasBuyCreditsFeature ? purchasedBytesRemaining : 0}
             purchasedBytesTotal={hasBuyCreditsFeature ? purchasedBytesTotal : 0}
             nextExpiryDate={nextExpiryDate}

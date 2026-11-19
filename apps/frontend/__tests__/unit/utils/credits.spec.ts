@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
 import { PaymentMethod } from '@auto-drive/models'
 
 // ---------------------------------------------------------------------------
@@ -227,6 +227,27 @@ describe('getBatchStatus', () => {
 
   it('prioritises "depleted" over "expiring"', () => {
     expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', expiresAt: '2026-06-10T00:00:00Z' }))).toBe('depleted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// describeBatchKind
+// ---------------------------------------------------------------------------
+
+describe('describeBatchKind', () => {
+  it('labels purchases and one-time free credits', () => {
+    expect(describeBatchKind({ kind: 'purchase', grantPeriod: null })).toBe('Purchased')
+    expect(describeBatchKind({ kind: 'free_one_time', grantPeriod: null })).toBe('Free credits')
+  })
+
+  it('names the UTC month of monthly free credits', () => {
+    expect(
+      describeBatchKind({ kind: 'free_monthly', grantPeriod: '2026-11-01T00:00:00.000Z' }),
+    ).toBe('Monthly free credits, November 2026')
+    // A report gives the month as its first day.
+    expect(describeBatchKind({ kind: 'free_monthly', grantPeriod: '2027-01-01' })).toBe(
+      'Monthly free credits, January 2027',
+    )
   })
 })
 
