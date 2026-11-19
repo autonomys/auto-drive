@@ -1,0 +1,1 @@
+ALTER TABLE users.users ADD COLUMN oauth_username TEXT;

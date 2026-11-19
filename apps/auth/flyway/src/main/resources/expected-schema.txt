@@ -1,0 +1,60 @@
+column|api_keys|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+column|api_keys|deleted_at|timestamp without time zone|YES|
+column|api_keys|expires_at|timestamp without time zone|YES|
+column|api_keys|id|text|NO|
+column|api_keys|name|text|YES|
+column|api_keys|oauth_provider|text|NO|
+column|api_keys|oauth_user_id|text|NO|
+column|api_keys|secret|text|NO|
+column|deletion_requests|admin_notes|text|YES|
+column|deletion_requests|cancelled_at|timestamp with time zone|YES|
+column|deletion_requests|completed_at|timestamp with time zone|YES|
+column|deletion_requests|created_at|timestamp with time zone|NO|CURRENT_TIMESTAMP
+column|deletion_requests|id|text|NO|(gen_random_uuid())::text
+column|deletion_requests|oauth_provider|text|NO|
+column|deletion_requests|oauth_user_id|text|NO|
+column|deletion_requests|reason|text|YES|
+column|deletion_requests|requested_at|timestamp with time zone|NO|CURRENT_TIMESTAMP
+column|deletion_requests|scheduled_anonymisation_at|timestamp with time zone|NO|
+column|deletion_requests|status|text|NO|'pending'::text
+column|deletion_requests|updated_at|timestamp with time zone|NO|CURRENT_TIMESTAMP
+column|deletion_requests|user_public_id|text|NO|
+column|jwt_token_registry|createdat|timestamp without time zone|YES|CURRENT_TIMESTAMP
+column|jwt_token_registry|id|text|NO|
+column|organizations|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+column|organizations|id|text|NO|
+column|organizations|name|text|NO|
+column|users_organizations|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+column|users_organizations|oauth_provider|text|NO|
+column|users_organizations|oauth_user_id|text|NO|
+column|users_organizations|organization_id|text|NO|
+column|users|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+column|users|oauth_avatar_url|text|YES|
+column|users|oauth_provider|text|NO|
+column|users|oauth_user_id|text|NO|
+column|users|oauth_username|text|YES|
+column|users|public_id|text|YES|
+column|users|role|text|NO|'User'::text
+column|wallet_nonces|expires_at|timestamp with time zone|NO|
+column|wallet_nonces|nonce|text|NO|
+constraint|api_keys|api_keys_pkey|PRIMARY KEY (id)
+constraint|deletion_requests|deletion_requests_pkey|PRIMARY KEY (id)
+constraint|deletion_requests|deletion_requests_status_check|CHECK ((status = ANY (ARRAY['pending'::text, 'cancelled'::text, 'processing'::text, 'completed'::text, 'failed'::text])))
+constraint|jwt_token_registry|jwt_token_registry_pkey|PRIMARY KEY (id)
+constraint|organizations|organizations_pkey|PRIMARY KEY (id)
+constraint|users|users_handle_key|UNIQUE (public_id)
+constraint|users|users_pkey|PRIMARY KEY (oauth_provider, oauth_user_id)
+constraint|wallet_nonces|wallet_nonces_pkey|PRIMARY KEY (nonce)
+index|api_keys|api_keys_pkey|CREATE UNIQUE INDEX api_keys_pkey ON users.api_keys USING btree (id)|valid=true
+index|api_keys|idx_api_keys_owner|CREATE INDEX idx_api_keys_owner ON users.api_keys USING btree (oauth_provider, oauth_user_id) WHERE (deleted_at IS NULL)|valid=true
+index|deletion_requests|deletion_requests_pkey|CREATE UNIQUE INDEX deletion_requests_pkey ON users.deletion_requests USING btree (id)|valid=true
+index|deletion_requests|idx_deletion_requests_scheduled|CREATE INDEX idx_deletion_requests_scheduled ON users.deletion_requests USING btree (scheduled_anonymisation_at)|valid=true
+index|deletion_requests|idx_deletion_requests_status|CREATE INDEX idx_deletion_requests_status ON users.deletion_requests USING btree (status)|valid=true
+index|deletion_requests|idx_deletion_requests_user|CREATE INDEX idx_deletion_requests_user ON users.deletion_requests USING btree (user_public_id)|valid=true
+index|jwt_token_registry|jwt_token_registry_pkey|CREATE UNIQUE INDEX jwt_token_registry_pkey ON users.jwt_token_registry USING btree (id)|valid=true
+index|organizations|organizations_pkey|CREATE UNIQUE INDEX organizations_pkey ON users.organizations USING btree (id)|valid=true
+index|users|idx_users_public_id|CREATE INDEX idx_users_public_id ON users.users USING btree (public_id)|valid=true
+index|users|users_handle_key|CREATE UNIQUE INDEX users_handle_key ON users.users USING btree (public_id)|valid=true
+index|users|users_pkey|CREATE UNIQUE INDEX users_pkey ON users.users USING btree (oauth_provider, oauth_user_id)|valid=true
+index|wallet_nonces|idx_wallet_nonces_expires_at|CREATE INDEX idx_wallet_nonces_expires_at ON users.wallet_nonces USING btree (expires_at)|valid=true
+index|wallet_nonces|wallet_nonces_pkey|CREATE UNIQUE INDEX wallet_nonces_pkey ON users.wallet_nonces USING btree (nonce)|valid=true
