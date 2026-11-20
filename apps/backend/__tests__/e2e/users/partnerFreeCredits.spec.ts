@@ -333,6 +333,107 @@ describe('Partner free credits', () => {
       ])
       expect(await freeCreditsLeft(member)).toBe(100n)
     })
+
+    // Waits until another connection is blocked on a lock.
+    const waitForLockWait = async () => {
+      const db = await getDatabase()
+      for (let i = 0; i < 200; i++) {
+        const { rows } = await db.query<{ waiting: number }>(
+          `SELECT COUNT(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        )
+        if (rows[0].waiting > 0) return
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      throw new Error('No connection waited on a lock')
+    }
+
+    it('replaces a batch an upload is still issuing when the amount changes', async () => {
+      const { member, account } = await createMonthlyPartner(100)
+      const db = await getDatabase()
+      // This month's batch is not issued yet.
+      await db.query('DELETE FROM purchased_credits WHERE account_id = $1', [
+        account.id,
+      ])
+
+      const client = await db.connect()
+      try {
+        await client.query('BEGIN')
+        await purchasedCreditsRepository.ensureMonthlyFreeCredits(
+          account.id,
+          client,
+        )
+        const change = setTerms(account.id, { monthlyFreeUploadBytes: 200 })
+        await waitForLockWait()
+        await client.query('COMMIT')
+        expect((await change).isOk()).toBe(true)
+      } finally {
+        client.release()
+      }
+
+      expect(await freeCreditsLeft(member)).toBe(200n)
+    })
+
+    it('waits for a change to the amount already under way before issuing', async () => {
+      const { member, account } = await createMonthlyPartner(100)
+      const db = await getDatabase()
+      await db.query('DELETE FROM purchased_credits WHERE account_id = $1', [
+        account.id,
+      ])
+
+      // The steps of updateAccount, held open after the account is locked.
+      const client = await db.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [
+          account.id,
+        ])
+        await client.query(
+          'UPDATE accounts SET monthly_free_upload_bytes = 200 WHERE id = $1',
+          [account.id],
+        )
+        const issuing = purchasedCreditsRepository.ensureMonthlyFreeCredits(
+          account.id,
+        )
+        await waitForLockWait()
+        await purchasedCreditsRepository.supersedeMonthlyFreeCredits(
+          client,
+          account.id,
+        )
+        await purchasedCreditsRepository.ensureMonthlyFreeCredits(
+          account.id,
+          client,
+        )
+        await client.query('COMMIT')
+        await issuing
+      } finally {
+        client.release()
+      }
+
+      expect(await freeCreditsLeft(member)).toBe(200n)
+    })
+
+    it('keeps an upload begun before a change off the replaced batch', async () => {
+      const { account } = await createMonthlyPartner(100)
+      const db = await getDatabase()
+
+      const client = await db.connect()
+      try {
+        // NOW() in this transaction is from before the change.
+        await client.query('BEGIN')
+        await setTerms(account.id, { monthlyFreeUploadBytes: 50 })
+        const consumed = await purchasedCreditsRepository.consumeUpTo(
+          client,
+          account.id,
+          'upload',
+          1000n,
+        )
+        await client.query('COMMIT')
+        expect(consumed.map((c) => Number(c.bytes))).toEqual([50])
+      } finally {
+        client.release()
+      }
+    })
   })
 
   describe('consumption order', () => {

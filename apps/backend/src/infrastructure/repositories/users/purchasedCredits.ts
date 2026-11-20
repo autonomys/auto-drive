@@ -152,6 +152,9 @@ const getActiveByAccountId = async (
 // locked FOR UPDATE until the caller commits, and the caller writes the
 // interaction and its per-batch consumption rows before committing, so the
 // ledger can never disagree with the balances. Rolling back undoes everything.
+//
+// A replaced monthly batch is skipped by superseded_at: NOW() is when the
+// caller's transaction began, which can be before the batch was ended.
 // ---------------------------------------------------------------------------
 
 export type BatchConsumption = {
@@ -180,6 +183,7 @@ const consumeUpTo = async (
      WHERE account_id = $1
        AND expired = FALSE
        AND expires_at > NOW()
+       AND superseded_at IS NULL
        AND ${remainingCol} > 0
      ORDER BY (intent_id IS NOT NULL), expires_at ASC, purchased_at ASC
      FOR UPDATE`,
@@ -574,6 +578,12 @@ const CURRENT_MONTH = `date_trunc('month',
  * that is more than 0. The amount is read from the account in the same
  * statement, so a request holding an older copy of the account can't issue
  * an amount an admin has just changed. The batch expires when the month ends.
+ *
+ * The account row is locked FOR SHARE before anything is inserted, against
+ * updateAccount's FOR UPDATE: a change to the amount waits for a batch issued
+ * here and then replaces it, and issuing waits for a change under way. The
+ * foreign key would lock the row only after the insert, which can deadlock
+ * with a change under way.
  */
 const ensureMonthlyFreeCredits = async (
   accountId: string,
@@ -585,6 +595,7 @@ const ensureMonthlyFreeCredits = async (
        SELECT monthly_free_upload_bytes AS bytes
        FROM accounts
        WHERE id = $1 AND is_partner
+       FOR SHARE
      ), used AS (
        SELECT COALESCE(SUM(upload_bytes_original - upload_bytes_remaining), 0)
                 AS bytes
