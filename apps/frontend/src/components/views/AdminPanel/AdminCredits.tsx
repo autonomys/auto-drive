@@ -43,19 +43,25 @@ const EconomicsCard = ({
 }) => (
   <div className='grid grid-cols-1 gap-4 sm:grid-cols-3'>
     <div className='rounded-lg border border-border bg-card p-4'>
-      <p className='text-xs text-muted-foreground'>Batches expiring ≤ 30 d</p>
+      <p className='text-xs text-muted-foreground'>
+        Purchased batches expiring ≤ 30 d
+      </p>
       <p className='mt-1 text-2xl font-semibold text-foreground'>
         {economics.totalExpiringWithin30Days}
       </p>
     </div>
     <div className='rounded-lg border border-border bg-card p-4'>
-      <p className='text-xs text-muted-foreground'>Upload bytes expiring</p>
+      <p className='text-xs text-muted-foreground'>
+        Purchased upload bytes expiring
+      </p>
       <p className='mt-1 text-2xl font-semibold text-foreground'>
         {formatBytes(Number(BigInt(economics.totalExpiringUploadBytes)), 1)}
       </p>
     </div>
     <div className='rounded-lg border border-border bg-card p-4'>
-      <p className='text-xs text-muted-foreground'>Download bytes expiring</p>
+      <p className='text-xs text-muted-foreground'>
+        Purchased download bytes expiring
+      </p>
       <p className='mt-1 text-2xl font-semibold text-foreground'>
         {formatBytes(Number(BigInt(economics.totalExpiringDownloadBytes)), 1)}
       </p>
@@ -110,13 +116,9 @@ const OverCapPanel = ({
               <td className='py-2 pr-4 font-mono text-xs'>
                 {intent.userPublicId.slice(0, 12)}…
               </td>
-              <td className='py-2 pr-4'>
-                {intent.paymentAmount ?? '—'}
-              </td>
+              <td className='py-2 pr-4'>{intent.paymentAmount ?? '—'}</td>
               <td className='py-2 pr-4 font-mono text-xs'>
-                {intent.txHash
-                  ? `${intent.txHash.slice(0, 10)}…`
-                  : '—'}
+                {intent.txHash ? `${intent.txHash.slice(0, 10)}…` : '—'}
               </td>
               <td className='py-2'>
                 <Button
@@ -126,7 +128,9 @@ const OverCapPanel = ({
                   className='flex items-center gap-1 text-xs'
                 >
                   <RotateCcw className='h-3 w-3' />
-                  {isPending && reprocessingId === intent.id ? 'Reprocessing…' : 'Reprocess'}
+                  {isPending && reprocessingId === intent.id
+                    ? 'Reprocessing…'
+                    : 'Reprocess'}
                 </Button>
               </td>
             </tr>
@@ -208,13 +212,11 @@ const groupBatchesByAccount = (
       0,
     ),
     totalRemaining: accountBatches.reduce(
-      (s, b) =>
-        s + (b.expired ? 0 : Number(BigInt(b.uploadBytesRemaining))),
+      (s, b) => s + (b.expired ? 0 : Number(BigInt(b.uploadBytesRemaining))),
       0,
     ),
     totalExpiredUnused: accountBatches.reduce(
-      (s, b) =>
-        s + (b.expired ? Number(BigInt(b.uploadBytesRemaining)) : 0),
+      (s, b) => s + (b.expired ? Number(BigInt(b.uploadBytesRemaining)) : 0),
       0,
     ),
   }));
@@ -266,12 +268,10 @@ const AccountBatchGroupSection = ({
           {group.batches.length === 1 ? 'batch' : 'batches'}
           {group.userPublicIds.length > 1 &&
             ` (${group.userPublicIds.length} users)`}
-          {group.walletCount > 1 && ` (${group.walletCount} wallets)`}{' '}
-          · {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
+          {group.walletCount > 1 && ` (${group.walletCount} wallets)`} ·{' '}
+          {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
           {formatBytes(group.totalRemaining, 1)} remaining ·{' '}
-          <span
-            className={group.totalExpiredUnused > 0 ? 'text-red-500' : ''}
-          >
+          <span className={group.totalExpiredUnused > 0 ? 'text-red-500' : ''}>
             {formatBytes(group.totalExpiredUnused, 1)} expired
           </span>
         </span>
@@ -301,127 +301,127 @@ const AccountBatchGroupSection = ({
     {/* Batch rows — hidden until the admin expands the account. Sorted by
         purchasing wallet so refundable-together batches are adjacent. */}
     {isExpanded && (
-    <div className='overflow-x-auto'>
-      <table className='w-full text-sm'>
-        <thead>
-          <tr className='border-b border-border text-left text-xs text-muted-foreground'>
-            <th className='px-4 py-2 font-medium'>User</th>
-            <th className='px-4 py-2 font-medium'>Purchasing Wallet</th>
-            <th className='px-4 py-2 font-medium'>Asset</th>
-            <th className='px-4 py-2 font-medium'>Status</th>
-            <th className='px-4 py-2 font-medium'>Purchased</th>
-            <th className='px-4 py-2 font-medium'>Original</th>
-            <th className='px-4 py-2 font-medium'>Remaining</th>
-            <th className='px-4 py-2 font-medium'>Used %</th>
-            <th className='px-4 py-2 font-medium'>Expires</th>
-            <th className='px-4 py-2 font-medium'>Refund</th>
-          </tr>
-        </thead>
-        <tbody>
-          {group.batches.map((batch) => {
-            const status = getBatchStatus(batch);
-            const original = Number(BigInt(batch.uploadBytesOriginal));
-            const remaining = Number(BigInt(batch.uploadBytesRemaining));
-            const usedPct =
-              original > 0
-                ? Math.round(((original - remaining) / original) * 100)
-                : 0;
+      <div className='overflow-x-auto'>
+        <table className='w-full text-sm'>
+          <thead>
+            <tr className='border-b border-border text-left text-xs text-muted-foreground'>
+              <th className='px-4 py-2 font-medium'>User</th>
+              <th className='px-4 py-2 font-medium'>Purchasing Wallet</th>
+              <th className='px-4 py-2 font-medium'>Asset</th>
+              <th className='px-4 py-2 font-medium'>Status</th>
+              <th className='px-4 py-2 font-medium'>Purchased</th>
+              <th className='px-4 py-2 font-medium'>Original</th>
+              <th className='px-4 py-2 font-medium'>Remaining</th>
+              <th className='px-4 py-2 font-medium'>Used %</th>
+              <th className='px-4 py-2 font-medium'>Expires</th>
+              <th className='px-4 py-2 font-medium'>Refund</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.batches.map((batch) => {
+              const status = getBatchStatus(batch);
+              const original = Number(BigInt(batch.uploadBytesOriginal));
+              const remaining = Number(BigInt(batch.uploadBytesRemaining));
+              const usedPct =
+                original > 0
+                  ? Math.round(((original - remaining) / original) * 100)
+                  : 0;
 
-            return (
-              <tr
-                key={batch.id}
-                className='border-b border-border last:border-0'
-              >
-                <td className='px-4 py-2 font-mono text-xs'>
-                  <Link
-                    href={ROUTES.adminUserCredits(
-                      networkId,
-                      batch.userPublicId,
-                    )}
-                    className='text-blue-500 hover:underline'
-                    title={batch.userPublicId}
-                  >
-                    {batch.userPublicId.slice(0, 12)}…
-                  </Link>
-                </td>
-                {/* Purchasing wallet in full (never truncated) with a copy
-                    button — refunds go back to this exact address. */}
-                <td className='px-4 py-2 font-mono text-xs'>
-                  {batch.fromAddress ? (
-                    <CopiableText
-                      text={batch.fromAddress}
-                      className='whitespace-nowrap'
-                    />
-                  ) : (
-                    <span className='text-muted-foreground'>—</span>
-                  )}
-                </td>
-                {/* Original payment asset. Refunds are always in AI3. */}
-                <td className='px-4 py-2 text-xs'>
-                  {PAYMENT_METHOD_ASSET[batch.paymentMethod]}
-                </td>
-                <td className='px-4 py-2'>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
-                  >
-                    {STATUS_LABEL[status]}
-                  </span>
-                </td>
-                <td className='px-4 py-2 text-xs'>
-                  {formatDate(batch.purchasedAt)}
-                </td>
-                <td className='px-4 py-2 text-xs'>
-                  {formatBytes(original, 1)}
-                </td>
-                <td className='px-4 py-2 text-xs'>
-                  {formatBytes(remaining, 1)}
-                </td>
-                <td className='px-4 py-2'>
-                  <div className='flex items-center gap-2'>
-                    <div className='h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700'>
-                      <div
-                        className='h-full rounded-full bg-blue-500'
-                        style={{ width: `${usedPct}%` }}
-                      />
-                    </div>
-                    <span className='text-xs text-muted-foreground'>
-                      {usedPct}%
-                    </span>
-                  </div>
-                </td>
-                <td className='px-4 py-2 text-xs'>
-                  {batch.expired ? (
-                    <span className='text-red-500'>
-                      Expired {formatDate(batch.expiresAt)}
-                    </span>
-                  ) : (
-                    formatDate(batch.expiresAt)
-                  )}
-                </td>
-                <td className='px-4 py-2 text-xs'>
-                  {batch.refundedAt !== null ? (
-                    <span
-                      className='inline-flex items-center gap-1 text-muted-foreground'
-                      title={batch.refundTxHash ?? undefined}
-                    >
-                      <CheckCircle2 className='h-3 w-3 text-green-500' />
-                      {formatDate(batch.refundedAt)}
-                      {batch.refundTxHash && (
-                        <span className='font-mono'>
-                          · {batch.refundTxHash.slice(0, 10)}…
-                        </span>
+              return (
+                <tr
+                  key={batch.id}
+                  className='border-b border-border last:border-0'
+                >
+                  <td className='px-4 py-2 font-mono text-xs'>
+                    <Link
+                      href={ROUTES.adminUserCredits(
+                        networkId,
+                        batch.userPublicId,
                       )}
+                      className='text-blue-500 hover:underline'
+                      title={batch.userPublicId}
+                    >
+                      {batch.userPublicId.slice(0, 12)}…
+                    </Link>
+                  </td>
+                  {/* Purchasing wallet in full (never truncated) with a copy
+                    button — refunds go back to this exact address. */}
+                  <td className='px-4 py-2 font-mono text-xs'>
+                    {batch.fromAddress ? (
+                      <CopiableText
+                        text={batch.fromAddress}
+                        className='whitespace-nowrap'
+                      />
+                    ) : (
+                      <span className='text-muted-foreground'>—</span>
+                    )}
+                  </td>
+                  {/* Original payment asset. Refunds are always in AI3. */}
+                  <td className='px-4 py-2 text-xs'>
+                    {PAYMENT_METHOD_ASSET[batch.paymentMethod]}
+                  </td>
+                  <td className='px-4 py-2'>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
+                    >
+                      {STATUS_LABEL[status]}
                     </span>
-                  ) : (
-                    <span className='text-muted-foreground'>—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  </td>
+                  <td className='px-4 py-2 text-xs'>
+                    {formatDate(batch.purchasedAt)}
+                  </td>
+                  <td className='px-4 py-2 text-xs'>
+                    {formatBytes(original, 1)}
+                  </td>
+                  <td className='px-4 py-2 text-xs'>
+                    {formatBytes(remaining, 1)}
+                  </td>
+                  <td className='px-4 py-2'>
+                    <div className='flex items-center gap-2'>
+                      <div className='h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700'>
+                        <div
+                          className='h-full rounded-full bg-blue-500'
+                          style={{ width: `${usedPct}%` }}
+                        />
+                      </div>
+                      <span className='text-xs text-muted-foreground'>
+                        {usedPct}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className='px-4 py-2 text-xs'>
+                    {batch.expired ? (
+                      <span className='text-red-500'>
+                        Expired {formatDate(batch.expiresAt)}
+                      </span>
+                    ) : (
+                      formatDate(batch.expiresAt)
+                    )}
+                  </td>
+                  <td className='px-4 py-2 text-xs'>
+                    {batch.refundedAt !== null ? (
+                      <span
+                        className='inline-flex items-center gap-1 text-muted-foreground'
+                        title={batch.refundTxHash ?? undefined}
+                      >
+                        <CheckCircle2 className='h-3 w-3 text-green-500' />
+                        {formatDate(batch.refundedAt)}
+                        {batch.refundTxHash && (
+                          <span className='font-mono'>
+                            · {batch.refundTxHash.slice(0, 10)}…
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className='text-muted-foreground'>—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     )}
   </div>
 );
@@ -476,11 +476,11 @@ export const AdminCredits = () => {
     staleTime: 30_000,
   });
 
-  const { mutate: reprocess, variables: reprocessingId, isPending: isReprocessing } = useMutation<
-    void,
-    Error,
-    string
-  >({
+  const {
+    mutate: reprocess,
+    variables: reprocessingId,
+    isPending: isReprocessing,
+  } = useMutation<void, Error, string>({
     mutationFn: (intentId: string) => api.reprocessIntent(intentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['adminOverCapIntents'] });
@@ -488,10 +488,7 @@ export const AdminCredits = () => {
     },
   });
 
-  const groups = useMemo(
-    () => groupBatchesByAccount(batches),
-    [batches],
-  );
+  const groups = useMemo(() => groupBatchesByAccount(batches), [batches]);
   const awaitingRefund = useMemo(
     () => groups.reduce((s, g) => s + g.refundableCount, 0),
     [groups],
@@ -512,8 +509,8 @@ export const AdminCredits = () => {
         <div>
           <h1 className='text-2xl font-bold'>Purchased Credits</h1>
           <p className='mt-0.5 text-xs text-muted-foreground'>
-            All credit batches across all users, grouped by account. Refunds
-            are processed per account and purchasing wallet.
+            All credit batches across all users, grouped by account. Refunds are
+            processed per account and purchasing wallet.
           </p>
         </div>
         {isLoading && (
@@ -528,7 +525,7 @@ export const AdminCredits = () => {
 
       {/* Economics summary */}
       <div>
-        <h3 className='mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+        <h3 className='mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground'>
           System Economics (expiring ≤ 30 days)
         </h3>
         {economics ? (
@@ -544,7 +541,7 @@ export const AdminCredits = () => {
 
       {/* Usage by account, linking to each account's full report */}
       <div>
-        <h3 className='mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+        <h3 className='mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground'>
           Account Usage
         </h3>
         <AccountUsageList />
@@ -553,7 +550,7 @@ export const AdminCredits = () => {
       {/* OVER_CAP intents */}
       <div>
         <div className='mb-3 flex items-center gap-2'>
-          <h3 className='text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+          <h3 className='text-sm font-medium uppercase tracking-wide text-muted-foreground'>
             Over-Cap Intents
           </h3>
           {overCapIntents.length > 0 && (
@@ -567,8 +564,8 @@ export const AdminCredits = () => {
           Payments confirmed on-chain that could not be converted to credits
           because the account hit the per-account cap. The cap is the server
           setting MAX_CREDITS_PER_USER unless a partner account&apos;s terms
-          override it: click Reprocess once the account has spent enough
-          credits or its cap is raised.
+          override it: click Reprocess once the account has spent enough credits
+          or its cap is raised.
         </p>
         <OverCapPanel
           intents={overCapIntents}
@@ -581,7 +578,7 @@ export const AdminCredits = () => {
       {/* All batches grouped by user */}
       <div>
         <div className='mb-3 flex items-center gap-2'>
-          <h3 className='text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+          <h3 className='text-sm font-medium uppercase tracking-wide text-muted-foreground'>
             All Purchase Batches ({batches.length})
           </h3>
           {awaitingRefund > 0 && (

@@ -21,6 +21,7 @@ import {
   DownloadStatus,
   Intent,
   PaymentMethod,
+  PurchasedCreditKind,
   StoragePrice,
   TouChangeType,
   TouStatus,
@@ -33,9 +34,14 @@ import {
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
+// Every field but freeUploadBytesRemaining is about purchased credits only;
+// free credits are reported apart and never summed with them.
 export type CreditSummaryResponse = {
+  /** Purchased upload bytes left. */
   uploadBytesRemaining: string;
-  /** Sum of upload_bytes_original across all active (non-expired) rows. */
+  /** Free credit upload bytes left (partners only). */
+  freeUploadBytesRemaining: string;
+  /** Sum of upload_bytes_original across active purchased rows. */
   totalPurchasedBytesOriginal: string;
   downloadBytesRemaining: string;
   nextExpiryDate: string | null;
@@ -51,7 +57,13 @@ export type CreditSummaryResponse = {
 export type ExpiringCreditBatch = {
   id: string;
   accountId: string;
-  intentId: string;
+  /** Null for free credits. */
+  intentId: string | null;
+  kind: PurchasedCreditKind;
+  /** Start of the UTC month of monthly free credits, else null. */
+  grantPeriod: string | null;
+  /** Monthly free credits ended by a change to the monthly amount. */
+  supersededAt: string | null;
   uploadBytesOriginal: string;
   uploadBytesRemaining: string;
   downloadBytesOriginal: string;
@@ -61,6 +73,14 @@ export type ExpiringCreditBatch = {
   expired: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+// Wire-format of rows from GET /accounts/admin/:id/free-credits (admin).
+export type AdminFreeCreditBatch = ExpiringCreditBatch & {
+  kind: 'free_one_time' | 'free_monthly';
+  /** Admin publicId, for one-time free credits. */
+  grantedBy: string | null;
+  grantReason: string | null;
 };
 
 // Wire-format of rows from GET /credits/batches/all (admin endpoint).
@@ -601,6 +621,20 @@ export const createApiService = ({
     adminRequest(
       `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/terms-changes`,
     ),
+  /** Admin: an account's free credit batches, newest first. */
+  getAccountFreeCredits: (accountId: string): Promise<AdminFreeCreditBatch[]> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/free-credits`,
+    ),
+  /** Admin: grants a partner account one-time free upload credits. */
+  grantFreeCredits: (
+    accountId: string,
+    grant: { uploadBytes: number; expiresInDays: number; reason: string },
+  ): Promise<AdminFreeCreditBatch> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/free-credits`,
+      { method: 'POST', body: grant },
+    ),
   /** An account's usage over [from, to), for its members and admins. */
   getUsageReport: (
     accountId: string,
@@ -798,6 +832,7 @@ export const createApiService = ({
     terms: {
       maxPurchasedBytes?: number | null;
       creditExpiryDays?: number | null;
+      monthlyFreeUploadBytes?: number;
       reason?: string;
     } = {},
   ): Promise<void> => {

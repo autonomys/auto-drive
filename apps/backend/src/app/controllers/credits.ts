@@ -32,7 +32,7 @@ const serializeBatchWithIntent = (batch: AdminUserCreditBatchRow) => ({
   quotedAi3Shannons: batch.quotedAi3Shannons?.toString() ?? null,
 })
 
-const serializeCredit = (credit: PurchasedCredit) => ({
+export const serializeCredit = <T extends PurchasedCredit>(credit: T) => ({
   ...credit,
   uploadBytesOriginal: credit.uploadBytesOriginal.toString(),
   uploadBytesRemaining: credit.uploadBytesRemaining.toString(),
@@ -67,6 +67,7 @@ creditsController.get(
     const summary = result.value
     res.status(200).json({
       uploadBytesRemaining: summary.uploadBytesRemaining.toString(),
+      freeUploadBytesRemaining: summary.freeUploadBytesRemaining.toString(),
       totalPurchasedBytesOriginal:
         summary.totalPurchasedBytesOriginal.toString(),
       downloadBytesRemaining: summary.downloadBytesRemaining.toString(),

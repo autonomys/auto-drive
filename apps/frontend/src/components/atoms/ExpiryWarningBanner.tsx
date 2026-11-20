@@ -6,10 +6,7 @@ import { useNetwork } from '../../contexts/network';
 import { ExpiringCreditBatch } from '../../services/api';
 import { SessionContext } from 'next-auth/react';
 import { useContext } from 'react';
-import {
-  daysUntilExpiry,
-  sumExpiringUploadBytes,
-} from '../../utils/credits';
+import { daysUntilExpiry, sumExpiringUploadBytes } from '../../utils/credits';
 import { BannerShell } from '../organisms/BannerNotifications/BannerShell';
 
 /**
@@ -23,7 +20,11 @@ export const ExpiryWarningBanner = () => {
 
   const { data: expiringBatches } = useQuery<ExpiringCreditBatch[]>({
     queryKey: ['expiringCreditBatches'],
-    queryFn: () => api.getExpiringCreditBatches(),
+    // Purchased only: a partner's monthly free credits expire every month.
+    queryFn: async () =>
+      (await api.getExpiringCreditBatches()).filter(
+        (batch) => batch.kind === 'purchase',
+      ),
     // Refresh every 5 minutes – expiry warnings don't need to be real-time
     refetchInterval: 5 * 60 * 1000,
     enabled: !!session?.data,
@@ -51,13 +52,16 @@ export const ExpiryWarningBanner = () => {
 
   return (
     <BannerShell criticality={BannerCriticality.Warning}>
-      <h3 className='font-semibold text-sm'>Credits expiring soon!</h3>
+      <h3 className='text-sm font-semibold'>
+        Purchased credits expiring soon!
+      </h3>
       <p className='mt-1 text-sm'>
         {totalMB > 0 ? `${totalMB.toFixed(0)} MiB of` : 'Some of your'}{' '}
         purchased storage credits will expire
         {daysLeft !== null && daysLeft > 0
           ? ` in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
-          : ' today'}. Use them before they expire.
+          : ' today'}
+        . Use them before they expire.
       </p>
     </BannerShell>
   );
