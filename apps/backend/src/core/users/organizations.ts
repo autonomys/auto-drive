@@ -376,6 +376,7 @@ const createApiKey = async (
     logger.info('Organization API key created', {
       organizationId,
       apiKeyId: created.value.id,
+      scopes: created.value.scopes,
       by: executor.publicId,
     })
   }

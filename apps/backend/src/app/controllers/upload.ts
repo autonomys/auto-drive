@@ -1,8 +1,15 @@
 import { json, Router, Request, Response } from 'express'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
+import {
+  handleAuth,
+  requireApiKeyScope,
+} from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
-import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
+import {
+  ApiKeyScope,
+  FolderTreeFolderSchema,
+  uploadOptionsSchema,
+} from '@auto-drive/models'
 import { z } from 'zod'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
@@ -32,6 +39,7 @@ const readJson = (req: Request, res: Response, limit?: string) =>
   })
 
 const uploadController = Router()
+uploadController.use(requireApiKeyScope(ApiKeyScope.Files))
 
 const chunkParser = multer({
   limits: {

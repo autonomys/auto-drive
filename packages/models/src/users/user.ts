@@ -1,5 +1,6 @@
 import { Organization } from "./organization";
 import { AccountInfo } from "./account";
+import { ApiKeyScope } from "./apiKey";
 
 export type OAuthUser = {
   provider: string;
@@ -8,6 +9,7 @@ export type OAuthUser = {
   username?: string;
   avatarUrl?: string;
   apiKeyId?: string;
+  apiKeyScopes?: ApiKeyScope[] | null;
 };
 
 export enum UserRole {
@@ -46,6 +48,8 @@ export type UserWithOrganization = User & {
   organizationId: Organization["id"] | null;
   // The API key that authenticated the request. Absent for session logins.
   apiKeyId?: string;
+  // What that key may be used for. Absent or null for full access.
+  apiKeyScopes?: ApiKeyScope[] | null;
 };
 
 type UnonboardedUserWithOrganization = UnonboardedUser & {

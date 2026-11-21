@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { OrganizationRole } from '@auto-drive/models'
+import { ApiKeyScope, OrganizationRole } from '@auto-drive/models'
 import { handleAuth } from '../../infrastructure/services/auth/express.js'
 import { OrganizationsUseCases } from '../../core/users/organizations.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
@@ -215,15 +215,20 @@ organizationsController.post(
       return
     }
 
-    // Auth validates the name's length and that the expiry is in the future.
+    // Auth validates the name's length, that the expiry is in the future and
+    // that the scopes are neither empty nor repeated. Without scopes the key
+    // has full access.
     const body = z
       .object({
         name: z.string().nullish(),
         expiresAt: z.string().nullish(),
+        scopes: z.array(z.nativeEnum(ApiKeyScope)).nullish(),
       })
       .safeParse(req.body ?? {})
     if (!body.success) {
-      res.status(400).json({ error: 'name and expiresAt must be strings' })
+      res.status(400).json({
+        error: `name and expiresAt must be strings, and scopes a list of: ${Object.values(ApiKeyScope).join(', ')}`,
+      })
       return
     }
 

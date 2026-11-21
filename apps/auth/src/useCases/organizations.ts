@@ -3,6 +3,7 @@ import { v4 } from 'uuid'
 import {
   User,
   ApiKey,
+  ApiKeyScope,
   ApiKeyWithoutSecret,
   Organization,
   OrganizationMembershipChange,
@@ -166,7 +167,11 @@ const listApiKeys = (organizationId: string): Promise<ApiKeyWithoutSecret[]> =>
 
 const createApiKey = async (
   organizationId: string,
-  options: { name: string | null; expiresAt: Date | null },
+  options: {
+    name: string | null
+    expiresAt: Date | null
+    scopes?: ApiKeyScope[] | null
+  },
 ): Promise<ApiKey> => {
   const organization =
     await organizationsRepository.getOrganizationById(organizationId)

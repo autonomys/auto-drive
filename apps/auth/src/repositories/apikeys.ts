@@ -1,5 +1,5 @@
 import { getDatabase } from '../drivers/index.js'
-import { ApiKey } from '@auto-drive/models'
+import { ApiKey, ApiKeyScope } from '@auto-drive/models'
 import { ApiKeyNotFoundError } from '../errors/apikeys.js'
 
 type DBApiKey = {
@@ -11,6 +11,8 @@ type DBApiKey = {
   deleted_at: Date | null
   expires_at: Date | null
   created_at: Date | null
+  // Comma-separated, sorted. NULL for full access.
+  scopes: string | null
 }
 
 const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
@@ -22,6 +24,10 @@ const mapDBApiKeyToApiKey = (dbApiKey: DBApiKey): ApiKey => ({
   deletedAt: dbApiKey.deleted_at,
   expiresAt: dbApiKey.expires_at,
   createdAt: dbApiKey.created_at,
+  scopes:
+    dbApiKey.scopes === null
+      ? null
+      : (dbApiKey.scopes.split(',') as ApiKeyScope[]),
 })
 
 type CreateApiKeyParams = {
@@ -31,6 +37,7 @@ type CreateApiKeyParams = {
   oauthProvider: string
   oauthUserId: string
   expiresAt: Date | null
+  scopes: ApiKeyScope[] | null
 }
 
 const createApiKey = async ({
@@ -40,15 +47,24 @@ const createApiKey = async ({
   oauthProvider,
   oauthUserId,
   expiresAt,
+  scopes,
 }: CreateApiKeyParams): Promise<ApiKey> => {
   const db = await getDatabase()
 
   const result = await db.query<DBApiKey>(
     `INSERT INTO users.api_keys
-       (id, name, secret, oauth_provider, oauth_user_id, expires_at, deleted_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NULL)
+       (id, name, secret, oauth_provider, oauth_user_id, expires_at, scopes, deleted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
      RETURNING *`,
-    [id, name, secret, oauthProvider, oauthUserId, expiresAt],
+    [
+      id,
+      name,
+      secret,
+      oauthProvider,
+      oauthUserId,
+      expiresAt,
+      scopes === null ? null : [...new Set(scopes)].sort().join(','),
+    ],
   )
 
   return mapDBApiKeyToApiKey(result.rows[0])

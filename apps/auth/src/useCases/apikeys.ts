@@ -4,6 +4,7 @@ import {
   User,
   ApiKey,
   ApiKeyName,
+  ApiKeyScope,
   ApiKeyWithoutSecret,
 } from '@auto-drive/models'
 import { createLogger } from '../drivers/logger.js'
@@ -35,6 +36,8 @@ const stripSecret = (apiKey: ApiKey): ApiKeyWithoutSecret => {
 type CreateApiKeyOptions = {
   name?: string | null
   expiresAt?: Date | null
+  // Organisation keys only, checked by the controller. Null for full access.
+  scopes?: ApiKeyScope[] | null
 }
 
 /**
@@ -100,12 +103,14 @@ const createApiKey = async (
     oauthProvider: executor.oauthProvider,
     oauthUserId: executor.oauthUserId,
     expiresAt,
+    scopes: options.scopes ?? null,
   })
 
   logger.info(
-    'API key %s ("%s") created for user %s:%s',
+    'API key %s ("%s", scopes: %s) created for user %s:%s',
     id,
     name ?? '(unnamed)',
+    apiKeyObject.scopes?.join(',') ?? 'all',
     executor.oauthProvider,
     executor.oauthUserId,
   )

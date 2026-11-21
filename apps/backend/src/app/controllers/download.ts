@@ -9,7 +9,9 @@ import {
 import {
   handleAuth,
   handleOptionalAuth,
+  requireApiKeyScope,
 } from '../../infrastructure/services/auth/express.js'
+import { ApiKeyScope } from '@auto-drive/models'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import {
@@ -27,6 +29,7 @@ import { TimeoutError } from '../../shared/utils/timeout.js'
 const logger = createLogger('http:controllers:download')
 
 const downloadController = Router()
+downloadController.use(requireApiKeyScope(ApiKeyScope.Files))
 
 downloadController.get(
   '/:cid/status',
