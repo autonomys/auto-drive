@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import {
   MaybeUser,
+  OAuthUser,
   SERVICE_USER_PROVIDER,
   User,
   UserRole,
@@ -44,7 +45,9 @@ export const handleAuth = async (
 export const handleAuthIgnoreOnboarding = async (
   req: Request,
   res: Response,
-): Promise<(MaybeUser & { apiKeyId?: string }) | null> => {
+): Promise<
+  (MaybeUser & Pick<OAuthUser, 'apiKeyId' | 'apiKeyScopes'>) | null
+> => {
   logger.trace('handleAuthIgnoreOnboarding called')
   const accessToken = req.headers.authorization?.split(' ')[1]
   if (!accessToken) {
@@ -79,7 +82,15 @@ export const handleAuthIgnoreOnboarding = async (
   }
 
   const user = await UsersUseCases.getUserByOAuthUser(oauthUser)
-  return oauthUser.apiKeyId ? { ...user, apiKeyId: oauthUser.apiKeyId } : user
+  // The key and what it may be used for, which GET /@me passes on to the
+  // backend.
+  return oauthUser.apiKeyId
+    ? {
+        ...user,
+        apiKeyId: oauthUser.apiKeyId,
+        apiKeyScopes: oauthUser.apiKeyScopes ?? null,
+      }
+    : user
 }
 
 export const handleAdminAuth = async (

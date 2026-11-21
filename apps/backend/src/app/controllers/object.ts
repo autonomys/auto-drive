@@ -1,8 +1,14 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { ObjectSummary, PaginatedResult, User } from '@auto-drive/models'
+import {
+  ApiKeyScope,
+  ObjectSummary,
+  PaginatedResult,
+  User,
+} from '@auto-drive/models'
 import {
   handleAuth,
+  requireApiKeyScope,
   tryAuthenticate,
 } from '../../infrastructure/services/auth/express.js'
 import {
@@ -24,6 +30,7 @@ import { config } from '../../config.js'
 const logger = createLogger('http:controllers:object')
 
 const objectController = Router()
+objectController.use(requireApiKeyScope(ApiKeyScope.Files))
 
 const withVisibleRowOwners = async (
   page: PaginatedResult<ObjectSummary>,

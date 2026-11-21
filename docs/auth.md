@@ -63,6 +63,7 @@ The service supports multiple authentication providers:
 - Allows users to create API keys for programmatic access
 - Keys are validated against the database
 - Used for server-to-server authentication
+- Organization keys can be limited to scopes (`files`, `end_users`, `usage`), stored in `users.api_keys.scopes` as a sorted, comma-separated list. NULL means full access, which every personal key and every key from before scopes has. The backend enforces them: see [API key scopes](#api-key-scopes)
 
 ### 6. **Custom JWT**
 
@@ -176,11 +177,11 @@ yarn workspace auth lambda:build
 
 #### `DELETE /users/@me/invalidateToken`: Invalidates a refresh token
 
-#### `GET /users/@me`: Gets current user information with organization
+#### `GET /users/@me`: Gets current user information with organization. With an API key, also the key's `apiKeyId` and `apiKeyScopes` (null for full access)
 
 #### `GET /users/@me/apiKeys`: Lists user's API keys (without secrets)
 
-#### `POST /users/@me/apiKeys/create`: Creates a new API key
+#### `POST /users/@me/apiKeys/create`: Creates a new API key (`{ name?, expiresAt? }`). Personal keys have full access: a `scopes` attribute is refused with 400
 
 #### `DELETE /users/@me/apiKeys/:id`: Deletes an API key
 
@@ -214,11 +215,31 @@ The endpoints below accept only the backend's service secret (`API_SECRET`), nev
 
 An organization's API keys belong to its service user, so they keep working whoever leaves the organization. The backend decides who may manage them, and these endpoints take no `actor`.
 
-#### `GET /organizations/:organizationId/apiKeys`: Lists the organization's API keys (without secrets)
+#### `GET /organizations/:organizationId/apiKeys`: Lists the organization's API keys (without secrets), each with its `scopes` (null for full access)
 
-#### `POST /organizations/:organizationId/apiKeys`: Creates an API key (`{ name?, expiresAt? }`) and returns it with its secret. An organization created before service users gets its service user here. 404 for an unknown organization, 409 for an archived one
+#### `POST /organizations/:organizationId/apiKeys`: Creates an API key (`{ name?, expiresAt?, scopes? }`) and returns it with its secret. `scopes` is a non-empty list of distinct scopes out of `files`, `end_users` and `usage`; omitted or null gives full access. An organization created before service users gets its service user here. 400 for invalid scopes, 404 for an unknown organization, 409 for an archived one
 
 #### `DELETE /organizations/:organizationId/apiKeys/:apiKeyId`: Revokes one of the organization's API keys. 404 for any other key
+
+### API key scopes
+
+An organization key with scopes can be used only on the backend routes that declare one of its scopes. Every other route that needs authentication answers it with 403, so a route without a declared scope is closed to it. Sessions and keys with full access are not affected. Public routes stay public: there, a key that may not be used counts as no credential.
+
+| Scope | Backend routes |
+| --- | --- |
+| `files` | `/uploads`, `/objects`, `/downloads` and `/s3` (S3 answers 403 `AccessDenied`) |
+| `usage` | `GET /accounts/@me`, `GET /accounts/:accountId/usage-report` and `GET /accounts/:accountId/usage-report/interactions` |
+| `end_users` | None yet |
+
+The backend's organization API key routes refuse every API key, scoped or not.
+
+Production applies the column to Aurora DSQL as one statement:
+
+```sql
+ALTER TABLE users.api_keys ADD COLUMN scopes text;
+```
+
+Deploy auth before the backend: an auth service from before scopes ignores `scopes` and would create a key with full access.
 
 ## Security Considerations
 

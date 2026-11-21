@@ -24,10 +24,13 @@ import {
   stashContentEncoding,
 } from './s3.js'
 import { handleS3Auth } from './auth.js'
+import { requireApiKeyScope } from '../../../infrastructure/services/auth/express.js'
+import { ApiKeyScope } from '@auto-drive/models'
 import { config } from '../../../config.js'
 import { requestTrace } from '../../middlewares/requestTrace.js'
 
 const s3Controller = Router()
+s3Controller.use(requireApiKeyScope(ApiKeyScope.Files))
 
 const logger = createLogger('http:controllers:s3')
 

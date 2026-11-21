@@ -155,7 +155,7 @@ userController.post(
       return
     }
 
-    const parsed = parseCreateApiKeyBody(req.body)
+    const parsed = parseCreateApiKeyBody(req.body, { organization: false })
     if ('error' in parsed) {
       res.status(400).json({ error: parsed.error })
       return

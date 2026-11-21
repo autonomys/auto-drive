@@ -1,5 +1,5 @@
-import { Request, Response } from 'express'
-import { UserWithOrganization } from '@auto-drive/models'
+import { NextFunction, Request, Response } from 'express'
+import { ApiKeyScope, UserWithOrganization } from '@auto-drive/models'
 import { AuthManager, classifyAuthFailure } from './index.js'
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
@@ -19,6 +19,37 @@ const readCredentials = (
   return { accessToken, provider }
 }
 
+// The scope each request's route declares. Keyed by the request, so a client
+// cannot set it, and collected with it.
+const declaredScopes = new WeakMap<Request, ApiKeyScope>()
+
+/**
+ * Declares the scope an API key needs for the routes behind it. Keys limited to
+ * scopes reach only routes that declare one of theirs; routes that declare none
+ * refuse them. Sessions and keys with full access are not affected.
+ */
+export const requireApiKeyScope =
+  (scope: ApiKeyScope) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    declaredScopes.set(req, scope)
+    next()
+  }
+
+/** Why the user's API key may not be used for this request, or null. */
+export const apiKeyScopeRefusal = (
+  user: UserWithOrganization,
+  req: Request,
+): string | null => {
+  const scopes = user.apiKeyScopes
+  if (!scopes) return null
+
+  const required = declaredScopes.get(req)
+  if (required && scopes.includes(required)) return null
+  return required
+    ? `This API key needs the ${required} scope (it has: ${scopes.join(', ')})`
+    : `Not available to API keys limited to scopes (this key has: ${scopes.join(', ')})`
+}
+
 /**
  * Resolve the request's credentials to a user WITHOUT writing a response.
  *
@@ -35,10 +66,12 @@ export const tryAuthenticate = async (
   if (!credentials) return null
 
   try {
-    return await AuthManager.getUserFromAccessToken(
+    const user = await AuthManager.getUserFromAccessToken(
       credentials.provider,
       credentials.accessToken,
     )
+    // A key that may not be used here is no credential either.
+    return user && apiKeyScopeRefusal(user, req) ? null : user
   } catch (error) {
     logger.warn(error, 'Token lookup failed')
     return null
@@ -90,6 +123,12 @@ export const handleAuth = async (
     res.status(401).json({
       error: 'Failed to authenticate user',
     })
+    return null
+  }
+
+  const refusal = apiKeyScopeRefusal(user, req)
+  if (refusal) {
+    res.status(403).json({ error: refusal })
     return null
   }
 

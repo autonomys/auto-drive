@@ -4,6 +4,7 @@ import { objects } from './objects.js'
 import { accounts } from './accounts.js'
 import { uploads } from './uploads.js'
 import { intents } from './intents.js'
+import { organizations } from './organizations.js'
 
 export const swagger = {
   openapi: '3.0.0',
@@ -31,6 +32,16 @@ X-Auth-Provider: apikey
 \`\`\`
 
 API keys should be kept secure and not shared with unauthorized parties.
+
+## API key scopes
+
+An organization API key can be limited to scopes when it is created (\`POST /organizations/{organizationId}/api-keys\`). A key with scopes can be used only on the routes of its scopes; every other route that needs authentication answers it with 403. A key without scopes, and every personal key, has full access.
+
+| Scope | Routes |
+| --- | --- |
+| \`files\` | \`/uploads\`, \`/objects\`, \`/downloads\` and \`/s3\`: everything the Auto Drive SDK needs to upload, download and list files |
+| \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
+| \`end_users\` | None yet |
 
 ## Purchasing Storage Credits (Pay with AI3)
 
@@ -73,6 +84,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
     ...objects.paths,
     ...downloads.paths,
     ...intents.paths,
+    ...organizations.paths,
   },
   security: [
     {
@@ -88,6 +100,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
       ...accounts.components.schemas,
       ...downloads.components.schemas,
       ...intents.components.schemas,
+      ...organizations.components.schemas,
     },
     securitySchemes: {
       apiKey: {
