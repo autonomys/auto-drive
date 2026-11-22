@@ -788,6 +788,8 @@ export const config = {
     downloadInactivityTimeoutMs: Number(
       env('DOWNLOAD_INACTIVITY_TIMEOUT_MS', '300000'),
     ),
+    // The most end users a partner organisation may have enrolled at once.
+    partnerMaxEndUsers: positiveIntEnv('PARTNER_MAX_END_USERS', 10000),
   },
   featureFlags: {
     flags: {

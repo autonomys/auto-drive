@@ -49,7 +49,7 @@ const requireAdmin = (executor: User): Result<void, ForbiddenError> =>
     ? ok()
     : err(new ForbiddenError('User does not have admin privileges'))
 
-const getPartnerAccount = async (
+export const getPartnerAccount = async (
   organizationId: string,
 ): Promise<Result<Account, NotFoundError>> => {
   const account = await accountsRepository.getByOrganizationId(organizationId)

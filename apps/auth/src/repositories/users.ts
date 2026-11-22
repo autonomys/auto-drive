@@ -48,6 +48,19 @@ const getUserByOAuthInformation = async (
   return user.rows.at(0)
 }
 
+const getUsersByOAuthUserIds = async (
+  oauth_provider: string,
+  oauth_user_ids: string[],
+): Promise<User[]> => {
+  const db = await getDatabase()
+  const users = await db.query<User>(
+    'SELECT * FROM users.users WHERE oauth_provider = $1 AND oauth_user_id = ANY($2::text[])',
+    [oauth_provider, oauth_user_ids],
+  )
+
+  return users.rows
+}
+
 const createUser = async (
   oauth_provider: string,
   oauth_user_id: string,
@@ -173,6 +186,7 @@ export const usersRepository = {
   getUsersByPublicIds,
   createUser,
   getUserByOAuthInformation,
+  getUsersByOAuthUserIds,
   searchUsersByPublicId,
   updateRole,
   getAllUsers,

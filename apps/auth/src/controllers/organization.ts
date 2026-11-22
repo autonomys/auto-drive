@@ -22,7 +22,8 @@ const handleError = (error: unknown, res: Response, message: string) => {
   res.status(500).json({ error: message })
 }
 
-// Every write below records the Auto Drive admin who made it.
+// Every membership write below records who made it: the Auto Drive admin, or
+// for end users the organisation admin or organisation API key.
 const getActor = (req: Request, res: Response): string | null => {
   const actor = req.body?.actor
   if (typeof actor !== 'string' || !actor) {
@@ -187,6 +188,71 @@ organizationController.delete(
       )
     } catch (error) {
       handleError(error, res, 'Failed to remove member')
+    }
+  },
+)
+
+// A partner's end users. The backend decides who may manage them.
+organizationController.post(
+  '/:organizationId/end-users',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+
+    const { addresses } = req.body
+    if (
+      !Array.isArray(addresses) ||
+      addresses.length < 1 ||
+      addresses.length > 100 ||
+      !addresses.every((address) => typeof address === 'string')
+    ) {
+      res
+        .status(400)
+        .json({ error: 'addresses must be an array of 1 to 100 strings' })
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.enrollEndUsers({
+          organizationId: req.params.organizationId,
+          addresses,
+          actor,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to enroll end users')
+    }
+  },
+)
+
+organizationController.delete(
+  '/:organizationId/end-users/:publicId',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.removeMember({
+          organizationId: req.params.organizationId,
+          publicId: req.params.publicId,
+          actor,
+          endUser: true,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to remove end user')
     }
   },
 )

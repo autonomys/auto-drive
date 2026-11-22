@@ -422,6 +422,27 @@ const removeOrganizationMember = (
     { method: 'DELETE', body: { actor } },
   )
 
+// Returns each address's public ID, in request order.
+const enrollOrganizationEndUsers = (
+  organizationId: string,
+  addresses: string[],
+  actor: string,
+) =>
+  organizationRequest<Array<{ address: string; publicId: string }>>(
+    `/${encodeURIComponent(organizationId)}/end-users`,
+    { method: 'POST', body: { addresses, actor } },
+  )
+
+const removeOrganizationEndUser = (
+  organizationId: string,
+  publicId: string,
+  actor: string,
+) =>
+  organizationRequest<{ organizationId: string }>(
+    `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(publicId)}`,
+    { method: 'DELETE', body: { actor } },
+  )
+
 const getOrganizationApiKeys = (organizationId: string) =>
   organizationRequest<ApiKeyWithoutSecret[]>(
     `/${encodeURIComponent(organizationId)}/apiKeys`,
@@ -454,6 +475,8 @@ export const AuthManager = {
   addOrganizationMember,
   changeOrganizationMemberRole,
   removeOrganizationMember,
+  enrollOrganizationEndUsers,
+  removeOrganizationEndUser,
   getUserFromAccessToken,
   getUserFromPublicId,
   getUsersFromPublicIds,

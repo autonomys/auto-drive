@@ -197,21 +197,21 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user
+#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user and its end users
 
-The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each membership write takes the acting admin's public ID as `actor` and is recorded in `users.organization_membership_changes`.
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each membership write takes the public ID of whoever made it as `actor` (the Auto Drive admin, or for end users the organization admin or the organization's service user) and is recorded in `users.organization_membership_changes`.
 
 #### `POST /organizations`: Creates an organization (`{ name }`) and its service user, the user that owns the organization's API keys
 
-#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user) and archive date (`{ ids }`, up to 100)
+#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user or end users) and archive date (`{ ids }`, up to 100)
 
 #### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
 
-#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`). The user leaves their current organization, which is archived if no members remain
+#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`, `role` is `admin` or `member`). The user leaves their current organization, which is archived if no members remain. 409 for an end user
 
-#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`)
+#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`, `role` is `admin` or `member`). 409 for an end user
 
-#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one
+#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one. 409 for an end user, who is removed through the end user endpoint
 
 An organization's API keys belong to its service user, so they keep working whoever leaves the organization. The backend decides who may manage them, and these endpoints take no `actor`.
 
@@ -221,6 +221,23 @@ An organization's API keys belong to its service user, so they keep working whoe
 
 #### `DELETE /organizations/:organizationId/apiKeys/:apiKeyId`: Revokes one of the organization's API keys. 404 for any other key
 
+### End users
+
+End users are a partner organization's customers, who never use Auto Drive themselves. Each is a wallet user (`web3-wallet`, stored under the EIP-55 checksummed address, as wallet sign-in finds it) with role `end_user` in the partner's organization. Only enrollment gives that role: `admin` and `member` are the only roles the member endpoints accept, and they refuse to move an end user or change their role. End users own the files they upload and are charged to the organization's account, but are not listed as members or counted in member counts. The backend decides who may manage them (`/organizations/:organizationId/end-users`) and keeps what the partner gave for each one.
+
+#### `POST /organizations/:organizationId/end-users`: Enrolls end users (`{ addresses, actor }`, 1 to 100 addresses) in one transaction, all or none, and returns `[{ address, publicId }]` in request order, each address checksummed. Each user is created onboarded and belongs to this organization only. An address already enrolled in this organization is returned as it is, so a retry is safe. 400 for an invalid or repeated address (mixed case must be a valid checksum), 404 for an unknown organization, 409 for an archived one or for an address that already has any other user
+
+#### `DELETE /organizations/:organizationId/end-users/:publicId`: Removes an end user (`{ actor }`), who gets a new personal organization of their own (they had none before). Their files stay theirs. 404 if the user is not an end user of this organization
+
+Production applies the role to Aurora DSQL as two statements, each in its own transaction:
+
+```sql
+ALTER TABLE users.users_organizations DROP CONSTRAINT users_organizations_role_check;
+ALTER TABLE users.users_organizations ADD CONSTRAINT users_organizations_role_check CHECK (role IN ('admin', 'member', 'end_user')) NOT VALID;
+```
+
+Deploy auth, with the constraint, before the backend's end user routes are used.
+
 ### API key scopes
 
 An organization key with scopes can be used only on the backend routes that declare one of its scopes. Every other route that needs authentication answers it with 403, so a route without a declared scope is closed to it. Sessions and keys with full access are not affected. Public routes stay public: there, a key that may not be used counts as no credential.
@@ -229,7 +246,7 @@ An organization key with scopes can be used only on the backend routes that decl
 | --- | --- |
 | `files` | `/uploads`, `/objects`, `/downloads` and `/s3` (S3 answers 403 `AccessDenied`) |
 | `usage` | `GET /accounts/@me`, `GET /accounts/:accountId/usage-report` and `GET /accounts/:accountId/usage-report/interactions` |
-| `end_users` | None yet |
+| `end_users` | `POST`, `GET` and `DELETE` under `/organizations/:organizationId/end-users` |
 
 The backend's organization API key routes refuse every API key, scoped or not.
 

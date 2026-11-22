@@ -41,7 +41,7 @@ An organization API key can be limited to scopes when it is created (\`POST /org
 | --- | --- |
 | \`files\` | \`/uploads\`, \`/objects\`, \`/downloads\` and \`/s3\`: everything the Auto Drive SDK needs to upload, download and list files |
 | \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
-| \`end_users\` | None yet |
+| \`end_users\` | \`POST\`, \`GET\` and \`DELETE\` under \`/organizations/{organizationId}/end-users\`: enroll, list and remove the organization's end users |
 
 ## Purchasing Storage Credits (Pay with AI3)
 

@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { SERVICE_USER_PROVIDER } from '@auto-drive/models'
+import { OrganizationRole, SERVICE_USER_PROVIDER } from '@auto-drive/models'
 import { getDatabase } from '../drivers/pg.js'
 import { createLogger } from '../drivers/logger.js'
 
@@ -82,7 +82,8 @@ const unarchive = async (
   return result.rows[0] ?? null
 }
 
-// Member counts leave out the service user, as getOrganizationMemberships does.
+// Member counts leave out the service user and end users, as
+// getOrganizationMemberships does.
 const getOrganizationSummaries = async (
   ids: string[],
 ): Promise<DBOrganizationSummary[]> => {
@@ -95,9 +96,10 @@ const getOrganizationSummaries = async (
      FROM users.organizations o
      LEFT JOIN users.users_organizations m
        ON m.organization_id = o.id AND m.oauth_provider <> $2
+         AND m.role IS DISTINCT FROM $3
      WHERE o.id = ANY($1::text[])
      GROUP BY o.id, o.name, o.archived_at`,
-    [ids, SERVICE_USER_PROVIDER],
+    [ids, SERVICE_USER_PROVIDER, OrganizationRole.EndUser],
   )
   return result.rows
 }

@@ -17,15 +17,17 @@ export const organizationRole = (
 ): OrganizationRole => member.role ?? OrganizationRole.Admin
 
 // The people in an organisation: its service user, which only holds its API
-// keys, is left out.
+// keys, and its end users, who are its customers, are left out.
 const getOrganizationMemberships = async (
   organizationId: string,
 ): Promise<DBOrganizationMember[]> => {
   const db = await getDatabase()
   return db
     .query<DBOrganizationMember>(
-      'SELECT * FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider <> $2',
-      [organizationId, SERVICE_USER_PROVIDER],
+      `SELECT * FROM users.users_organizations
+       WHERE organization_id = $1 AND oauth_provider <> $2
+         AND role IS DISTINCT FROM $3`,
+      [organizationId, SERVICE_USER_PROVIDER, OrganizationRole.EndUser],
     )
     .then((result) => result.rows)
 }
@@ -99,33 +101,33 @@ const getOrganizationMembershipsByUsers = async (
   return result.rows
 }
 
-// Returns whether the user was a member.
+// Returns the removed membership, or null if the user was not a member.
 const removeMemberFromOrganization = async (
   organizationId: string,
   oauthProvider: string,
   oauthUserId: string,
   db?: pg.Client,
-): Promise<boolean> => {
+): Promise<DBOrganizationMember | null> => {
   const client = db ?? (await getDatabase())
-  const result = await client.query(
-    'DELETE FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3',
+  const result = await client.query<DBOrganizationMember>(
+    'DELETE FROM users.users_organizations WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3 RETURNING *',
     [organizationId, oauthProvider, oauthUserId],
   )
-  return (result.rowCount ?? 0) > 0
+  return result.rows[0] ?? null
 }
 
-// Returns the organisations the user was removed from.
+// Returns the memberships the user was removed from.
 const removeUserMemberships = async (
   oauthProvider: string,
   oauthUserId: string,
   db?: pg.Client,
-): Promise<string[]> => {
+): Promise<DBOrganizationMember[]> => {
   const client = db ?? (await getDatabase())
-  const result = await client.query<{ organization_id: string }>(
-    'DELETE FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2 RETURNING organization_id',
+  const result = await client.query<DBOrganizationMember>(
+    'DELETE FROM users.users_organizations WHERE oauth_provider = $1 AND oauth_user_id = $2 RETURNING *',
     [oauthProvider, oauthUserId],
   )
-  return result.rows.map((row) => row.organization_id)
+  return result.rows
 }
 
 export const organizationMembersRepository = {
