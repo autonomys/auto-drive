@@ -63,3 +63,56 @@ export type OrganizationMembershipChange = {
   actor: string;
   createdAt: string;
 };
+
+/**
+ * An offer to join a partner organisation. Organisation admins invite by
+ * public ID; the user joins only by accepting it.
+ */
+export type OrganizationInvitation = {
+  id: string;
+  organizationId: string;
+  publicId: string;
+  role: OrganizationRole;
+  // Public ID of who sent it.
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/** An invitation as the invited user sees it. */
+export type ReceivedOrganizationInvitation = {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  role: OrganizationRole;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/**
+ * A partner organisation as its members see it. Byte amounts are decimal
+ * strings.
+ */
+export type OrganizationOverview = {
+  id: string;
+  name: string;
+  accountId: string;
+  // The caller's role, null for an Auto Drive admin who is not a member.
+  viewerRole: OrganizationRole | null;
+  // Whether the caller may invite, remove members and change roles.
+  canManageMembers: boolean;
+  // By public ID only: members don't see each other's sign-in names.
+  members: OrganizationMember[];
+  credits: {
+    purchasedBytesRemaining: string;
+    // Soonest expiry of the purchased credits left, or null when none.
+    purchasedNextExpiry: string | null;
+    freeCreditBytesRemaining: string;
+    // Issued at the start of each UTC month; 0 = none.
+    monthlyFreeUploadBytes: string;
+    // Most purchased credits the account may hold at once.
+    maxPurchasedBytes: string;
+    // Days purchased credits last.
+    creditExpiryDays: number;
+  };
+};

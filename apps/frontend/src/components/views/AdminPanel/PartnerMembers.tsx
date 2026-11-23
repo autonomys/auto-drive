@@ -26,6 +26,7 @@ import {
 } from '@/components/molecules/Table/TableBody';
 import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatDate } from '@/utils/time';
+import { PendingInvitations } from '@/components/views/Organization/PendingInvitations';
 
 const ROLE_LABEL: Record<OrganizationRole, string> = {
   [OrganizationRole.Admin]: 'Organization admin',
@@ -144,9 +145,10 @@ export const PartnerMembers = ({
           Members of {organization.name}
         </h2>
         <p className='mb-4 text-sm text-gray-500'>
-          Adding a user moves them out of their personal organization. Their
-          earlier usage stays on their personal account, and removing them
-          returns them to it.
+          Adding a user here moves them at once, out of their personal
+          organization. Their earlier usage stays on their personal account, and
+          removing them returns them to it. The organization&apos;s own admins
+          invite users instead, who join on accepting.
         </p>
 
         <form
@@ -257,6 +259,13 @@ export const PartnerMembers = ({
             )}
           </TableBody>
         </Table>
+
+        <div className='mt-6'>
+          <PendingInvitations
+            organizationId={organization.id}
+            queryKey={['adminOrganizationInvitations', organization.id]}
+          />
+        </div>
       </div>
 
       <div className='rounded-lg border border-gray-200 bg-background p-6'>

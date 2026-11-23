@@ -11,6 +11,8 @@ import {
   User,
   UserRole,
   UserWithOrganization,
+  SERVICE_USER_PROVIDER,
+  deriveUserPublicId,
 } from '@auto-drive/models'
 import { err, ok, Result } from 'neverthrow'
 import { formatUnits } from 'viem'
@@ -105,14 +107,39 @@ const namesOrNone = async <T>(
   }
 }
 
-const getKeyNames = async (
-  ids: string[],
-): Promise<Map<string, { name: string | null; deleted: boolean }>> => {
+type KeyName = {
+  name: string | null
+  deleted: boolean
+  owner: UsageByApiKey['owner']
+  ownerPublicId: string | null
+}
+
+// A key belongs to the organisation when its service user owns it, else to
+// the member who made it, identified by public ID (not their sign-in name).
+const getKeyNames = async (ids: string[]): Promise<Map<string, KeyName>> => {
   const keys = await namesOrNone('API key names', () =>
     AuthManager.getApiKeyNames([...new Set(ids)]),
   )
   return new Map(
-    keys.map((key) => [key.id, { name: key.name, deleted: !!key.deletedAt }]),
+    keys.map((key) => {
+      const owner: KeyName['owner'] = !key.oauthProvider
+        ? null
+        : key.oauthProvider === SERVICE_USER_PROVIDER
+          ? 'organization'
+          : 'member'
+      return [
+        key.id,
+        {
+          name: key.name,
+          deleted: !!key.deletedAt,
+          owner,
+          ownerPublicId:
+            owner === 'member' && key.oauthProvider && key.oauthUserId
+              ? deriveUserPublicId(key.oauthProvider, key.oauthUserId)
+              : null,
+        },
+      ]
+    }),
   )
 }
 
@@ -147,6 +174,8 @@ const byApiKey = async (
       kind: kindOf(bucket[0]),
       apiKeyId,
       name: key?.name ?? null,
+      owner: key?.owner ?? null,
+      ownerPublicId: key?.ownerPublicId ?? null,
       deleted: key?.deleted ?? false,
       uploadCount: uploads.reduce((total, g) => total + g.count, 0),
       uploadBytes: sum(uploads.map((g) => g.bytes)),
@@ -487,6 +516,8 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           'ai3_value',
           'download_count',
           'download_bytes',
+          'owner',
+          'owner_public_id',
         ],
         report.apiKeys.map((key) => [
           key.kind,
@@ -500,6 +531,8 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           ai3(key.ai3Value),
           key.downloadCount,
           key.downloadBytes,
+          key.owner,
+          key.ownerPublicId,
         ]),
       )
     case 'customerReferences':

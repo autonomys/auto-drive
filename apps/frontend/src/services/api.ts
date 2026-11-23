@@ -8,10 +8,15 @@ import {
   AdminAccountDetails,
   ApiKey,
   CreateApiKeyInput,
+  ObjectSummary,
   OrganizationApiKeys,
+  OrganizationInvitation,
   OrganizationMembershipChange,
+  OrganizationOverview,
   OrganizationRole,
+  PaginatedResult,
   PartnerOrganization,
+  ReceivedOrganizationInvitation,
   Banner,
   BannerCriticality,
   BannerInteractionType,
@@ -591,6 +596,68 @@ export const createApiService = ({
   ): Promise<OrganizationMembershipChange[]> =>
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/membership-changes`,
+    ),
+  /** A partner organization as its members see it. */
+  getOrganizationOverview: (
+    organizationId: string,
+  ): Promise<OrganizationOverview> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/overview`,
+    ),
+  /** Files uploaded with the organization's API keys, newest first. */
+  getOrganizationFiles: (
+    organizationId: string,
+    limit: number,
+    offset: number,
+  ): Promise<PaginatedResult<ObjectSummary>> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/files?${new URLSearchParams({ limit: String(limit), offset: String(offset) })}`,
+    ),
+  /** Organization admins: pending invitations, newest first. */
+  getOrganizationInvitations: (
+    organizationId: string,
+  ): Promise<OrganizationInvitation[]> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations`,
+    ),
+  /** Organization admins: invites a user, who joins once they accept. */
+  inviteOrganizationMember: (
+    organizationId: string,
+    publicId: string,
+    role: OrganizationRole,
+  ): Promise<OrganizationInvitation> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations`,
+      { method: 'POST', body: { publicId, role } },
+    ),
+  revokeOrganizationInvitation: (
+    organizationId: string,
+    invitationId: string,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations/${encodeURIComponent(invitationId)}`,
+      { method: 'DELETE' },
+    ),
+  /** The signed-in user's invitations to join organizations. */
+  getReceivedInvitations: (): Promise<ReceivedOrganizationInvitation[]> =>
+    adminRequest(`${apiBaseUrl}/organizations/invitations/received`),
+  /**
+   * Joins the organization. Without `allowUnusedCredits`, refused with code
+   * UNUSED_PURCHASED_CREDITS if the user's purchased credits would be left
+   * behind.
+   */
+  acceptInvitation: (
+    invitationId: string,
+    allowUnusedCredits = false,
+  ): Promise<{ organizationId: string }> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/invitations/${encodeURIComponent(invitationId)}/accept`,
+      { method: 'POST', body: { allowUnusedCredits } },
+    ),
+  declineInvitation: (invitationId: string): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/invitations/${encodeURIComponent(invitationId)}/decline`,
+      { method: 'POST' },
     ),
   /** A partner organization's API keys, for its members and admins. */
   getOrganizationApiKeys: (

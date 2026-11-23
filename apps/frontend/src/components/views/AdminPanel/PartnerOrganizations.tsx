@@ -75,8 +75,8 @@ export const PartnerOrganizations = () => {
           Partner Organizations
         </h1>
         <p className='mb-4 text-sm text-gray-500'>
-          Organizations whose members share one partner account. Open an account
-          to manage its members.
+          Organizations whose members share one partner account. Open one to
+          manage its members, terms and free credits.
         </p>
 
         <form
@@ -125,7 +125,15 @@ export const PartnerOrganizations = () => {
               {partners?.map((partner) => (
                 <TableBodyRow key={partner.id}>
                   <TableBodyCell>
-                    {partner.name}
+                    <Link
+                      href={ROUTES.adminOrganization(
+                        network.id,
+                        partner.accountId,
+                      )}
+                      className='font-medium text-primary hover:underline'
+                    >
+                      {partner.name}
+                    </Link>
                     {partner.archivedAt && (
                       <span className='ml-2 text-xs text-gray-500'>
                         archived {formatDate(partner.archivedAt)}
@@ -140,15 +148,10 @@ export const PartnerOrganizations = () => {
                     />
                   </TableBodyCell>
                   <TableBodyCell>
-                    <Link
-                      href={ROUTES.adminOrganization(
-                        network.id,
-                        partner.accountId,
-                      )}
-                      className='font-mono text-sm text-primary hover:underline'
-                    >
-                      {partner.accountId}
-                    </Link>
+                    <CopiableText
+                      text={partner.accountId}
+                      className='break-all font-mono text-sm'
+                    />
                   </TableBodyCell>
                 </TableBodyRow>
               ))}

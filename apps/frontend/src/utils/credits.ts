@@ -4,6 +4,7 @@
  */
 
 import {
+  AccountInfo,
   PaymentMethod,
   PurchasedCreditKind,
   USD_RATE_SCALE,
@@ -92,6 +93,23 @@ export const daysUntilExpiry = (expiresAt: Date | null): number | null => {
     0,
     Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
   );
+};
+
+/**
+ * Purchased upload bytes left. The credits summary is behind the buyCredits
+ * flag, so a user without it has none. A partner has no free storage (its
+ * upload limit is 0), so its balance less its free credits is what it bought.
+ */
+export const purchasedUploadBytesLeft = (
+  summary: { uploadBytesRemaining: string } | null,
+  account: Pick<
+    AccountInfo,
+    'isPartner' | 'pendingUploadCredits' | 'freeUploadCredits'
+  > | null,
+): number => {
+  if (summary) return Number(summary.uploadBytesRemaining);
+  if (!account?.isPartner) return 0;
+  return Math.max(0, account.pendingUploadCredits - account.freeUploadCredits);
 };
 
 /**

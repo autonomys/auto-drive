@@ -19,9 +19,11 @@ import {
   Button,
   EXTERNAL_ROUTES,
   NetworkId,
+  ROUTES,
 } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
 import { SIDEBAR_DEFINITION } from './items';
@@ -30,6 +32,9 @@ import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
 import { useSearchParams } from 'next/navigation';
 import { CALLBACK_URL_PARAM, sanitizeCallbackUrl } from '@/utils/callbackUrl';
+import { purchasedUploadBytesLeft } from '@/utils/credits';
+
+dayjs.extend(utc);
 
 export type SideNavbarProps = {
   networkId: NetworkId;
@@ -62,6 +67,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     if (callbackUrl && loggedOut) setIsAuthModalOpen(true);
   }, [callbackUrl, loggedOut]);
 
+  // A partner's monthly free credits are issued at the start of each UTC
+  // month, which is not local midnight.
+  const freeCreditsIssueDate = useMemo(
+    () => dayjs.utc().add(1, 'month').startOf('month').toDate(),
+    [],
+  );
+
   const renewalDate = useMemo(() => {
     const date = dayjs().add(1, 'month').startOf('month');
     return date.toDate();
@@ -71,13 +83,11 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     if (e.onlyAdmin) {
       return isAdmin;
     }
+    if (e.onlyPartner) {
+      return isLoggedIn && !!account?.isPartner;
+    }
     return true;
-  }).map((section) => ({
-    ...section,
-    items: section.items.filter(
-      (item) => !item.onlyPartner || account?.isPartner,
-    ),
-  }));
+  });
 
   // Pay with AI3 is gated solely by the `buyCredits` feature flag — it is
   // available to both OneOff and Monthly accounts. The flag itself enforces
@@ -85,17 +95,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   // (see core/featureFlags). Account model is not part of the gate.
   const hasBuyCreditsFeature = features.buyCredits && isLoggedIn;
 
-  // creditSummary is always loaded for any logged-in user (see SessionEnsurer),
-  // so we can safely derive purchasedBytesRemaining from it regardless of the
-  // feature flag.  This is needed to separate free vs. purchased bytes in the
-  // progress bar even when the buy-credits UI is hidden.
-  const purchasedBytesRemaining = useMemo(() => {
-    if (!creditSummary) return 0;
-    // uploadBytesRemaining is a decimal-string bigint from the API, purchased
-    // credits only. Max safe value is 100 GiB which is well within Number's
-    // safe range.
-    return Number(creditSummary.uploadBytesRemaining);
-  }, [creditSummary]);
+  // Separates free from purchased bytes even when the buy-credits UI is
+  // hidden. Without the flag there is no credit summary, and only a partner's
+  // purchased bytes can be told apart.
+  const purchasedBytesRemaining = useMemo(
+    () => purchasedUploadBytesLeft(creditSummary, account),
+    [creditSummary, account],
+  );
 
   // Free credits granted to a partner. Read from the account, so they show
   // whether or not the buy-credits feature is on.
@@ -119,13 +125,17 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     purchasedBytesRemaining -
     freeCreditBytesRemaining;
 
+  // A partner's credits are its only way to upload, so they show whether or
+  // not this member can buy more.
+  const showPurchasedCredits = hasBuyCreditsFeature || !!account?.isPartner;
+
   const nextExpiryDate = useMemo(() => {
-    if (!hasBuyCreditsFeature || !creditSummary?.nextExpiryDate) return null;
+    if (!showPurchasedCredits || !creditSummary?.nextExpiryDate) return null;
     return new Date(creditSummary.nextExpiryDate);
-  }, [hasBuyCreditsFeature, creditSummary]);
+  }, [showPurchasedCredits, creditSummary]);
 
   const creditHistoryHref = hasBuyCreditsFeature
-    ? `/${networkId}/drive/credits`
+    ? ROUTES.credits(networkId)
     : undefined;
 
   return (
@@ -162,11 +172,14 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={freeRemaining}
+            isPartner={!!account?.isPartner}
+            monthlyFreeUploadBytes={account?.monthlyFreeUploadBytes ?? 0}
+            freeCreditsIssueDate={freeCreditsIssueDate}
             freeCreditBytesRemaining={freeCreditBytesRemaining}
             purchasedBytesRemaining={
-              hasBuyCreditsFeature ? purchasedBytesRemaining : 0
+              showPurchasedCredits ? purchasedBytesRemaining : 0
             }
-            purchasedBytesTotal={hasBuyCreditsFeature ? purchasedBytesTotal : 0}
+            purchasedBytesTotal={showPurchasedCredits ? purchasedBytesTotal : 0}
             nextExpiryDate={nextExpiryDate}
             creditHistoryHref={creditHistoryHref}
           />
