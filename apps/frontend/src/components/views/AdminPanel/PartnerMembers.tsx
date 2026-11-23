@@ -31,7 +31,7 @@ import { formatDate } from '@/utils/time';
 const ROLE_LABEL: Record<OrganizationRole, string> = {
   [OrganizationRole.Admin]: 'Organization admin',
   [OrganizationRole.Member]: 'Member',
-  [OrganizationRole.EndUser]: 'End user',
+  [OrganizationRole.PartnerEndUser]: 'Partner end user',
 };
 
 const describeChange = (

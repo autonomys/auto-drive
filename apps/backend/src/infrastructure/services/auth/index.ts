@@ -11,6 +11,7 @@ import {
   OrganizationRole,
   OrganizationSummary,
   OrganizationWithMembers,
+  PartnerEndUser,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { err, ok, Result } from 'neverthrow'
@@ -422,24 +423,41 @@ const removeOrganizationMember = (
     { method: 'DELETE', body: { actor } },
   )
 
-// Returns each address's public ID, in request order.
+export type PartnerEndUserEnrollment = {
+  address: string
+  customerReference: string
+  uploadQuotaBytes: number | null
+}
+
+// Enrolls them in one transaction, at most maxEndUsers end users that are not
+// removed in all, and returns them in request order.
 const enrollOrganizationEndUsers = (
   organizationId: string,
-  addresses: string[],
+  endUsers: PartnerEndUserEnrollment[],
+  maxEndUsers: number,
   actor: string,
 ) =>
-  organizationRequest<Array<{ address: string; publicId: string }>>(
+  organizationRequest<PartnerEndUser[]>(
     `/${encodeURIComponent(organizationId)}/end-users`,
-    { method: 'POST', body: { addresses, actor } },
+    { method: 'POST', body: { endUsers, maxEndUsers, actor } },
   )
 
+const listOrganizationEndUsers = (
+  organizationId: string,
+  { limit, offset }: { limit: number; offset: number },
+) =>
+  organizationRequest<{ endUsers: PartnerEndUser[]; totalCount: number }>(
+    `/${encodeURIComponent(organizationId)}/end-users?limit=${limit}&offset=${offset}`,
+  )
+
+// Succeeds for an end user already removed.
 const removeOrganizationEndUser = (
   organizationId: string,
-  publicId: string,
+  address: string,
   actor: string,
 ) =>
-  organizationRequest<{ organizationId: string }>(
-    `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(publicId)}`,
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(address)}`,
     { method: 'DELETE', body: { actor } },
   )
 
@@ -476,6 +494,7 @@ export const AuthManager = {
   changeOrganizationMemberRole,
   removeOrganizationMember,
   enrollOrganizationEndUsers,
+  listOrganizationEndUsers,
   removeOrganizationEndUser,
   getUserFromAccessToken,
   getUserFromPublicId,

@@ -26,6 +26,19 @@ const getOrganizationById = async (
   return result.rows[0] || null
 }
 
+// Locks the organisation until the transaction ends, so changes to its end
+// users are made one at a time.
+const getOrganizationForUpdate = async (
+  id: string,
+  db: pg.Client,
+): Promise<DBOrganization | null> => {
+  const result = await db.query<DBOrganization>(
+    'SELECT * FROM users.organizations WHERE id = $1 FOR UPDATE',
+    [id],
+  )
+  return result.rows[0] ?? null
+}
+
 const createOrganization = async (
   id: string,
   name: string,
@@ -82,7 +95,7 @@ const unarchive = async (
   return result.rows[0] ?? null
 }
 
-// Member counts leave out the service user and end users, as
+// Member counts leave out the service user and partner end users, as
 // getOrganizationMemberships does.
 const getOrganizationSummaries = async (
   ids: string[],
@@ -99,13 +112,14 @@ const getOrganizationSummaries = async (
          AND m.role IS DISTINCT FROM $3
      WHERE o.id = ANY($1::text[])
      GROUP BY o.id, o.name, o.archived_at`,
-    [ids, SERVICE_USER_PROVIDER, OrganizationRole.EndUser],
+    [ids, SERVICE_USER_PROVIDER, OrganizationRole.PartnerEndUser],
   )
   return result.rows
 }
 
 export const organizationsRepository = {
   getOrganizationById,
+  getOrganizationForUpdate,
   createOrganization,
   updateOrganizationName,
   archiveIfEmpty,

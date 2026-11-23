@@ -197,21 +197,21 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user and its end users
+#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user and its partner end users
 
-The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each membership write takes the public ID of whoever made it as `actor` (the Auto Drive admin, or for end users the organization admin or the organization's service user) and is recorded in `users.organization_membership_changes`.
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each membership write takes the public ID of whoever made it as `actor` (the Auto Drive admin, or for partner end users the organization admin or the organization's service user) and is recorded in `users.organization_membership_changes`.
 
 #### `POST /organizations`: Creates an organization (`{ name }`) and its service user, the user that owns the organization's API keys
 
-#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user or end users) and archive date (`{ ids }`, up to 100)
+#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user or partner end users) and archive date (`{ ids }`, up to 100)
 
 #### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
 
-#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`, `role` is `admin` or `member`). The user leaves their current organization, which is archived if no members remain. 409 for an end user
+#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`, `role` is `admin` or `member`). The user leaves their current organization, which is archived if no members remain. 409 for a partner end user, removed or not
 
-#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`, `role` is `admin` or `member`). 409 for an end user
+#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`, `role` is `admin` or `member`). 409 for a partner end user, removed or not
 
-#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one. 409 for an end user, who is removed through the end user endpoint
+#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one. 409 for a partner end user, removed or not, who is removed through the end user endpoint
 
 An organization's API keys belong to its service user, so they keep working whoever leaves the organization. The backend decides who may manage them, and these endpoints take no `actor`.
 
@@ -223,20 +223,40 @@ An organization's API keys belong to its service user, so they keep working whoe
 
 ### End users
 
-End users are a partner organization's customers, who never use Auto Drive themselves. Each is a wallet user (`web3-wallet`, stored under the EIP-55 checksummed address, as wallet sign-in finds it) with role `end_user` in the partner's organization. Only enrollment gives that role: `admin` and `member` are the only roles the member endpoints accept, and they refuse to move an end user or change their role. End users own the files they upload and are charged to the organization's account, but are not listed as members or counted in member counts. The backend decides who may manage them (`/organizations/:organizationId/end-users`) and keeps what the partner gave for each one.
+Partner end users are a partner organization's customers, who never use Auto Drive themselves. Each is a wallet user (`web3-wallet`, stored under the EIP-55 checksummed address, as wallet sign-in finds it) with role `partner_end_user` in the partner's organization. Only enrollment gives that role: `admin` and `member` are the only roles the member endpoints accept, and they refuse to move an end user, change their role or remove them, whether the end user is removed or not. End users own the files they upload and are charged to the organization's account, but are not listed as members or counted in member counts.
 
-#### `POST /organizations/:organizationId/end-users`: Enrolls end users (`{ addresses, actor }`, 1 to 100 addresses) in one transaction, all or none, and returns `[{ address, publicId }]` in request order, each address checksummed. Each user is created onboarded and belongs to this organization only. An address already enrolled in this organization is returned as it is, so a retry is safe. 400 for an invalid or repeated address (mixed case must be a valid checksum), 404 for an unknown organization, 409 for an archived one or for an address that already has any other user
+The auth service owns them. What the partner gives for each one is kept on their membership row in `users.users_organizations`: `customer_reference` (the partner's own reference, unique within the organization), `upload_quota_bytes` (NULL for the account's default) and `end_user_removed_at`. All three are NULL for everyone else. Each enrollment and removal is one transaction in the auth database, so retries are safe. The backend decides who may manage end users (`/organizations/:organizationId/end-users`), checks what the partner sends and passes its cap, `PARTNER_MAX_END_USERS`.
 
-#### `DELETE /organizations/:organizationId/end-users/:publicId`: Removes an end user (`{ actor }`), who gets a new personal organization of their own (they had none before). Their files stay theirs. 404 if the user is not an end user of this organization
+A removed end user stays in the organization with role `partner_end_user` and `end_user_removed_at` set: they keep read-only access to their files and no longer count towards the cap. Enrolling them again clears it. They keep their customer reference while removed, so it is never given to another person.
 
-Production applies the role to Aurora DSQL as two statements, each in its own transaction:
+The membership history (`users.organization_membership_changes`) records each enrollment and re-enrollment as a move into the organization (`from_organization_id` NULL) and each removal as a move out of it (`to_organization_id` NULL), both with role `partner_end_user`. An end user never leaves the organization, so for them a move out is a removal.
+
+#### `POST /organizations/:organizationId/end-users`: Enrolls end users (`{ endUsers, maxEndUsers, actor }`) in one transaction, all or none. `endUsers` is a list of 1 to 100 `{ address, customerReference, uploadQuotaBytes }` (`uploadQuotaBytes` a positive integer or null), and `maxEndUsers` the most end users the organization may have that are not removed. Returns `[{ address, publicId, customerReference, uploadQuotaBytes, createdAt, removedAt }]` in request order, each address checksummed
+
+- A new address gets a user, created onboarded, in this organization only.
+- An end user of this organization with the same customer reference is returned unchanged, even if the request gives another quota, so a retry is safe. With another customer reference: 409.
+- A removed end user of this organization is enrolled again with the customer reference and quota of the request.
+- Any other user of the address (a member, a user of another organization, an end user of another organization, a wallet user who signed up): 409.
+- A customer reference that another end user of this organization has, removed or not: 409.
+- More than `maxEndUsers` end users that are not removed, counted in the transaction: 409.
+- 400 for an invalid or repeated address (mixed case must be a valid checksum) or a repeated customer reference, 404 for an unknown organization, 409 for an archived one.
+
+#### `GET /organizations/:organizationId/end-users`: Lists the organization's end users a page at a time (`?limit=1..500&offset=0..`, 100 and 0 by default), removed ones included, ordered by first enrollment. Returns `{ endUsers: [{ address, publicId, customerReference, uploadQuotaBytes, createdAt, removedAt }], totalCount }`, where `createdAt` is when the membership row was created and `totalCount` counts removed end users too. 404 for an unknown organization
+
+#### `DELETE /organizations/:organizationId/end-users/:address`: Removes an end user (`{ actor }`) by setting `end_user_removed_at`. They stay in the organization and keep their files. Answers 204, also when they were already removed, which changes nothing. 400 for an invalid address, 404 if the address is not an end user of this organization
+
+Production applies the migration to Aurora DSQL as these statements, in this order, each in its own transaction:
 
 ```sql
 ALTER TABLE users.users_organizations DROP CONSTRAINT users_organizations_role_check;
-ALTER TABLE users.users_organizations ADD CONSTRAINT users_organizations_role_check CHECK (role IN ('admin', 'member', 'end_user')) NOT VALID;
+ALTER TABLE users.users_organizations ADD CONSTRAINT users_organizations_role_check CHECK (role IN ('admin', 'member', 'partner_end_user')) NOT VALID;
+ALTER TABLE users.users_organizations ADD COLUMN customer_reference text;
+ALTER TABLE users.users_organizations ADD COLUMN upload_quota_bytes bigint;
+ALTER TABLE users.users_organizations ADD COLUMN end_user_removed_at timestamp;
+CREATE UNIQUE INDEX ASYNC users_organizations_customer_reference_key ON users.users_organizations (organization_id, customer_reference);
 ```
 
-Deploy auth, with the constraint, before the backend's end user routes are used.
+The last statement returns a job ID: wait for the job to finish before deploying. Deploy auth before the backend's end user routes are used.
 
 ### API key scopes
 

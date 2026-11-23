@@ -18,20 +18,18 @@ import {
   Account,
   AccountModel,
   ApiKeyScope,
-  EndUser,
   OrganizationRole,
   OrganizationWithMembers,
+  PartnerEndUser,
   SERVICE_USER_PROVIDER,
   UserRole,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { organizationsController } from '../../../src/app/controllers/organizations.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
-import { endUsersRepository } from '../../../src/infrastructure/repositories/users/endUsers.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { ConflictError, NotFoundError } from '../../../src/errors/index.js'
 import { config } from '../../../src/config.js'
-import { dbMigration } from '../../utils/dbMigrate.js'
 import { createMockUser } from '../../utils/mocks.js'
 
 // A lower-case address, as a client may send it, and its EIP-55 form.
@@ -40,8 +38,10 @@ const newAddress = () => {
   return { input: address, address: getAddress(address) }
 }
 
-// Runs against the migrated TestContainers Postgres (requires Docker), with
-// the auth service mocked.
+const CREATED_AT = '2026-11-23T00:00:00.000Z'
+
+// The auth service owns end users and is mocked: these tests cover who may
+// call the routes, what they check and what they pass to auth.
 describe('End users', () => {
   let server: Server
   let baseUrl: string
@@ -50,12 +50,14 @@ describe('End users', () => {
   let enrollInAuth: jest.SpiedFunction<
     typeof AuthManager.enrollOrganizationEndUsers
   >
+  let listInAuth: jest.SpiedFunction<
+    typeof AuthManager.listOrganizationEndUsers
+  >
   let removeInAuth: jest.SpiedFunction<
     typeof AuthManager.removeOrganizationEndUser
   >
 
   beforeAll(async () => {
-    await dbMigration.up()
     const app = express()
     app.use(express.json())
     app.use('/organizations', organizationsController)
@@ -66,7 +68,6 @@ describe('End users', () => {
 
   afterAll(async () => {
     await new Promise((resolve) => server.close(resolve))
-    await dbMigration.down()
   })
 
   // Callers, for the organization of the test.
@@ -118,14 +119,22 @@ describe('End users', () => {
     )
     enrollInAuth = jest
       .spyOn(AuthManager, 'enrollOrganizationEndUsers')
-      .mockImplementation(async (_id, addresses) =>
+      .mockImplementation(async (_id, endUsers) =>
         ok(
-          addresses.map((address) => ({ address, publicId: `pub-${address}` })),
+          endUsers.map((endUser) => ({
+            ...endUser,
+            publicId: `pub-${endUser.address}`,
+            createdAt: CREATED_AT,
+            removedAt: null,
+          })),
         ),
       )
+    listInAuth = jest
+      .spyOn(AuthManager, 'listOrganizationEndUsers')
+      .mockResolvedValue(ok({ endUsers: [], totalCount: 0 }))
     removeInAuth = jest
       .spyOn(AuthManager, 'removeOrganizationEndUser')
-      .mockResolvedValue(ok({ organizationId: 'personal' }))
+      .mockResolvedValue(ok(undefined))
   })
 
   afterEach(() => {
@@ -152,20 +161,15 @@ describe('End users', () => {
       method: 'DELETE',
       headers,
     })
-  const listed = async (query = '') =>
-    (await (await list(query)).json()) as {
-      endUsers: EndUser[]
-      totalCount: number
-    }
 
   it.each([
-    ['an organization admin, signed in', orgAdmin, [201, 200, 404]],
+    ['an organization admin, signed in', orgAdmin, [201, 200, 204]],
     ['a member, signed in', member, [403, 403, 403]],
-    ['the organization key', () => orgKey(null), [201, 200, 404]],
+    ['the organization key', () => orgKey(null), [201, 200, 204]],
     [
       'the organization key with end_users',
       () => orgKey([ApiKeyScope.EndUsers]),
-      [201, 200, 404],
+      [201, 200, 204],
     ],
     [
       'the organization key with files only',
@@ -182,7 +186,7 @@ describe('End users', () => {
       () => ({ ...orgAdmin(), apiKeyId: 'personal-key' }),
       [403, 403, 403],
     ],
-    ['an Auto Drive admin, signed in', autoDriveAdmin, [403, 200, 404]],
+    ['an Auto Drive admin, signed in', autoDriveAdmin, [403, 200, 204]],
     [
       'a personal key of an Auto Drive admin',
       () => ({ ...autoDriveAdmin(), apiKeyId: 'personal-key' }),
@@ -195,12 +199,14 @@ describe('End users', () => {
     const responses = [
       await enroll([{ address: input, customerReference: 'customer-1' }]),
       await list(),
-      // An address that is not enrolled: 404 once let in.
       await remove(newAddress().input),
     ]
 
     expect(responses.map((r) => r.status)).toEqual(statuses)
-    if (statuses[0] === 403) expect(enrollInAuth).not.toHaveBeenCalled()
+    const calls = [enrollInAuth, listInAuth, removeInAuth].map(
+      (mock) => mock.mock.calls.length,
+    )
+    expect(calls).toEqual(statuses.map((status) => (status === 403 ? 0 : 1)))
   })
 
   it('answers 404 for an organization that is not a partner', async () => {
@@ -214,9 +220,12 @@ describe('End users', () => {
     ]
 
     expect(responses.map((r) => r.status)).toEqual([404, 404, 404])
+    expect(enrollInAuth).not.toHaveBeenCalled()
+    expect(listInAuth).not.toHaveBeenCalled()
+    expect(removeInAuth).not.toHaveBeenCalled()
   })
 
-  it('enrolls end users under their checksummed addresses', async () => {
+  it('enrolls end users in auth under their checksummed addresses, with the cap', async () => {
     caller = orgAdmin()
     const [first, second] = [newAddress(), newAddress()]
 
@@ -230,29 +239,51 @@ describe('End users', () => {
     ])
 
     expect(response.status).toBe(201)
-    const { endUsers } = (await response.json()) as { endUsers: EndUser[] }
-    expect(endUsers).toEqual([
+    const requested = [
       {
         address: first.address,
-        publicId: `pub-${first.address}`,
         customerReference: 'customer-1',
         uploadQuotaBytes: null,
-        createdAt: expect.any(String),
       },
       {
         address: second.address,
-        publicId: `pub-${second.address}`,
         customerReference: 'customer:2',
         uploadQuotaBytes: 1024,
-        createdAt: expect.any(String),
       },
-    ])
+    ]
     expect(enrollInAuth).toHaveBeenCalledWith(
       organizationId,
-      [first.address, second.address],
+      requested,
+      config.params.partnerMaxEndUsers,
       'org-admin',
     )
-    expect(await listed()).toEqual({ endUsers, totalCount: 2 })
+    expect(await response.json()).toEqual({
+      endUsers: requested.map((r) => ({
+        ...r,
+        publicId: `pub-${r.address}`,
+        createdAt: CREATED_AT,
+        removedAt: null,
+      })),
+    })
+  })
+
+  it('passes the configured cap to auth', async () => {
+    const max = config.params.partnerMaxEndUsers
+    config.params.partnerMaxEndUsers = 2
+    try {
+      const { input, address } = newAddress()
+      expect(
+        (await enroll([{ address: input, customerReference: 'c1' }])).status,
+      ).toBe(201)
+      expect(enrollInAuth).toHaveBeenCalledWith(
+        organizationId,
+        [expect.objectContaining({ address })],
+        2,
+        expect.any(String),
+      )
+    } finally {
+      config.params.partnerMaxEndUsers = max
+    }
   })
 
   it('validates the request before calling auth', async () => {
@@ -285,201 +316,81 @@ describe('End users', () => {
     expect(enrollInAuth).not.toHaveBeenCalled()
   })
 
-  it('returns end users already enrolled and refuses conflicting ones', async () => {
-    const [first, second, third] = [newAddress(), newAddress(), newAddress()]
-    const [enrolled] = (
-      (await (
-        await enroll([
-          { address: first.input, customerReference: 'customer-1' },
-        ])
-      ).json()) as { endUsers: EndUser[] }
-    ).endUsers
-
-    const again = await enroll([
-      { address: second.input, customerReference: 'customer-2' },
-      // Unchanged, though asked with another quota.
-      {
-        address: first.address,
-        customerReference: 'customer-1',
-        uploadQuotaBytes: 5,
-      },
-    ])
-    expect(again.status).toBe(201)
-    const { endUsers } = (await again.json()) as { endUsers: EndUser[] }
-    expect(endUsers[1]).toEqual(enrolled)
-    expect(enrollInAuth).toHaveBeenLastCalledWith(
-      organizationId,
-      [second.address],
-      expect.any(String),
-    )
-
-    enrollInAuth.mockClear()
-    const conflicts = [
-      // Enrolled with another reference.
-      [{ address: first.input, customerReference: 'customer-9' }],
-      // A reference another end user has.
-      [{ address: third.input, customerReference: 'customer-1' }],
-    ]
-    for (const endUsers of conflicts) {
-      expect((await enroll(endUsers)).status).toBe(409)
-    }
-    expect(enrollInAuth).not.toHaveBeenCalled()
-    expect((await listed()).totalCount).toBe(2)
-  })
-
-  it('passes on what auth refuses, and completes on a retry', async () => {
+  it('passes on what auth refuses', async () => {
     const { input, address } = newAddress()
-    const body = [{ address: input, customerReference: 'customer-1' }]
-    enrollInAuth.mockResolvedValueOnce(
-      err(new ConflictError(`${address} is already an Auto Drive user`)),
-    )
-    const refused = await enroll(body)
-    expect(refused.status).toBe(409)
-    expect(await refused.json()).toEqual({
-      error: `${address} is already an Auto Drive user`,
-    })
-
-    // Auth enrolled them, then recording them here failed.
-    jest
-      .spyOn(endUsersRepository, 'insertEndUsers')
-      .mockRejectedValueOnce(new Error('connection lost'))
-    expect((await enroll(body)).status).toBe(500)
-    expect((await listed()).totalCount).toBe(0)
-
-    expect((await enroll(body)).status).toBe(201)
-    expect(enrollInAuth).toHaveBeenCalledTimes(3)
-    expect((await listed()).endUsers.map((e) => e.address)).toEqual([address])
-  })
-
-  it('refuses an enrollment raced by a concurrent one', async () => {
-    const { input } = newAddress()
-    await enroll([{ address: input, customerReference: 'customer-1' }])
-    // As if the check ran before the concurrent request inserted its row.
-    jest
-      .spyOn(endUsersRepository, 'getActiveByAddressesOrReferences')
-      .mockResolvedValueOnce([])
-
-    const raced = await enroll([
-      { address: newAddress().input, customerReference: 'customer-1' },
-    ])
-
-    expect(raced.status).toBe(409)
-    expect((await listed()).totalCount).toBe(1)
-  })
-
-  it('caps the end users of an organization', async () => {
-    const max = config.params.partnerMaxEndUsers
-    config.params.partnerMaxEndUsers = 2
-    try {
-      const [first, second, third] = [newAddress(), newAddress(), newAddress()]
-      expect(
-        (
-          await enroll([
-            { address: first.input, customerReference: 'c1' },
-            { address: second.input, customerReference: 'c2' },
-          ])
-        ).status,
-      ).toBe(201)
-
-      const over = await enroll([
-        { address: third.input, customerReference: 'c3' },
-      ])
-      expect(over.status).toBe(409)
-      expect(await over.json()).toEqual({
-        error:
-          'An organization can have at most 2 end users: it has 2, and this would add 1',
-      })
-      // Nothing new to enroll.
-      expect(
-        (await enroll([{ address: first.input, customerReference: 'c1' }]))
-          .status,
-      ).toBe(201)
-
-      expect((await remove(second.input)).status).toBe(204)
-      expect(
-        (await enroll([{ address: third.input, customerReference: 'c3' }]))
-          .status,
-      ).toBe(201)
-    } finally {
-      config.params.partnerMaxEndUsers = max
-    }
-  })
-
-  it('lists active end users a page at a time', async () => {
-    const addresses = Array.from({ length: 5 }, () => newAddress())
-    await enroll(
-      addresses
-        .slice(0, 3)
-        .map((a, i) => ({ address: a.input, customerReference: `c${i}` })),
-    )
-    await enroll(
-      addresses
-        .slice(3)
-        .map((a, i) => ({ address: a.input, customerReference: `c${i + 3}` })),
-    )
-    await remove(addresses[1].input)
-    const active = [0, 2, 3, 4].map((i) => addresses[i].address)
-
-    expect((await listed()).endUsers.map((e) => e.address)).toEqual(active)
-    const pages = [
-      await listed('?limit=2'),
-      await listed('?limit=2&offset=2'),
-      await listed('?limit=2&offset=4'),
+    const conflicts = [
+      `${address} is already an Auto Drive user`,
+      'Customer reference customer-1 is already used by another end user',
+      'An organization can have at most 2 end users: it has 2, and this would add 1',
     ]
-    expect(pages.map((p) => p.endUsers.map((e) => e.address))).toEqual([
-      active.slice(0, 2),
-      active.slice(2),
-      [],
+    for (const message of conflicts) {
+      enrollInAuth.mockResolvedValueOnce(err(new ConflictError(message)))
+      const refused = await enroll([
+        { address: input, customerReference: 'customer-1' },
+      ])
+      expect(refused.status).toBe(409)
+      expect(await refused.json()).toEqual({ error: message })
+    }
+
+    listInAuth.mockResolvedValueOnce(
+      err(new NotFoundError('Organization not found')),
+    )
+    expect((await list()).status).toBe(404)
+    removeInAuth.mockResolvedValueOnce(
+      err(new NotFoundError('Not an end user of this organization')),
+    )
+    const notEndUser = await remove(input)
+    expect(notEndUser.status).toBe(404)
+    expect(await notEndUser.json()).toEqual({
+      error: 'Not an end user of this organization',
+    })
+  })
+
+  it('removes an end user in auth, and answers 204 again once removed', async () => {
+    const { input, address } = newAddress()
+    const admin = autoDriveAdmin()
+    caller = admin
+
+    // Auth answers 204 both times: the second removal changes nothing.
+    expect((await remove(input)).status).toBe(204)
+    expect((await remove(address)).status).toBe(204)
+
+    expect(removeInAuth.mock.calls).toEqual([
+      [organizationId, address, admin.publicId],
+      [organizationId, address, admin.publicId],
     ])
-    expect(pages.map((p) => p.totalCount)).toEqual([4, 4, 4])
+    expect((await remove('not-an-address')).status).toBe(400)
+    expect(removeInAuth).toHaveBeenCalledTimes(2)
+  })
+
+  it('lists end users from auth a page at a time', async () => {
+    const page = {
+      endUsers: [
+        {
+          address: newAddress().address,
+          publicId: 'pub-1',
+          customerReference: 'customer-1',
+          uploadQuotaBytes: null,
+          createdAt: CREATED_AT,
+          removedAt: CREATED_AT,
+        },
+      ] satisfies PartnerEndUser[],
+      totalCount: 3,
+    }
+    listInAuth.mockResolvedValue(ok(page))
+
+    const defaults = await list()
+    expect(defaults.status).toBe(200)
+    expect(await defaults.json()).toEqual(page)
+    expect((await list('?limit=2&offset=2')).status).toBe(200)
+    expect(listInAuth.mock.calls).toEqual([
+      [organizationId, { limit: 100, offset: 0 }],
+      [organizationId, { limit: 2, offset: 2 }],
+    ])
 
     for (const query of ['?limit=0', '?limit=501', '?offset=-1', '?limit=a']) {
       expect([query, (await list(query)).status]).toEqual([query, 400])
     }
-  })
-
-  it('removes an end user from auth, then here', async () => {
-    const { input, address } = newAddress()
-    caller = orgKey([ApiKeyScope.EndUsers])
-    await enroll([{ address: input, customerReference: 'customer-1' }])
-    const admin = autoDriveAdmin()
-    caller = admin
-
-    expect((await remove(input)).status).toBe(204)
-
-    expect(removeInAuth).toHaveBeenCalledWith(
-      organizationId,
-      `pub-${address}`,
-      admin.publicId,
-    )
-    expect(await listed()).toEqual({ endUsers: [], totalCount: 0 })
-    expect((await remove(address)).status).toBe(404)
-    expect(removeInAuth).toHaveBeenCalledTimes(1)
-    expect((await remove('not-an-address')).status).toBe(400)
-
-    // Removed, the address and reference can be enrolled again.
-    caller = orgKey(null)
-    expect(
-      (await enroll([{ address: input, customerReference: 'customer-1' }]))
-        .status,
-    ).toBe(201)
-  })
-
-  it('completes a removal that auth already made', async () => {
-    const [removed, refused] = [newAddress(), newAddress()]
-    await enroll([
-      { address: removed.input, customerReference: 'customer-1' },
-      { address: refused.input, customerReference: 'customer-2' },
-    ])
-    removeInAuth
-      .mockResolvedValueOnce(err(new NotFoundError('Not an end user')))
-      .mockResolvedValueOnce(err(new ConflictError('Refused')))
-
-    expect((await remove(removed.input)).status).toBe(204)
-    expect((await remove(refused.input)).status).toBe(409)
-
-    expect((await listed()).endUsers.map((e) => e.address)).toEqual([
-      refused.address,
-    ])
+    expect(listInAuth).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { OrganizationsUseCases } from '../useCases/index.js'
+import { EndUserEnrollment, OrganizationsUseCases } from '../useCases/index.js'
 import { createLogger } from '../drivers/logger.js'
 import {
   handleAdminAuth,
@@ -23,7 +23,7 @@ const handleError = (error: unknown, res: Response, message: string) => {
 }
 
 // Every membership write below records who made it: the Auto Drive admin, or
-// for end users the organisation admin or organisation API key.
+// for partner end users the organisation admin or organisation API key.
 const getActor = (req: Request, res: Response): string | null => {
   const actor = req.body?.actor
   if (typeof actor !== 'string' || !actor) {
@@ -192,7 +192,21 @@ organizationController.delete(
   },
 )
 
-// A partner's end users. The backend decides who may manage them.
+// A partner's end users. The backend decides who may manage them and checks
+// what the partner gives for them; these routes check its shape.
+const isEnrollment = (value: unknown): value is EndUserEnrollment => {
+  const { address, customerReference, uploadQuotaBytes } = (value ??
+    {}) as Record<string, unknown>
+  return (
+    typeof address === 'string' &&
+    typeof customerReference === 'string' &&
+    customerReference.length >= 1 &&
+    customerReference.length <= 128 &&
+    (uploadQuotaBytes == null ||
+      (Number.isSafeInteger(uploadQuotaBytes) && Number(uploadQuotaBytes) > 0))
+  )
+}
+
 organizationController.post(
   '/:organizationId/end-users',
   async (req: Request, res: Response) => {
@@ -204,16 +218,23 @@ organizationController.post(
       return
     }
 
-    const { addresses } = req.body
+    const { endUsers, maxEndUsers } = req.body
     if (
-      !Array.isArray(addresses) ||
-      addresses.length < 1 ||
-      addresses.length > 100 ||
-      !addresses.every((address) => typeof address === 'string')
+      !Array.isArray(endUsers) ||
+      endUsers.length < 1 ||
+      endUsers.length > 100 ||
+      !endUsers.every(isEnrollment)
     ) {
+      res.status(400).json({
+        error:
+          'endUsers must be an array of 1 to 100 { address, customerReference, uploadQuotaBytes }',
+      })
+      return
+    }
+    if (!Number.isSafeInteger(maxEndUsers) || maxEndUsers < 0) {
       res
         .status(400)
-        .json({ error: 'addresses must be an array of 1 to 100 strings' })
+        .json({ error: 'maxEndUsers must be a non-negative integer' })
       return
     }
 
@@ -221,7 +242,12 @@ organizationController.post(
       res.json(
         await OrganizationsUseCases.enrollEndUsers({
           organizationId: req.params.organizationId,
-          addresses,
+          endUsers: endUsers.map((endUser) => ({
+            address: endUser.address,
+            customerReference: endUser.customerReference,
+            uploadQuotaBytes: endUser.uploadQuotaBytes ?? null,
+          })),
+          maxEndUsers,
           actor,
         }),
       )
@@ -231,8 +257,46 @@ organizationController.post(
   },
 )
 
+// A non-negative integer query parameter, or null if it is not one.
+const parseCount = (value: unknown, fallback: number): number | null => {
+  if (value === undefined) return fallback
+  return typeof value === 'string' && /^\d{1,9}$/.test(value)
+    ? Number(value)
+    : null
+}
+
+organizationController.get(
+  '/:organizationId/end-users',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    const limit = parseCount(req.query.limit, 100)
+    const offset = parseCount(req.query.offset, 0)
+    if (limit === null || limit < 1 || limit > 500 || offset === null) {
+      res.status(400).json({
+        error: 'limit must be 1 to 500 and offset a non-negative integer',
+      })
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.listEndUsers({
+          organizationId: req.params.organizationId,
+          limit,
+          offset,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to list end users')
+    }
+  },
+)
+
 organizationController.delete(
-  '/:organizationId/end-users/:publicId',
+  '/:organizationId/end-users/:address',
   async (req: Request, res: Response) => {
     if (!handleServiceAuth(req, res)) {
       return
@@ -243,14 +307,12 @@ organizationController.delete(
     }
 
     try {
-      res.json(
-        await OrganizationsUseCases.removeMember({
-          organizationId: req.params.organizationId,
-          publicId: req.params.publicId,
-          actor,
-          endUser: true,
-        }),
-      )
+      await OrganizationsUseCases.removeEndUser({
+        organizationId: req.params.organizationId,
+        address: req.params.address,
+        actor,
+      })
+      res.status(204).end()
     } catch (error) {
       handleError(error, res, 'Failed to remove end user')
     }

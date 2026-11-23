@@ -1,23 +1,18 @@
 import { err, ok, Result } from 'neverthrow'
 import { getAddress, isAddress } from 'viem'
 import {
-  EndUser,
   OrganizationRole,
+  PartnerEndUser,
   SERVICE_USER_PROVIDER,
   UserRole,
   UserWithOrganization,
 } from '@auto-drive/models'
-import { endUsersRepository } from '../../infrastructure/repositories/users/endUsers.js'
 import {
   AuthManager,
   OrganizationRequestError,
+  PartnerEndUserEnrollment,
 } from '../../infrastructure/services/auth/index.js'
-import {
-  BadRequestError,
-  ConflictError,
-  ForbiddenError,
-  NotFoundError,
-} from '../../errors/index.js'
+import { BadRequestError, ForbiddenError } from '../../errors/index.js'
 import { getPartnerAccount } from './organizations.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
@@ -83,27 +78,30 @@ const authorize = async (
 }
 
 /**
- * Enrols end users: the auth service creates their identities, then they are
- * recorded here with what the partner gave for them. An address already
- * enrolled with the same customer reference is returned as it is. Auth
- * returns the identities it has already created, so a request that fails
- * after auth succeeded is completed by retrying it.
+ * Enrols end users. The auth service owns them: it enrols all of them or none
+ * in one transaction, returns an end user already enrolled with the same
+ * customer reference unchanged and enrols a removed one again, so a request
+ * that failed or timed out can be retried. It also checks the cap.
  */
 const enrollEndUsers = async (
   executor: UserWithOrganization,
   organizationId: string,
   inputs: EndUserInput[],
-): Promise<Result<EndUser[], EndUsersError>> => {
+): Promise<Result<PartnerEndUser[], EndUsersError>> => {
   const allowed = await authorize(executor, organizationId, 'enroll')
   if (allowed.isErr()) return err(allowed.error)
 
-  const requested: EndUserInput[] = []
+  const requested: PartnerEndUserEnrollment[] = []
   for (const input of inputs) {
     const address = normaliseAddress(input.address)
     if (!address) {
       return err(new BadRequestError(`Invalid address: ${input.address}`))
     }
-    requested.push({ ...input, address })
+    requested.push({
+      address,
+      customerReference: input.customerReference,
+      uploadQuotaBytes: input.uploadQuotaBytes ?? null,
+    })
   }
   const addresses = requested.map((r) => r.address)
   const references = requested.map((r) => r.customerReference)
@@ -118,93 +116,25 @@ const enrollEndUsers = async (
     )
   }
 
-  const existing = await endUsersRepository.getActiveByAddressesOrReferences(
+  const enrolled = await AuthManager.enrollOrganizationEndUsers(
     organizationId,
-    addresses,
-    references,
+    requested,
+    config.params.partnerMaxEndUsers,
+    executor.publicId,
   )
-  for (const endUser of existing) {
-    const input = requested.find((r) => r.address === endUser.address)
-    if (!input) {
-      return err(
-        new ConflictError(
-          `Customer reference ${endUser.customerReference} is already used by another end user`,
-        ),
-      )
-    }
-    if (input.customerReference !== endUser.customerReference) {
-      return err(
-        new ConflictError(
-          `${endUser.address} is already enrolled with another customer reference`,
-        ),
-      )
-    }
-  }
-
-  const enrolled = new Map(existing.map((e) => [e.address, e]))
-  const toEnroll = requested.filter((r) => !enrolled.has(r.address))
-  if (toEnroll.length > 0) {
-    const active = await endUsersRepository.countActive(organizationId)
-    const max = config.params.partnerMaxEndUsers
-    if (active + toEnroll.length > max) {
-      return err(
-        new ConflictError(
-          `An organization can have at most ${max} end users: it has ` +
-            `${active}, and this would add ${toEnroll.length}`,
-        ),
-      )
-    }
-
-    const identities = await AuthManager.enrollOrganizationEndUsers(
-      organizationId,
-      toEnroll.map((r) => r.address),
-      executor.publicId,
-    )
-    if (identities.isErr()) return err(identities.error)
-    const publicIds = new Map(
-      identities.value.map((i) => [i.address, i.publicId]),
-    )
-
-    let inserted: EndUser[]
-    try {
-      inserted = await endUsersRepository.insertEndUsers(
-        organizationId,
-        toEnroll.map((r) => ({
-          address: r.address,
-          publicId: publicIds.get(r.address)!,
-          customerReference: r.customerReference,
-          uploadQuotaBytes: r.uploadQuotaBytes ?? null,
-        })),
-      )
-    } catch (error) {
-      // A unique index: a concurrent request enrolled one of them first.
-      if ((error as { code?: string }).code === '23505') {
-        return err(
-          new ConflictError(
-            'An address or customer reference was enrolled by a concurrent request',
-          ),
-        )
-      }
-      throw error
-    }
-    for (const endUser of inserted) {
-      enrolled.set(endUser.address, endUser)
-    }
-  }
+  if (enrolled.isErr()) return err(enrolled.error)
 
   logger.info('End users enrolled', {
     organizationId,
-    enrolled: toEnroll.length,
-    alreadyEnrolled: requested.length - toEnroll.length,
+    count: requested.length,
     by: executor.publicId,
   })
-  return ok(requested.map((r) => enrolled.get(r.address)!))
+  return ok(enrolled.value)
 }
 
 /**
- * Removes an end user. The auth service gives them a personal organisation of
- * their own, and their files stay theirs. Auth is called first, so a failure
- * leaves the end user listed and a retry completes the removal.
+ * Removes an end user. They stay in the organisation, read-only, and keep
+ * their files. Removing someone already removed succeeds, so a retry is safe.
  */
 const removeEndUser = async (
   executor: UserWithOrganization,
@@ -218,49 +148,34 @@ const removeEndUser = async (
   if (!normalised) {
     return err(new BadRequestError(`Invalid address: ${address}`))
   }
-  const [endUser] = await endUsersRepository.getActiveByAddressesOrReferences(
-    organizationId,
-    [normalised],
-    [],
-  )
-  if (!endUser) {
-    return err(new NotFoundError('Not an end user of this organization'))
-  }
 
   const removed = await AuthManager.removeOrganizationEndUser(
     organizationId,
-    endUser.publicId,
+    normalised,
     executor.publicId,
   )
-  // 404: an earlier attempt removed them from auth.
-  if (removed.isErr() && !(removed.error instanceof NotFoundError)) {
-    return err(removed.error)
-  }
-  await endUsersRepository.markRemoved(organizationId, normalised)
+  if (removed.isErr()) return err(removed.error)
 
   logger.info('End user removed', {
     organizationId,
-    publicId: endUser.publicId,
+    address: normalised,
     by: executor.publicId,
   })
   return ok()
 }
 
+// A page of the end users, removed ones included, in the order of enrollment.
 const listEndUsers = async (
   executor: UserWithOrganization,
   organizationId: string,
-  { limit, offset }: { limit: number; offset: number },
+  page: { limit: number; offset: number },
 ): Promise<
-  Result<{ endUsers: EndUser[]; totalCount: number }, EndUsersError>
+  Result<{ endUsers: PartnerEndUser[]; totalCount: number }, EndUsersError>
 > => {
   const allowed = await authorize(executor, organizationId, 'list')
   if (allowed.isErr()) return err(allowed.error)
 
-  const [endUsers, totalCount] = await Promise.all([
-    endUsersRepository.listActive(organizationId, limit, offset),
-    endUsersRepository.countActive(organizationId),
-  ])
-  return ok({ endUsers, totalCount })
+  return AuthManager.listOrganizationEndUsers(organizationId, page)
 }
 
 export const EndUsersUseCases = {

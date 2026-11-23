@@ -12,11 +12,13 @@ import {
   OrganizationRole,
   OrganizationSummary,
   OrganizationWithMembers,
+  PartnerEndUser,
   SERVICE_USER_PROVIDER,
   UserRole,
   userFromTable,
 } from '@auto-drive/models'
 import {
+  DBOrganizationMember,
   apiKeysRepository,
   organizationMembersRepository,
   organizationMembershipChangesRepository,
@@ -231,7 +233,8 @@ const getOrganizationSummaries = async (
   }))
 }
 
-// End users are only ever enrolled (enrollEndUsers), never given the role.
+// Partner end users are only ever enrolled (enrollEndUsers), never given the
+// role.
 const parseRole = (role: unknown): OrganizationRole => {
   if (!MEMBER_ROLES.includes(role as (typeof MEMBER_ROLES)[number])) {
     throw new OrganizationValidationError(
@@ -295,7 +298,7 @@ const addMember = async ({
       user.oauth_user_id,
       db,
     )
-    if (from?.role === OrganizationRole.EndUser) {
+    if (from?.role === OrganizationRole.PartnerEndUser) {
       throw endUserConflict()
     }
     const fromOrganizationId = from?.organization_id ?? null
@@ -342,14 +345,14 @@ const changeMemberRole = async ({
 }): Promise<void> => {
   const memberRole = parseRole(role)
   const user = await getMemberUser(publicId)
-  // A user becomes an end user only when enrolment creates them, so this
-  // cannot change before the update.
+  // A user becomes an end user only when enrolment creates them, and stays
+  // one, removed or not, so this cannot change before the update.
   const current =
     await organizationMembersRepository.getOrganizationMembershipByUser(
       user.oauth_provider,
       user.oauth_user_id,
     )
-  if (current?.role === OrganizationRole.EndUser) {
+  if (current?.role === OrganizationRole.PartnerEndUser) {
     throw endUserConflict()
   }
 
@@ -385,18 +388,16 @@ const changeMemberRole = async ({
  * Removes a user from an organisation and returns them to the organisation
  * they were moved in from, restoring it from the archive. If there is none to
  * restore, they get a new personal organisation, so a user is never left
- * without one. `endUser` removes an end user, who is removed only that way.
+ * without one. Partner end users are removed only by removeEndUser.
  */
 const removeMember = async ({
   organizationId,
   publicId,
   actor,
-  endUser = false,
 }: {
   organizationId: string
   publicId: string
   actor: string
-  endUser?: boolean
 }): Promise<{ organizationId: string }> => {
   const user = await getMemberUser(publicId)
 
@@ -408,15 +409,13 @@ const removeMember = async ({
         user.oauth_user_id,
         db,
       )
-    const wasEndUser = removed?.role === OrganizationRole.EndUser
-    if (!removed || (endUser && !wasEndUser)) {
+    if (!removed) {
       throw new OrganizationNotFoundError(
-        endUser
-          ? 'User is not an end user of this organization'
-          : 'User is not a member of this organization',
+        'User is not a member of this organization',
       )
     }
-    if (wasEndUser && !endUser) {
+    // Rolled back with the transaction.
+    if (removed.role === OrganizationRole.PartnerEndUser) {
       throw new OrganizationConflictError(
         'An end user is removed through the end users endpoint',
       )
@@ -482,104 +481,308 @@ const parseAddress = (address: string): string => {
   throw new OrganizationValidationError(`Invalid address: ${address}`)
 }
 
+export type EndUserEnrollment = {
+  address: string
+  customerReference: string
+  // Null for the account's default.
+  uploadQuotaBytes: number | null
+}
+
+const toPartnerEndUser = (
+  membership: DBOrganizationMember,
+): PartnerEndUser => ({
+  address: membership.oauth_user_id,
+  publicId: deriveUserPublicId(
+    membership.oauth_provider,
+    membership.oauth_user_id,
+  ),
+  // Every end user is enrolled with one.
+  customerReference: membership.customer_reference as string,
+  uploadQuotaBytes:
+    membership.upload_quota_bytes === null
+      ? null
+      : Number(membership.upload_quota_bytes),
+  createdAt: membership.created_at.toISOString(),
+  removedAt: membership.end_user_removed_at?.toISOString() ?? null,
+})
+
+const isUniqueViolation = (error: unknown) =>
+  (error as { code?: string } | null)?.code === '23505'
+
 /**
- * Enrols a partner's customers as end users of its organisation: for each
- * wallet address, a user who signs in with that wallet, onboarded and with
- * role end_user, all in one transaction. An address already enrolled in this
- * organisation is returned as it is, so a retry is safe; any other user of the
- * address is refused. Returns the public IDs in request order.
+ * Enrols a partner's customers as end users of its organisation, all of them
+ * or none in one transaction. A new address gets a user who signs in with that
+ * wallet, onboarded, with role partner_end_user and what the partner gave for
+ * them. An end user of this organisation with the same customer reference is
+ * returned unchanged, so a retry is safe, and a removed one is enrolled again
+ * with the reference and quota of the request. Refused: any other user of the
+ * address, a reference another end user of the organisation has (removed or
+ * not), and more than `maxEndUsers` end users that are not removed. Returns
+ * the end users in request order.
  */
 const enrollEndUsers = async ({
   organizationId,
-  addresses,
+  endUsers,
+  maxEndUsers,
   actor,
 }: {
   organizationId: string
-  addresses: string[]
+  endUsers: EndUserEnrollment[]
+  maxEndUsers: number
   actor: string
-}): Promise<Array<{ address: string; publicId: string }>> => {
-  const normalised = addresses.map(parseAddress)
-  if (new Set(normalised).size !== normalised.length) {
-    throw new OrganizationValidationError('Each address may appear only once')
+}): Promise<PartnerEndUser[]> => {
+  const requested = endUsers.map((endUser) => ({
+    ...endUser,
+    address: parseAddress(endUser.address),
+  }))
+  const addresses = requested.map((r) => r.address)
+  const references = requested.map((r) => r.customerReference)
+  if (
+    new Set(addresses).size < addresses.length ||
+    new Set(references).size < references.length
+  ) {
+    throw new OrganizationValidationError(
+      'Each address and customer reference may appear only once',
+    )
   }
+
+  try {
+    return await withTransaction(async (db) => {
+      // Locked, so the organisation's enrolments are made one at a time and
+      // the cap holds.
+      const organization =
+        await organizationsRepository.getOrganizationForUpdate(
+          organizationId,
+          db,
+        )
+      if (!organization) {
+        throw new OrganizationNotFoundError('Organization not found')
+      }
+      if (organization.archived_at) {
+        throw new OrganizationConflictError('Organization is archived')
+      }
+
+      const users = new Set(
+        (
+          await usersRepository.getUsersByOAuthUserIds(
+            WALLET_PROVIDER,
+            addresses,
+            db,
+          )
+        ).map((user) => user.oauth_user_id),
+      )
+      const memberships = new Map(
+        (
+          await organizationMembersRepository.getOrganizationMembershipsByUsers(
+            [...users].map((address) => ({
+              oauthProvider: WALLET_PROVIDER,
+              oauthUserId: address,
+            })),
+            db,
+          )
+        ).map((m) => [m.oauth_user_id, m]),
+      )
+      const referenceHolders = new Map(
+        (
+          await organizationMembersRepository.getEndUsersByCustomerReferences(
+            organizationId,
+            references,
+            db,
+          )
+        ).map((m) => [m.customer_reference, m]),
+      )
+
+      // Everything is checked before anything is written.
+      const plan = requested.map((request) => {
+        const holder = referenceHolders.get(request.customerReference)
+        if (
+          holder &&
+          (holder.oauth_provider !== WALLET_PROVIDER ||
+            holder.oauth_user_id !== request.address)
+        ) {
+          throw new OrganizationConflictError(
+            `Customer reference ${request.customerReference} is already used by another end user`,
+          )
+        }
+        if (!users.has(request.address)) {
+          return { request, action: 'create' as const }
+        }
+        const membership = memberships.get(request.address)
+        if (
+          membership?.organization_id !== organizationId ||
+          membership.role !== OrganizationRole.PartnerEndUser
+        ) {
+          throw new OrganizationConflictError(
+            `${request.address} is already an Auto Drive user`,
+          )
+        }
+        if (membership.end_user_removed_at) {
+          return { request, action: 'reenroll' as const }
+        }
+        if (membership.customer_reference !== request.customerReference) {
+          throw new OrganizationConflictError(
+            `${request.address} is already enrolled with another customer reference`,
+          )
+        }
+        return { request, action: 'none' as const, membership }
+      })
+
+      const adding = plan.filter((p) => p.action !== 'none').length
+      if (adding > 0) {
+        const active = await organizationMembersRepository.countActiveEndUsers(
+          organizationId,
+          db,
+        )
+        if (active + adding > maxEndUsers) {
+          throw new OrganizationConflictError(
+            `An organization can have at most ${maxEndUsers} end users: it ` +
+              `has ${active}, and this would add ${adding}`,
+          )
+        }
+      }
+
+      const enrolled: PartnerEndUser[] = []
+      for (const step of plan) {
+        if (step.action === 'none') {
+          enrolled.push(toPartnerEndUser(step.membership))
+          continue
+        }
+        const endUser = {
+          oauthProvider: WALLET_PROVIDER,
+          oauthUserId: step.request.address,
+          customerReference: step.request.customerReference,
+          uploadQuotaBytes: step.request.uploadQuotaBytes,
+        }
+        if (step.action === 'create') {
+          // Named by its address, as wallet sign-in names a user.
+          await usersRepository.createUser(
+            WALLET_PROVIDER,
+            endUser.oauthUserId,
+            endUser.oauthUserId,
+            undefined,
+            deriveUserPublicId(WALLET_PROVIDER, endUser.oauthUserId),
+            UserRole.User,
+            db,
+          )
+        }
+        const membership =
+          step.action === 'create'
+            ? await organizationMembersRepository.addEndUser(
+                organizationId,
+                endUser,
+                db,
+              )
+            : await organizationMembersRepository.reenrollEndUser(
+                organizationId,
+                endUser,
+                db,
+              )
+        await organizationMembershipChangesRepository.recordChange(
+          {
+            oauthProvider: WALLET_PROVIDER,
+            oauthUserId: endUser.oauthUserId,
+            fromOrganizationId: null,
+            toOrganizationId: organizationId,
+            role: OrganizationRole.PartnerEndUser,
+            actor,
+          },
+          db,
+        )
+        enrolled.push(toPartnerEndUser(membership))
+      }
+      return enrolled
+    })
+  } catch (error) {
+    // A concurrent sign-up or enrolment in another organisation took an
+    // address first. A retry gives the reason.
+    if (isUniqueViolation(error)) {
+      throw new OrganizationConflictError(
+        'An address was taken by a concurrent request',
+      )
+    }
+    throw error
+  }
+}
+
+/**
+ * Removes a partner end user. They stay in the organisation with their files,
+ * read-only, and no longer count towards its end users; enrolling them again
+ * undoes it. Removing someone already removed changes nothing, so a retry is
+ * safe.
+ */
+const removeEndUser = async ({
+  organizationId,
+  address,
+  actor,
+}: {
+  organizationId: string
+  address: string
+  actor: string
+}): Promise<void> => {
+  const oauthUserId = parseAddress(address)
+
+  await withTransaction(async (db) => {
+    const membership =
+      await organizationMembersRepository.getMembershipForUpdate(
+        organizationId,
+        WALLET_PROVIDER,
+        oauthUserId,
+        db,
+      )
+    if (membership?.role !== OrganizationRole.PartnerEndUser) {
+      throw new OrganizationNotFoundError(
+        'Not an end user of this organization',
+      )
+    }
+    if (membership.end_user_removed_at) {
+      return
+    }
+
+    await organizationMembersRepository.markEndUserRemoved(
+      organizationId,
+      WALLET_PROVIDER,
+      oauthUserId,
+      db,
+    )
+    // They stay in the organisation: no destination marks a removal.
+    await organizationMembershipChangesRepository.recordChange(
+      {
+        oauthProvider: WALLET_PROVIDER,
+        oauthUserId,
+        fromOrganizationId: organizationId,
+        toOrganizationId: null,
+        role: OrganizationRole.PartnerEndUser,
+        actor,
+      },
+      db,
+    )
+  })
+}
+
+// A page of the organisation's end users, removed ones included, in the order
+// they were first enrolled.
+const listEndUsers = async ({
+  organizationId,
+  limit,
+  offset,
+}: {
+  organizationId: string
+  limit: number
+  offset: number
+}): Promise<{ endUsers: PartnerEndUser[]; totalCount: number }> => {
   const organization =
     await organizationsRepository.getOrganizationById(organizationId)
   if (!organization) {
     throw new OrganizationNotFoundError('Organization not found')
   }
-  if (organization.archived_at) {
-    throw new OrganizationConflictError('Organization is archived')
-  }
 
-  const existing = await usersRepository.getUsersByOAuthUserIds(
-    WALLET_PROVIDER,
-    normalised,
-  )
-  const memberships =
-    await organizationMembersRepository.getOrganizationMembershipsByUsers(
-      existing.map((user) => ({
-        oauthProvider: user.oauth_provider,
-        oauthUserId: user.oauth_user_id,
-      })),
+  const { endUsers, totalCount } =
+    await organizationMembersRepository.getEndUsers(
+      organizationId,
+      limit,
+      offset,
     )
-  const enrolledHere = new Set(
-    memberships
-      .filter(
-        (m) =>
-          m.organization_id === organizationId &&
-          m.role === OrganizationRole.EndUser,
-      )
-      .map((m) => m.oauth_user_id),
-  )
-  const publicIds = new Map<string, string>()
-  for (const user of existing) {
-    if (!user.public_id || !enrolledHere.has(user.oauth_user_id)) {
-      throw new OrganizationConflictError(
-        `${user.oauth_user_id} is already an Auto Drive user`,
-      )
-    }
-    publicIds.set(user.oauth_user_id, user.public_id)
-  }
-
-  return withTransaction(async (db) => {
-    const enrolled = []
-    for (const address of normalised) {
-      let publicId = publicIds.get(address)
-      if (!publicId) {
-        publicId = deriveUserPublicId(WALLET_PROVIDER, address)
-        // Named by its address, as wallet sign-in names a user.
-        await usersRepository.createUser(
-          WALLET_PROVIDER,
-          address,
-          address,
-          undefined,
-          publicId,
-          UserRole.User,
-          db,
-        )
-        await organizationMembersRepository.addMemberToOrganization(
-          organizationId,
-          WALLET_PROVIDER,
-          address,
-          OrganizationRole.EndUser,
-          db,
-        )
-        await organizationMembershipChangesRepository.recordChange(
-          {
-            oauthProvider: WALLET_PROVIDER,
-            oauthUserId: address,
-            fromOrganizationId: null,
-            toOrganizationId: organizationId,
-            role: OrganizationRole.EndUser,
-            actor,
-          },
-          db,
-        )
-      }
-      enrolled.push({ address, publicId })
-    }
-    return enrolled
-  })
+  return { endUsers: endUsers.map(toPartnerEndUser), totalCount }
 }
 
 const getMembershipChanges = async (
@@ -610,6 +813,8 @@ export const OrganizationsUseCases = {
   changeMemberRole,
   removeMember,
   enrollEndUsers,
+  removeEndUser,
+  listEndUsers,
   getMembershipChanges,
   listApiKeys,
   createApiKey,

@@ -22,12 +22,11 @@ exports.up = function (db) {
   var filePath = path.join(
     __dirname,
     'sqls',
-    '20261121000000-organization-end-users-up.sql',
+    '20261121000000-partner-end-users-up.sql',
   )
   return new Promise(function (resolve, reject) {
     fs.readFile(filePath, { encoding: 'utf-8' }, function (err, data) {
       if (err) return reject(err)
-      console.log('received data: ' + data)
 
       resolve(data)
     })
@@ -40,12 +39,11 @@ exports.down = function (db) {
   var filePath = path.join(
     __dirname,
     'sqls',
-    '20261121000000-organization-end-users-down.sql',
+    '20261121000000-partner-end-users-down.sql',
   )
   return new Promise(function (resolve, reject) {
     fs.readFile(filePath, { encoding: 'utf-8' }, function (err, data) {
       if (err) return reject(err)
-      console.log('received data: ' + data)
 
       resolve(data)
     })

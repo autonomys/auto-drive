@@ -7,17 +7,19 @@ export type Organization = {
 
 /**
  * Organisation admins manage the organisation (its API keys, #889); members
- * use its account. Both see its reports. End users are a partner's customers,
- * enrolled by the partner: they own their files and are charged to its
- * account, but are not listed or counted as members.
+ * use its account. Both see its reports. Partner end users are a partner's
+ * customers, enrolled by the partner: they own their files and are charged to
+ * its account, but are not listed or counted as members.
  */
 export enum OrganizationRole {
   Admin = "admin",
   Member = "member",
-  EndUser = "end_user",
+  PartnerEndUser = "partner_end_user",
 }
 
-/** The roles a member can be given. End users are only ever enrolled. */
+/**
+ * The roles a member can be given. Partner end users are only ever enrolled.
+ */
 export const MEMBER_ROLES = [
   OrganizationRole.Admin,
   OrganizationRole.Member,
@@ -62,19 +64,25 @@ export type OrganizationApiKeys = {
  * A partner's customer, identified by the address of their wallet key.
  * `customerReference` is the partner's own reference for them, and
  * `uploadQuotaBytes` their upload quota (null for the organisation's default).
+ * `removedAt` is set while the partner has removed them: they stay in the
+ * organisation, read-only, until it enrols them again.
  */
-export type EndUser = {
+export type PartnerEndUser = {
   // EIP-55 checksummed.
   address: string;
   publicId: string;
   customerReference: string;
   uploadQuotaBytes: number | null;
+  // When they were first enrolled.
   createdAt: string;
+  removedAt: string | null;
 };
 
 /**
  * One move into, out of or within an organisation. `fromOrganizationId` and
- * `toOrganizationId` are equal for a role change.
+ * `toOrganizationId` are equal for a role change. For a partner end user,
+ * who never leaves the organisation, a change with no `toOrganizationId` is
+ * a removal and one with no `fromOrganizationId` an enrolment.
  */
 export type OrganizationMembershipChange = {
   id: string;

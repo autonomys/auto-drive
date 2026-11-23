@@ -35,7 +35,18 @@ const endUserSchema = {
       nullable: true,
       description: 'Null for the default of the organization',
     },
-    createdAt: { type: 'string', format: 'date-time' },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+      description: 'When the end user was first enrolled',
+    },
+    removedAt: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description:
+        'When the end user was removed. Null unless they are removed now.',
+    },
   },
 }
 
@@ -47,7 +58,7 @@ export const organizations = {
     '/organizations/{organizationId}/end-users': {
       post: {
         summary: 'Organizations - Enroll end users',
-        description: `${endUsersAccess} End users are a partner's customers, each identified by a wallet address. They own the files they upload, which are charged to the organization's account, and are not members of the organization. An address already enrolled with the same customer reference is returned as it is, so a request can be retried; the rest of the request is enrolled. All or none of the end users in a request are enrolled.`,
+        description: `${endUsersAccess} End users are a partner's customers, each identified by a wallet address. They own the files they upload, which are charged to the organization's account, and are not members of the organization. All or none of the end users in a request are enrolled. An end user already enrolled with the same customer reference is returned as it is, whatever quota the request gives, so a request can be retried. A removed end user is enrolled again, with the customer reference and quota of the request.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [organizationIdParameter],
@@ -75,7 +86,7 @@ export const organizations = {
                           type: 'string',
                           pattern: '^[A-Za-z0-9._:-]{1,128}$',
                           description:
-                            'Your own reference for the customer, unique among the end users of the organization. Use a pseudonymous ID, never personal data.',
+                            'Your own reference for the customer, unique among the end users of the organization, removed ones included. Use a pseudonymous ID, never personal data.',
                         },
                         uploadQuotaBytes: {
                           type: 'integer',
@@ -118,13 +129,13 @@ export const organizations = {
           '404': { description: 'Not a partner organization' },
           '409': {
             description:
-              'An address enrolled with another customer reference, a customer reference another end user has, an address with another Auto Drive user, or more end users than the organization may have',
+              'An address enrolled with another customer reference, a customer reference another end user has (removed or not), an address with another Auto Drive user, more end users that are not removed than the organization may have, or an archived organization',
           },
         },
       },
       get: {
         summary: 'Organizations - List end users',
-        description: `${endUsersAccess} Auto Drive admins may list them too. Ordered by enrollment.`,
+        description: `${endUsersAccess} Auto Drive admins may list them too. Removed end users are included, with \`removedAt\` set. Ordered by first enrollment.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [
@@ -144,7 +155,8 @@ export const organizations = {
         ],
         responses: {
           '200': {
-            description: 'A page of end users, and how many there are',
+            description:
+              'A page of end users, and how many there are, removed ones included',
             content: {
               'application/json': {
                 schema: {
@@ -170,7 +182,7 @@ export const organizations = {
     '/organizations/{organizationId}/end-users/{address}': {
       delete: {
         summary: 'Organizations - Remove an end user',
-        description: `${endUsersAccess} Auto Drive admins may remove them too. The end user keeps their files, and is no longer charged to the organization.`,
+        description: `${endUsersAccess} Auto Drive admins may remove them too. The end user stays in the organization with read-only access to their files and no longer counts towards its end users. Enrolling them again undoes it. Removing an end user already removed succeeds, so a request can be retried.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [
@@ -183,7 +195,7 @@ export const organizations = {
           },
         ],
         responses: {
-          '204': { description: 'Removed' },
+          '204': { description: 'Removed, now or before' },
           '400': { description: 'Not an address' },
           '401': { description: 'Unauthorized' },
           '403': {
