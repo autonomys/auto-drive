@@ -101,14 +101,17 @@ const getPendingById = async (
   return result.rows[0] ? mapRow(result.rows[0]) : null
 }
 
+// Leaves out `exceptPublicId`'s invitation, which inviting them again renews
+// rather than adds to.
 const countPendingByOrganization = async (
   organizationId: string,
+  exceptPublicId: string,
 ): Promise<number> => {
   const db = await getDatabase()
   const result = await db.query<{ count: string }>(
     `SELECT COUNT(*) AS count FROM organization_invitations
-     WHERE organization_id = $1 AND ${PENDING}`,
-    [organizationId],
+     WHERE organization_id = $1 AND public_id <> $2 AND ${PENDING}`,
+    [organizationId, exceptPublicId],
   )
   return Number(result.rows[0].count)
 }

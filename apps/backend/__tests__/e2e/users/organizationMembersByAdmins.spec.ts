@@ -205,6 +205,40 @@ describe('Partner organization members, managed by its admins', () => {
       ).toHaveLength(1)
     })
 
+    it('renews an invitation even with the most pending', async () => {
+      const invitees = Array.from({ length: 50 }, () => createMockUser())
+      jest
+        .spyOn(AuthManager, 'getUserFromPublicId')
+        .mockImplementation(
+          async (publicId) => invitees.find((u) => u.publicId === publicId)!,
+        )
+      for (const invitee of invitees) {
+        ;(await invite(organizationAdmin, invitee))._unsafeUnwrap()
+      }
+
+      expect((await invite(organizationAdmin, invitees[0])).isOk()).toBe(true)
+      jest
+        .spyOn(AuthManager, 'getUserFromPublicId')
+        .mockResolvedValue(createMockUser())
+      expect(
+        (await invite(organizationAdmin, createMockUser()))._unsafeUnwrapErr(),
+      ).toBeInstanceOf(ConflictError)
+    })
+
+    it('refuses to join an organization archived since the invitation', async () => {
+      const addMember = jest.spyOn(AuthManager, 'addOrganizationMember')
+      const invitation = (await invite(organizationAdmin))._unsafeUnwrap()
+      organization = { ...organization, archivedAt: new Date().toISOString() }
+
+      const result = await OrganizationsUseCases.acceptInvitation(
+        outsider,
+        invitation.id,
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+      expect(addMember).not.toHaveBeenCalled()
+    })
+
     it('can be accepted only by the invitee, signed in', async () => {
       const invitation = (await invite(organizationAdmin))._unsafeUnwrap()
 

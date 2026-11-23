@@ -15,6 +15,8 @@ interface CreditLimitsProps {
   isPartner?: boolean;
   /** Free credits issued to a partner each UTC month. */
   monthlyFreeUploadBytes?: number;
+  /** When the next monthly free credits are issued: the next UTC month. */
+  freeCreditsIssueDate?: Date;
   /** Free credits a partner was granted, left to use. */
   freeCreditBytesRemaining?: number;
   /**
@@ -46,6 +48,7 @@ export const AccountInformation = ({
   renewalDate,
   isPartner = false,
   monthlyFreeUploadBytes = 0,
+  freeCreditsIssueDate = renewalDate,
   freeCreditBytesRemaining = 0,
   purchasedBytesRemaining = 0,
   purchasedBytesTotal = 0,
@@ -122,7 +125,7 @@ export const AccountInformation = ({
           {monthlyFreeUploadBytes > 0 && (
             <div className='text-xs text-muted-foreground'>
               {formatBytes(monthlyFreeUploadBytes, 2)} more in{' '}
-              {utcToLocalRelativeTime(renewalDate.toISOString())}
+              {utcToLocalRelativeTime(freeCreditsIssueDate.toISOString())}
             </div>
           )}
         </div>

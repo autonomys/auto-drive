@@ -23,6 +23,7 @@ import {
 } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { SessionContext } from 'next-auth/react';
 import { AuthModal } from '../../molecules/AuthModal';
 import { SIDEBAR_DEFINITION } from './items';
@@ -31,6 +32,8 @@ import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
 import { useSearchParams } from 'next/navigation';
 import { CALLBACK_URL_PARAM, sanitizeCallbackUrl } from '@/utils/callbackUrl';
+
+dayjs.extend(utc);
 
 export type SideNavbarProps = {
   networkId: NetworkId;
@@ -62,6 +65,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   useEffect(() => {
     if (callbackUrl && loggedOut) setIsAuthModalOpen(true);
   }, [callbackUrl, loggedOut]);
+
+  // A partner's monthly free credits are issued at the start of each UTC
+  // month, which is not local midnight.
+  const freeCreditsIssueDate = useMemo(
+    () => dayjs.utc().add(1, 'month').startOf('month').toDate(),
+    [],
+  );
 
   const renewalDate = useMemo(() => {
     const date = dayjs().add(1, 'month').startOf('month');
@@ -167,6 +177,7 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             uploadPending={freeRemaining}
             isPartner={!!account?.isPartner}
             monthlyFreeUploadBytes={account?.monthlyFreeUploadBytes ?? 0}
+            freeCreditsIssueDate={freeCreditsIssueDate}
             freeCreditBytesRemaining={freeCreditBytesRemaining}
             purchasedBytesRemaining={
               showPurchasedCredits ? purchasedBytesRemaining : 0

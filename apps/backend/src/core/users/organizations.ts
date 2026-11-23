@@ -436,6 +436,7 @@ const inviteMember = async (
   const pending =
     await organizationInvitationsRepository.countPendingByOrganization(
       organizationId,
+      publicId,
     )
   if (pending >= MAX_PENDING_INVITATIONS) {
     return err(
@@ -590,8 +591,17 @@ const acceptInvitation = async (
   const invitation = found.value
   const { organizationId } = invitation
 
-  const partnerAccount = await getPartnerAccount(organizationId)
+  const [partnerAccount, organization] = await Promise.all([
+    getPartnerAccount(organizationId),
+    AuthManager.getOrganization(organizationId),
+  ])
   if (partnerAccount.isErr()) return err(partnerAccount.error)
+  if (organization.isErr()) return err(organization.error)
+  // Auth refuses the move too; checked here so the user isn't first asked to
+  // confirm leaving credits behind for a move that can't happen.
+  if (organization.value.archivedAt) {
+    return err(new ConflictError('This organization no longer exists'))
+  }
 
   if (!executor.organizationId) {
     return err(
