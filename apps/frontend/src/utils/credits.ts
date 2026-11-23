@@ -116,6 +116,7 @@ export type BatchStatus =
   | 'replaced';
 
 export interface BatchStatusFields {
+  kind: PurchasedCreditKind;
   expired: boolean;
   uploadBytesRemaining: string;
   expiresAt: string;
@@ -136,6 +137,9 @@ export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
   // of the month took its place.
   if (batch.supersededAt) return 'replaced';
   if (batch.expired) return 'expired';
+  // Monthly free credits always end within the month, so "expiring" would
+  // show for their whole life.
+  if (batch.kind === 'free_monthly') return 'active';
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
   return 'active';

@@ -189,7 +189,8 @@ describe('getBatchStatus', () => {
     jest.useRealTimers()
   })
 
-  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string; supersededAt: string | null }> = {}) => ({
+  const makeBatch = (overrides: Partial<{ kind: 'purchase' | 'free_one_time' | 'free_monthly'; expired: boolean; uploadBytesRemaining: string; expiresAt: string; supersededAt: string | null }> = {}) => ({
+    kind: 'purchase' as const,
     expired: false,
     uploadBytesRemaining: '1048576',
     expiresAt: '2026-12-01T00:00:00Z',
@@ -211,6 +212,12 @@ describe('getBatchStatus', () => {
 
   it('returns "expiring" when the batch expires in exactly 30 days', () => {
     expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-01T00:00:00Z' }))).toBe('expiring')
+  })
+
+  it('never returns "expiring" for monthly free credits', () => {
+    expect(getBatchStatus(makeBatch({ kind: 'free_monthly', expiresAt: '2026-06-16T00:00:00Z' }))).toBe('active')
+    // One-time free credits still warn.
+    expect(getBatchStatus(makeBatch({ kind: 'free_one_time', expiresAt: '2026-06-16T00:00:00Z' }))).toBe('expiring')
   })
 
   it('returns "active" when the batch expires in more than 30 days', () => {
