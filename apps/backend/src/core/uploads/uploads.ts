@@ -140,15 +140,21 @@ const readUploadCredits = (
 // Twice, so that an upload cut off part-way can be sent again at once.
 const UNFINISHED_BYTES_PER_CREDIT = 2
 
+// A completion charges an upload and then marks it as migrating. Between the
+// two the upload is still counted as unfinished while its bytes are already
+// off the credits, which can refuse a part that fits. A refusal waits this
+// long for that to pass.
+const COMPLETION_SETTLE_MS = 50
+
 // The bytes each caller has in requests this process has accepted and not yet
 // written, in the order they arrived.
 const bytesInFlight = new Map<string, Set<{ bytes: number }>>()
 
 /**
  * Admits `bytes` for storing unless they would take the caller's unfinished
- * uploads past twice their remaining upload credits: bytes they could not
- * complete an upload of. Resolves to a function the caller must run once the
- * bytes are committed or given up, and not before.
+ * uploads, pending or being completed, past twice their remaining upload
+ * credits: bytes they could not complete an upload of. Resolves to a function
+ * the caller must run once the bytes are committed or given up, and not before.
  *
  * Bytes are counted from when they are admitted, so parts sent at the same
  * time are held to the bound together, first come first served. That count is
@@ -181,26 +187,39 @@ const reserveStorage = async (
   }
 
   try {
-    let credits = await readUploadCredits(user, CREDITS_MAX_AGE_MS)
-    // In flight first, stored second: a part released in between is already
-    // committed, so the read that follows sees it.
-    let held = 0
-    for (const reservation of reservations) {
-      held += reservation.bytes
-      if (reservation === own) break
+    const look = async (creditsMaxAgeMs: number) => {
+      const credits = await readUploadCredits(user, creditsMaxAgeMs)
+      // In flight first, stored second: a part released in between is already
+      // committed, so the read that follows sees it.
+      let inFlight = 0
+      for (const reservation of reservations) {
+        inFlight += reservation.bytes
+        if (reservation === own) break
+      }
+      const stored = await uploadsRepository.getUnfinishedBytes(
+        user.oauthProvider,
+        user.oauthUserId,
+        config.uploads.unfinishedWindowMs,
+      )
+      return {
+        fits: inFlight + stored.bytes <= UNFINISHED_BYTES_PER_CREDIT * credits,
+        completing: stored.completingBytes > 0,
+      }
     }
-    held += await uploadsRepository.getUnfinishedBytes(
-      user.oauthProvider,
-      user.oauthUserId,
-      config.uploads.unfinishedWindowMs,
-    )
 
-    // A refusal is decided on credits read since this request arrived, so that
-    // credits bought a moment ago count.
-    if (held > UNFINISHED_BYTES_PER_CREDIT * credits) {
-      credits = await readUploadCredits(user, Date.now() - arrivedAt)
+    // A refusal is decided on a second look, with credits read since this
+    // request arrived, so that credits bought a moment ago count.
+    const first = await look(CREDITS_MAX_AGE_MS)
+    let fits = first.fits
+    if (!fits) {
+      if (first.completing) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, COMPLETION_SETTLE_MS),
+        )
+      }
+      fits = (await look(Date.now() - arrivedAt)).fits
     }
-    if (held > UNFINISHED_BYTES_PER_CREDIT * credits) {
+    if (!fits) {
       throw new PaymentRequiredError('Not enough upload credits')
     }
     return release

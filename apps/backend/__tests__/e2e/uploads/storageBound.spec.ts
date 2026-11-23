@@ -61,12 +61,14 @@ describe('Unfinished uploads are bounded by the upload credits of the caller', (
   ) =>
     UploadsUseCases.uploadChunk(user, uploadId, index, Buffer.alloc(bytes, 1))
 
-  const unfinishedBytes = (user: UserWithOrganization) =>
-    uploadsRepository.getUnfinishedBytes(
-      user.oauthProvider,
-      user.oauthUserId,
-      config.uploads.unfinishedWindowMs,
-    )
+  const unfinishedBytes = async (user: UserWithOrganization) =>
+    (
+      await uploadsRepository.getUnfinishedBytes(
+        user.oauthProvider,
+        user.oauthUserId,
+        config.uploads.unfinishedWindowMs,
+      )
+    ).bytes
 
   const count = async (query: string, values: unknown[]) => {
     const db = await getDatabase()
@@ -182,7 +184,51 @@ describe('Unfinished uploads are bounded by the upload credits of the caller', (
       await sendPart(user, (await startUpload(user)).id, 0, 2 * CREDITS)
     })
 
-    it('of an upload that is no longer pending do not count', async () => {
+    it('of an upload that is being completed still count', async () => {
+      const user = await callerWithCredits()
+      const completing = await startUpload(user)
+      await sendPart(user, completing.id, 0, 2 * CREDITS)
+      await uploadsRepository.claimUploadForCompletion(
+        completing.id,
+        config.uploads.completionClaimStaleMs,
+      )
+
+      await expect(
+        sendPart(user, (await startUpload(user)).id, 0, 1),
+      ).rejects.toBeInstanceOf(PaymentRequiredError)
+      expect(await unfinishedBytes(user)).toBe(2 * CREDITS)
+    })
+
+    // A completion charges an upload and then marks it as migrating. Between
+    // the two it is counted as unfinished and its bytes are off the credits.
+    it('are not refused because of an upload that was charged a moment ago', async () => {
+      const user = await callerWithCredits()
+      // The credits left once the 60 bytes below are charged. Every reading
+      // gives them, so the part of 30 does not fit until the charged upload
+      // stops counting.
+      jest
+        .spyOn(AccountsUseCases, 'getPendingCreditsByUserAndType')
+        .mockResolvedValue(CREDITS - 60)
+      const charged = await startUpload(user)
+      await sendPart(user, charged.id, 0, 60)
+      await uploadsRepository.claimUploadForCompletion(
+        charged.id,
+        config.uploads.completionClaimStaleMs,
+      )
+      const markedAsMigrating = new Promise((resolve) =>
+        setTimeout(resolve, 20),
+      ).then(() =>
+        uploadsRepository.updateUploadStatusByRootUploadId(
+          charged.id,
+          UploadStatus.MIGRATING,
+        ),
+      )
+
+      await sendPart(user, (await startUpload(user)).id, 0, 30)
+      await markedAsMigrating
+    })
+
+    it('of an upload that has been completed do not count', async () => {
       const user = await callerWithCredits()
       const finished = await startUpload(user)
       await sendPart(user, finished.id, 0, 2 * CREDITS)

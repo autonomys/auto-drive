@@ -22,7 +22,7 @@ exports.up = function (db) {
   var filePath = path.join(
     __dirname,
     'sqls',
-    '20261121000000-uploads-pending-by-caller-up.sql',
+    '20261121000000-uploads-unfinished-by-caller-up.sql',
   )
   return new Promise(function (resolve, reject) {
     fs.readFile(filePath, { encoding: 'utf-8' }, function (err, data) {
@@ -40,7 +40,7 @@ exports.down = function (db) {
   var filePath = path.join(
     __dirname,
     'sqls',
-    '20261121000000-uploads-pending-by-caller-down.sql',
+    '20261121000000-uploads-unfinished-by-caller-down.sql',
   )
   return new Promise(function (resolve, reject) {
     fs.readFile(filePath, { encoding: 'utf-8' }, function (err, data) {
