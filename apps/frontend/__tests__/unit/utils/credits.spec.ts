@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases, purchasedUploadBytesLeft } from '../../../src/utils/credits'
 import { PaymentMethod } from '@auto-drive/models'
 
 // ---------------------------------------------------------------------------
@@ -447,5 +447,35 @@ describe('summarizePurchases', () => {
 
     expect(summary.bytesRemaining).toBe(BigInt(40))
     expect(summary.refundedCount).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// purchasedUploadBytesLeft
+// ---------------------------------------------------------------------------
+
+describe('purchasedUploadBytesLeft', () => {
+  const partner = {
+    isPartner: true,
+    pendingUploadCredits: 8_000,
+    freeUploadCredits: 3_000,
+  }
+
+  it('reads the credit summary when there is one', () => {
+    expect(
+      purchasedUploadBytesLeft({ uploadBytesRemaining: '4000' }, partner),
+    ).toBe(4_000)
+  })
+
+  // Without the buyCredits flag the summary route refuses.
+  it('derives a partner\'s purchased bytes from its account without a summary', () => {
+    expect(purchasedUploadBytesLeft(null, partner)).toBe(5_000)
+  })
+
+  it('counts nothing for other accounts without a summary', () => {
+    expect(
+      purchasedUploadBytesLeft(null, { ...partner, isPartner: false }),
+    ).toBe(0)
+    expect(purchasedUploadBytesLeft(null, null)).toBe(0)
   })
 })

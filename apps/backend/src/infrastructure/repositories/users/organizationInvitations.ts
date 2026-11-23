@@ -135,7 +135,8 @@ const close = async (
 
 const markAccepted = (id: string) => close(id, 'accepted_at')
 const markDeclined = (id: string) => close(id, 'declined_at')
-const revoke = (id: string, by: string) => close(id, 'revoked_at', by)
+// `by` is null when it lapsed because its sender lost the right to send it.
+const revoke = (id: string, by: string | null) => close(id, 'revoked_at', by)
 
 export const organizationInvitationsRepository = {
   upsertOpen,

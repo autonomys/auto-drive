@@ -122,9 +122,11 @@ export const AccountInformation = ({
           <div className='text-xs text-muted-foreground'>
             Used before purchased credits
           </div>
+          {/* The month's unused free credits expire when the next are issued,
+              so they are not added on top. */}
           {monthlyFreeUploadBytes > 0 && (
             <div className='text-xs text-muted-foreground'>
-              {formatBytes(monthlyFreeUploadBytes, 2)} more in{' '}
+              {formatBytes(monthlyFreeUploadBytes, 2)} a month, renews in{' '}
               {utcToLocalRelativeTime(freeCreditsIssueDate.toISOString())}
             </div>
           )}

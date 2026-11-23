@@ -79,7 +79,7 @@ describe('Partner organization members, managed by its admins', () => {
     jest
       .spyOn(AuthManager, 'getUserFromPublicId')
       .mockImplementation(async (publicId) =>
-        [organizationAdmin, member, outsider].find(
+        [organizationAdmin, member, outsider, autoDriveAdmin].find(
           (u) => u.publicId === publicId,
         )!,
       )
@@ -166,7 +166,57 @@ describe('Partner organization members, managed by its admins', () => {
     })
 
     it('lets an Auto Drive admin invite too', async () => {
-      expect((await invite(autoDriveAdmin)).isOk()).toBe(true)
+      jest
+        .spyOn(AuthManager, 'addOrganizationMember')
+        .mockResolvedValue(ok(undefined))
+      const invitation = (await invite(autoDriveAdmin))._unsafeUnwrap()
+
+      expect(
+        (
+          await OrganizationsUseCases.acceptInvitation(outsider, invitation.id)
+        ).isOk(),
+      ).toBe(true)
+    })
+
+    it.each<[string, [UserWithOrganization, OrganizationRole][]]>([
+      ['demoted', [[organizationAdmin, OrganizationRole.Member]]],
+      ['removed', []],
+    ])('lapses once its sender is %s', async (_, senderMembership) => {
+      const addMember = jest.spyOn(AuthManager, 'addOrganizationMember')
+      const invitation = (await invite(organizationAdmin))._unsafeUnwrap()
+      organization = {
+        ...organization,
+        memberships: memberships(
+          [member, OrganizationRole.Admin],
+          ...senderMembership,
+        ),
+      }
+
+      const result = await OrganizationsUseCases.acceptInvitation(
+        outsider,
+        invitation.id,
+      )
+
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(ConflictError)
+      expect(addMember).not.toHaveBeenCalled()
+      // It is revoked, so it no longer shows.
+      expect(
+        (
+          await OrganizationsUseCases.getReceivedInvitations(outsider)
+        )._unsafeUnwrap(),
+      ).toEqual([])
+    })
+
+    it('leaves out an invitation to an organization the user is in', async () => {
+      ;(await invite(organizationAdmin))._unsafeUnwrap()
+
+      // An Auto Drive admin added them directly while it was open.
+      const received = await OrganizationsUseCases.getReceivedInvitations({
+        ...outsider,
+        organizationId,
+      })
+
+      expect(received._unsafeUnwrap()).toEqual([])
     })
 
     it('refuses to invite a member or an unknown user', async () => {

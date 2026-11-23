@@ -511,10 +511,13 @@ const revokeInvitation = async (
 const getReceivedInvitations = async (
   executor: UserWithOrganization,
 ): Promise<Result<ReceivedOrganizationInvitation[], OrganizationError>> => {
-  const invitations =
+  // One to the caller's own organization is moot: they were added directly
+  // while it was open.
+  const invitations = (
     await organizationInvitationsRepository.getPendingByPublicId(
       executor.publicId,
     )
+  ).filter((i) => i.organizationId !== executor.organizationId)
   if (invitations.length === 0) return ok([])
 
   const organizations = await AuthManager.getOrganizationSummaries([
@@ -592,6 +595,21 @@ const acceptInvitation = async (
   // confirm leaving credits behind for a move that can't happen.
   if (organization.value.archivedAt) {
     return err(new ConflictError('This organization no longer exists'))
+  }
+  // The invitation acts with its sender's authority, so it lapses once they
+  // can no longer manage the organization's members.
+  const sender = invitation.invitedBy
+  if (
+    roleOf(organization.value, sender) !== OrganizationRole.Admin &&
+    (await AuthManager.getUserFromPublicId(sender).catch(() => null))?.role !==
+      UserRole.Admin
+  ) {
+    await organizationInvitationsRepository.revoke(invitationId, null)
+    return err(
+      new ConflictError(
+        'This invitation is no longer valid. Ask the organization for a new one.',
+      ),
+    )
   }
 
   if (!executor.organizationId) {

@@ -48,6 +48,7 @@ const PROTECTED_DRIVE_SECTIONS = new Set([
   'credits',
   'developers',
   'fs',
+  'organization',
   'profile',
   'search',
   'shared',

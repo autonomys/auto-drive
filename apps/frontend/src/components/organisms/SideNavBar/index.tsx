@@ -32,6 +32,7 @@ import { AskForCreditsButton } from '../../atoms/AskForCredits';
 import { BuyMoreCreditsButton } from '../../atoms/BuyMoreCreditsButton';
 import { useSearchParams } from 'next/navigation';
 import { CALLBACK_URL_PARAM, sanitizeCallbackUrl } from '@/utils/callbackUrl';
+import { purchasedUploadBytesLeft } from '@/utils/credits';
 
 dayjs.extend(utc);
 
@@ -94,17 +95,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
   // (see core/featureFlags). Account model is not part of the gate.
   const hasBuyCreditsFeature = features.buyCredits && isLoggedIn;
 
-  // creditSummary is always loaded for any logged-in user (see SessionEnsurer),
-  // so we can safely derive purchasedBytesRemaining from it regardless of the
-  // feature flag.  This is needed to separate free vs. purchased bytes in the
-  // progress bar even when the buy-credits UI is hidden.
-  const purchasedBytesRemaining = useMemo(() => {
-    if (!creditSummary) return 0;
-    // uploadBytesRemaining is a decimal-string bigint from the API, purchased
-    // credits only. Max safe value is 100 GiB which is well within Number's
-    // safe range.
-    return Number(creditSummary.uploadBytesRemaining);
-  }, [creditSummary]);
+  // Separates free from purchased bytes even when the buy-credits UI is
+  // hidden. Without the flag there is no credit summary, and only a partner's
+  // purchased bytes can be told apart.
+  const purchasedBytesRemaining = useMemo(
+    () => purchasedUploadBytesLeft(creditSummary, account),
+    [creditSummary, account],
+  );
 
   // Free credits granted to a partner. Read from the account, so they show
   // whether or not the buy-credits feature is on.
