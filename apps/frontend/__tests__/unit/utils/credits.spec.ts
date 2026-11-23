@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases } from '../../../src/utils/credits'
 import { PaymentMethod } from '@auto-drive/models'
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,8 @@ describe('getBatchStatus', () => {
     jest.useRealTimers()
   })
 
-  const makeBatch = (overrides: Partial<{ expired: boolean; uploadBytesRemaining: string; expiresAt: string }> = {}) => ({
+  const makeBatch = (overrides: Partial<{ kind: 'purchase' | 'free_one_time' | 'free_monthly'; expired: boolean; uploadBytesRemaining: string; expiresAt: string; supersededAt: string | null }> = {}) => ({
+    kind: 'purchase' as const,
     expired: false,
     uploadBytesRemaining: '1048576',
     expiresAt: '2026-12-01T00:00:00Z',
@@ -213,6 +214,12 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-01T00:00:00Z' }))).toBe('expiring')
   })
 
+  it('never returns "expiring" for monthly free credits', () => {
+    expect(getBatchStatus(makeBatch({ kind: 'free_monthly', expiresAt: '2026-06-16T00:00:00Z' }))).toBe('active')
+    // One-time free credits still warn.
+    expect(getBatchStatus(makeBatch({ kind: 'free_one_time', expiresAt: '2026-06-16T00:00:00Z' }))).toBe('expiring')
+  })
+
   it('returns "active" when the batch expires in more than 30 days', () => {
     expect(getBatchStatus(makeBatch({ expiresAt: '2026-07-02T00:00:00Z' }))).toBe('active')
   })
@@ -221,12 +228,42 @@ describe('getBatchStatus', () => {
     expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '0' }))).toBe('depleted')
   })
 
+  it('returns "replaced" for monthly free credits ended by a change to the amount', () => {
+    const replaced = { supersededAt: '2026-05-20T00:00:00Z', expiresAt: '2026-05-20T00:00:00Z' }
+    expect(getBatchStatus(makeBatch(replaced))).toBe('replaced')
+    // Even once the expiry job has flagged its leftover as expired.
+    expect(getBatchStatus(makeBatch({ ...replaced, expired: true }))).toBe('replaced')
+    // A replaced batch that was used up is still just depleted.
+    expect(getBatchStatus(makeBatch({ ...replaced, uploadBytesRemaining: '0' }))).toBe('depleted')
+  })
+
   it('returns "expired" when the batch is expired with bytes remaining', () => {
     expect(getBatchStatus(makeBatch({ expired: true, uploadBytesRemaining: '1048576' }))).toBe('expired')
   })
 
   it('prioritises "depleted" over "expiring"', () => {
     expect(getBatchStatus(makeBatch({ uploadBytesRemaining: '0', expiresAt: '2026-06-10T00:00:00Z' }))).toBe('depleted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// describeBatchKind
+// ---------------------------------------------------------------------------
+
+describe('describeBatchKind', () => {
+  it('labels purchases and one-time free credits', () => {
+    expect(describeBatchKind({ kind: 'purchase', grantPeriod: null })).toBe('Purchased credits')
+    expect(describeBatchKind({ kind: 'free_one_time', grantPeriod: null })).toBe('Free credits')
+  })
+
+  it('names the UTC month of monthly free credits', () => {
+    expect(
+      describeBatchKind({ kind: 'free_monthly', grantPeriod: '2026-11-01T00:00:00.000Z' }),
+    ).toBe('Monthly free credits, November 2026')
+    // A report gives the month as its first day.
+    expect(describeBatchKind({ kind: 'free_monthly', grantPeriod: '2027-01-01' })).toBe(
+      'Monthly free credits, January 2027',
+    )
   })
 })
 

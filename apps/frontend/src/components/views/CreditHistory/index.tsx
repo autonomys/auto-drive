@@ -7,6 +7,7 @@ import { formatBytes } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
   daysUntilExpiry,
+  describeBatchKind,
   getBatchStatus,
   STATUS_CLASSES,
   STATUS_LABEL,
@@ -48,14 +49,18 @@ const ConsumptionBar = ({ batch }: { batch: ExpiringCreditBatch }) => {
 
 const BatchCard = ({ batch }: { batch: ExpiringCreditBatch }) => {
   const status = getBatchStatus(batch);
-  const daysLeft =
-    !batch.expired ? daysUntilExpiry(new Date(batch.expiresAt)) : null;
+  const daysLeft = !batch.expired
+    ? daysUntilExpiry(new Date(batch.expiresAt))
+    : null;
 
   return (
     <div className='rounded-lg border border-border bg-card p-4 shadow-sm'>
       <div className='flex items-start justify-between gap-2'>
-        <div className='flex-1 min-w-0'>
-          <div className='flex items-center gap-2 flex-wrap'>
+        <div className='min-w-0 flex-1'>
+          <p className='mb-1 text-sm font-medium text-foreground'>
+            {describeBatchKind(batch)}
+          </p>
+          <div className='flex flex-wrap items-center gap-2'>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
             >
@@ -71,7 +76,7 @@ const BatchCard = ({ batch }: { batch: ExpiringCreditBatch }) => {
           <ConsumptionBar batch={batch} />
         </div>
 
-        <div className='text-right text-sm shrink-0'>
+        <div className='shrink-0 text-right text-sm'>
           <p className='font-medium text-foreground'>
             {formatBytes(Number(BigInt(batch.uploadBytesRemaining)), 1)}{' '}
             remaining
@@ -80,11 +85,15 @@ const BatchCard = ({ batch }: { batch: ExpiringCreditBatch }) => {
       </div>
 
       <div className='mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground'>
-        <span>Purchased</span>
+        <span>{batch.kind === 'purchase' ? 'Purchased' : 'Granted'}</span>
         <span className='text-right'>{formatDate(batch.purchasedAt)}</span>
-        <span>Expires</span>
+        <span>{batch.supersededAt ? 'Replaced' : 'Expires'}</span>
         <span className='text-right'>
-          {batch.expired ? (
+          {batch.supersededAt ? (
+            <span title='The monthly free amount changed, so a batch for the rest of the month replaced this one.'>
+              {formatDate(batch.supersededAt)} (monthly amount changed)
+            </span>
+          ) : batch.expired ? (
             <span className='text-red-500'>
               Expired {formatDate(batch.expiresAt)}
             </span>
@@ -143,6 +152,13 @@ export const CreditHistoryView = () => {
     staleTime: 30_000,
   });
 
+  const purchasedBatches = batches.filter(
+    (b: ExpiringCreditBatch) => b.kind === 'purchase',
+  );
+  const freeBatches = batches.filter(
+    (b: ExpiringCreditBatch) => b.kind !== 'purchase',
+  );
+
   // Show CTA when user has no active non-depleted batches or all are expiring
   // within 7 days.
   const showBuyMoreCta = useMemo(() => {
@@ -190,25 +206,48 @@ export const CreditHistoryView = () => {
       {/* Buy more CTA */}
       {showBuyMoreCta && <BuyMoreCta purchaseHref={purchaseHref} />}
 
-      {/* Batch list */}
+      {/* Batch lists: free credits and purchased credits apart */}
       {isLoading ? (
         <div className='flex items-center gap-2 text-sm text-muted-foreground'>
           <RefreshCw className='h-4 w-4 animate-spin' />
           Loading credit history…
         </div>
-      ) : batches.length === 0 ? (
-        <div className='rounded-lg border border-dashed border-border p-8 text-center'>
-          <p className='text-muted-foreground'>No purchases yet.</p>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Credit batches will appear here once you complete a purchase.
-          </p>
-        </div>
       ) : (
-        <div className='flex flex-col gap-3'>
-          {batches.map((batch: ExpiringCreditBatch) => (
-            <BatchCard key={batch.id} batch={batch} />
-          ))}
-        </div>
+        <>
+          {freeBatches.length > 0 && (
+            <section className='flex flex-col gap-3'>
+              <h2 className='text-lg font-semibold text-foreground'>
+                Free credits
+              </h2>
+              <p className='text-sm text-muted-foreground'>
+                Granted to your organisation at no cost. They are used before
+                purchased credits and can&apos;t be refunded.
+              </p>
+              {freeBatches.map((batch) => (
+                <BatchCard key={batch.id} batch={batch} />
+              ))}
+            </section>
+          )}
+          <section className='flex flex-col gap-3'>
+            {freeBatches.length > 0 && (
+              <h2 className='text-lg font-semibold text-foreground'>
+                Purchased credits
+              </h2>
+            )}
+            {purchasedBatches.length === 0 ? (
+              <div className='rounded-lg border border-dashed border-border p-8 text-center'>
+                <p className='text-muted-foreground'>No purchases yet.</p>
+                <p className='mt-1 text-sm text-muted-foreground'>
+                  Credit batches will appear here once you complete a purchase.
+                </p>
+              </div>
+            ) : (
+              purchasedBatches.map((batch) => (
+                <BatchCard key={batch.id} batch={batch} />
+              ))
+            )}
+          </section>
+        </>
       )}
     </div>
   );

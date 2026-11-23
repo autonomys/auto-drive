@@ -87,7 +87,7 @@ describe('Usage report routes', () => {
     ],
     [
       '/accounts/a/usage-report?from=2026-01-01&to=2026-02-01&format=csv',
-      'table: format=csv needs one of summary|apiKeys|customerReferences|purchases',
+      'table: format=csv needs one of summary|apiKeys|customerReferences|purchases|freeCredits',
     ],
     [
       '/accounts/a/usage-report/interactions?from=2026-01-01&to=2026-02-01&format=xml',

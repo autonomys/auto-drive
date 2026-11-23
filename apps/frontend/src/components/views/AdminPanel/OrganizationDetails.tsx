@@ -51,6 +51,7 @@ import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
 import { PartnerTerms } from './PartnerTerms';
+import { PartnerFreeCredits } from './PartnerFreeCredits';
 import { UsageReportView } from '../UsageReport';
 import { OrganizationApiKeys } from '@/components/organisms/OrganizationApiKeys';
 
@@ -346,6 +347,11 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                 <p className='mt-1 font-medium'>
                   {formatBytes(Number(account.pendingUploadCredits))}
                 </p>
+                {account.freeUploadCredits > 0 && (
+                  <p className='mt-1 text-xs text-gray-500'>
+                    incl. {formatBytes(account.freeUploadCredits)} free credits
+                  </p>
+                )}
               </div>
               <div className='rounded-lg border border-gray-200 p-4'>
                 <p className='text-xs text-gray-500'>Download Credits</p>
@@ -409,6 +415,13 @@ export const OrganizationDetails = ({ accountId }: Props) => {
 
       {account?.isPartner && (
         <PartnerTerms
+          account={account}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
+
+      {account?.isPartner && (
+        <PartnerFreeCredits
           account={account}
           onChanged={() => setAccountVersion((v) => v + 1)}
         />

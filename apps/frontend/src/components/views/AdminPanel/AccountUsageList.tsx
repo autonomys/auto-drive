@@ -82,15 +82,17 @@ export const AccountUsageList = () => {
               <TableHeadCell>Uploads</TableHeadCell>
               <TableHeadCell>Upload size</TableHeadCell>
               <TableHeadCell>AI3 value</TableHeadCell>
+              <TableHeadCell>Paid with free credits</TableHeadCell>
               <TableHeadCell>Download size</TableHeadCell>
-              <TableHeadCell>Credits granted</TableHeadCell>
+              <TableHeadCell>Credits purchased</TableHeadCell>
+              <TableHeadCell>Free credits granted</TableHeadCell>
             </TableHeadRow>
           </TableHead>
           <TableBody>
             {!range || isLoading || error || !accounts?.length ? (
               <TableBodyRow>
                 <TableBodyCell
-                  colSpan={6}
+                  colSpan={8}
                   className='py-6 text-center text-gray-500'
                 >
                   {!range ? (
@@ -134,8 +136,14 @@ export const AccountUsageList = () => {
                   <TableBodyCell>
                     {formatAi3(BigInt(account.ai3Value))}
                   </TableBodyCell>
+                  <TableBodyCell>
+                    {bytes(account.freeCreditBytes)}
+                  </TableBodyCell>
                   <TableBodyCell>{bytes(account.downloadBytes)}</TableBodyCell>
                   <TableBodyCell>{bytes(account.grantedBytes)}</TableBodyCell>
+                  <TableBodyCell>
+                    {bytes(account.freeCreditsGrantedBytes)}
+                  </TableBodyCell>
                 </TableBodyRow>
               ))
             )}
