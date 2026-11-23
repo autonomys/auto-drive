@@ -8,8 +8,9 @@ import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 
 // Partner organizations, their members and their API keys. Every route checks
-// its caller in its use case: Auto Drive admins manage organizations and
-// members, and organization members use the API key routes.
+// its caller in its use case: Auto Drive admins manage organizations,
+// organization admins manage their members (by invitation) and API keys, and
+// members read their organization.
 export const organizationsController = Router()
 
 const roleSchema = z.nativeEnum(OrganizationRole)
@@ -59,6 +60,223 @@ organizationsController.post(
     }
 
     res.status(201).json(result.value)
+  }),
+)
+
+// Registered before the `/:organizationId` routes, which would otherwise read
+// `invitations` as an organization ID.
+organizationsController.get(
+  '/invitations/received',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.getReceivedInvitations(user),
+      'Failed to get invitations',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/invitations/:invitationId/accept',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const body = z
+      .object({ allowUnusedCredits: z.boolean().optional() })
+      .safeParse(req.body ?? {})
+    if (!body.success) {
+      res.status(400).json({ error: 'allowUnusedCredits must be a boolean' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.acceptInvitation(user, req.params.invitationId, {
+        allowUnusedCredits: body.data.allowUnusedCredits,
+      }),
+      'Failed to accept invitation',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/invitations/:invitationId/decline',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.declineInvitation(user, req.params.invitationId),
+      'Failed to decline invitation',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
+  }),
+)
+
+organizationsController.get(
+  '/:organizationId/overview',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.getOverview(user, req.params.organizationId),
+      'Failed to get organization',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+const pageSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+organizationsController.get(
+  '/:organizationId/files',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const page = pageSchema.safeParse(req.query)
+    if (!page.success) {
+      res.status(400).json({
+        error: 'limit must be 1 to 100 and offset a non-negative integer',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.getFiles(
+        user,
+        req.params.organizationId,
+        page.data.limit,
+        page.data.offset,
+      ),
+      'Failed to get organization files',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.get(
+  '/:organizationId/invitations',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.getInvitations(user, req.params.organizationId),
+      'Failed to get invitations',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/:organizationId/invitations',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const body = z
+      .object({ publicId: z.string().trim().min(1), role: roleSchema })
+      .safeParse(req.body)
+    if (!body.success) {
+      res.status(400).json({
+        error: `publicId and role (${Object.values(OrganizationRole).join(', ')}) are required`,
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.inviteMember(
+        user,
+        req.params.organizationId,
+        body.data.publicId,
+        body.data.role,
+      ),
+      'Failed to invite member',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json(result.value)
+  }),
+)
+
+organizationsController.delete(
+  '/:organizationId/invitations/:invitationId',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      OrganizationsUseCases.revokeInvitation(
+        user,
+        req.params.organizationId,
+        req.params.invitationId,
+      ),
+      'Failed to revoke invitation',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
   }),
 )
 

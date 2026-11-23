@@ -8,6 +8,8 @@ import {
   User,
   UserRole,
   UserWithOrganization,
+  SERVICE_USER_PROVIDER,
+  deriveUserPublicId,
 } from '@auto-drive/models'
 import { jest } from '@jest/globals'
 import { v4 as uuidv4 } from 'uuid'
@@ -718,6 +720,47 @@ describe('Usage reports', () => {
     expect(total('uploadBytes')).toBe(BigInt(uploads.bytes))
     expect(total('ai3Value')).toBe(BigInt(uploads.ai3Value))
     expect(total('downloadBytes')).toBe(BigInt(downloads.bytes))
+  })
+
+  it('says whether each key is the organization\'s or a member\'s', async () => {
+    const { account } = await seedPartner()
+    jest.spyOn(AuthManager, 'getApiKeyNames').mockResolvedValue([
+      {
+        id: 'key-1',
+        name: 'Production',
+        deletedAt: null,
+        oauthProvider: SERVICE_USER_PROVIDER,
+        oauthUserId: account.organizationId,
+      },
+      {
+        id: 'key-2',
+        name: 'Laptop',
+        deletedAt: null,
+        oauthProvider: 'google',
+        oauthUserId: 'g-1',
+      },
+    ])
+    jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
+      {
+        publicId: deriveUserPublicId('google', 'g-1'),
+        oauthUsername: 'bob',
+      } as UserWithOrganization,
+    ])
+
+    const { apiKeys } = await report(admin, account.id, day(0), NOW)
+
+    expect(apiKeys.find((k) => k.apiKeyId === 'key-1')).toMatchObject({
+      owner: 'organization',
+      ownerName: null,
+    })
+    expect(apiKeys.find((k) => k.apiKeyId === 'key-2')).toMatchObject({
+      owner: 'member',
+      ownerName: 'bob',
+    })
+    expect(apiKeys.find((k) => k.kind === 'session')).toMatchObject({
+      owner: null,
+      ownerName: null,
+    })
   })
 
   it('breaks uploads down by customer reference, summing to the totals', async () => {

@@ -1,11 +1,11 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { Download, Loader } from 'lucide-react';
+import { ChevronDown, Download, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import {
   CreditBalance,
@@ -51,10 +51,75 @@ const EXPORTS = [
   { label: 'Purchases', table: 'purchases' },
   { label: 'Free credits', table: 'freeCredits' },
   { label: 'Interactions', table: 'interactions' },
-  { label: 'JSON', table: 'report' },
+  { label: 'Full report (JSON)', table: 'report' },
 ] as const;
 
 type ExportTable = (typeof EXPORTS)[number]['table'];
+
+// One menu instead of a button per table, which crowded the page.
+const ExportMenu = ({
+  exports,
+  disabled,
+  exporting,
+  onExport,
+}: {
+  exports: readonly { label: string; table: ExportTable }[];
+  disabled: boolean;
+  exporting: ExportTable | null;
+  onExport: (table: ExportTable) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div className='relative' ref={ref}>
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={disabled || exporting !== null}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup='menu'
+        aria-expanded={open}
+      >
+        {exporting ? <Loader className='animate-spin' /> : <Download />}
+        Export
+        <ChevronDown />
+      </Button>
+      {open && (
+        <div
+          role='menu'
+          className='absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-lg'
+        >
+          {exports.map(({ label, table }) => (
+            <button
+              key={table}
+              role='menuitem'
+              className='block w-full px-3 py-1.5 text-left hover:bg-background-hover'
+              onClick={() => {
+                setOpen(false);
+                onExport(table);
+              }}
+            >
+              {label}
+              <span className='ml-1 text-xs text-gray-500'>
+                {table === 'report' ? '' : 'CSV'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Stat = ({
   label,
@@ -88,7 +153,7 @@ const Section = ({
 );
 
 const KeyLabel = ({ row }: { row: UsageByApiKey }) => {
-  if (row.kind === 'session') return <>Web app</>;
+  if (row.kind === 'session') return <>Web app (all members)</>;
   if (row.kind === 'unattributed') {
     return <span className='text-gray-500'>Before attribution</span>;
   }
@@ -143,12 +208,21 @@ const Balance = ({
   );
 };
 
+const KeyOwner = ({ row }: { row: UsageByApiKey }) => {
+  if (row.owner === 'organization') return <>Organization</>;
+  if (row.owner === 'member') {
+    return <>{row.ownerName ?? 'A member'}</>;
+  }
+  return <span className='text-gray-500'>—</span>;
+};
+
 const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
   <div className='overflow-x-auto'>
     <Table className='min-w-full'>
       <TableHead>
         <TableHeadRow>
           <TableHeadCell>Key</TableHeadCell>
+          <TableHeadCell>Owner</TableHeadCell>
           <TableHeadCell>Uploads</TableHeadCell>
           <TableHeadCell>Upload size</TableHeadCell>
           <TableHeadCell>Purchased</TableHeadCell>
@@ -164,6 +238,9 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
             <TableBodyCell>
               <KeyLabel row={row} />
             </TableBodyCell>
+            <TableBodyCell>
+              <KeyOwner row={row} />
+            </TableBodyCell>
             <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
             <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
@@ -176,7 +253,7 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
         {rows.length === 0 && (
           <TableBodyRow>
             <TableBodyCell
-              colSpan={8}
+              colSpan={9}
               className='py-6 text-center text-gray-500'
             >
               No activity in this range
@@ -404,29 +481,27 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
         (value) => BigInt(value) > BigInt(0),
       ));
 
+  const hasCustomerReferences =
+    !!report &&
+    report.customerReferences.some((row) => row.customerReference !== null);
+
   return (
     <div className='space-y-6'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <UsageDaysPicker days={days} onChange={setDays} />
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-xs text-gray-500'>Export</span>
-          {EXPORTS.map(({ label, table }) => (
-            <Button
-              key={table}
-              variant='outline'
-              size='sm'
-              disabled={!range || exporting !== null}
-              onClick={() => download(table)}
-            >
-              {exporting === table ? (
-                <Loader className='animate-spin' />
-              ) : (
-                <Download />
-              )}
-              {label}
-            </Button>
-          ))}
-        </div>
+        <ExportMenu
+          exports={EXPORTS.filter(
+            ({ table }) =>
+              // Tables the report has nothing for are left out once it loads.
+              !report ||
+              (table !== 'customerReferences' && table !== 'freeCredits') ||
+              (table === 'customerReferences' && hasCustomerReferences) ||
+              (table === 'freeCredits' && hasFreeCredits),
+          )}
+          disabled={!range}
+          exporting={exporting}
+          onExport={download}
+        />
       </div>
 
       {!range ? (
@@ -450,7 +525,12 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             <Stat
               label='Paid with purchased credits'
               value={bytes(report.uploads.purchasedBytes)}
-              hint={`${bytes(report.uploads.freeTierBytes)} free tier`}
+              hint={
+                // Partner accounts have no free tier.
+                BigInt(report.uploads.freeTierBytes) > BigInt(0)
+                  ? `${bytes(report.uploads.freeTierBytes)} free tier`
+                  : undefined
+              }
             />
             {hasFreeCredits && (
               <Stat
@@ -500,9 +580,7 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             <ApiKeysTable rows={report.apiKeys} />
           </Section>
 
-          {report.customerReferences.some(
-            (row) => row.customerReference !== null,
-          ) && (
+          {hasCustomerReferences && (
             <Section title='Uploads by customer reference'>
               <CustomerReferencesTable rows={report.customerReferences} />
             </Section>

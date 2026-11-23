@@ -10,6 +10,9 @@ import { Button, ROUTES } from '@auto-drive/ui';
 import { useLogOut } from '@/hooks/useAuth';
 import { useNetwork } from '@/contexts/network';
 import { LogOut, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useOrganization } from '@/hooks/useOrganization';
+import { ROLE_LABEL } from '@/utils/organization';
 
 export const Profile = () => {
   const [isDefaultPasswordModalOpen, setIsDefaultPasswordModalOpen] =
@@ -20,6 +23,7 @@ export const Profile = () => {
   const publicId = useUserStore((state) => state.user?.publicId);
   const { logOut } = useLogOut();
   const { network } = useNetwork();
+  const { overview } = useOrganization();
 
   const copyPublicId = useCallback(() => {
     if (!publicId) return;
@@ -47,7 +51,20 @@ export const Profile = () => {
         onDeleted={() => {}}
       />
       <div className='flex flex-col gap-4 p-2'>
-        <span className='mb-4 text-2xl font-bold'>My Account</span>
+        <h1 className='mb-4 text-2xl font-bold'>Profile</h1>
+        {overview && (
+          <p className='text-sm'>
+            Member of{' '}
+            <Link
+              href={ROUTES.organization(network.id)}
+              className='font-medium text-primary hover:underline'
+            >
+              {overview.name}
+            </Link>
+            {overview.viewerRole &&
+              ` (${ROLE_LABEL[overview.viewerRole].toLowerCase()})`}
+          </p>
+        )}
         <div className='flex gap-2'>
           <span>
             <Button

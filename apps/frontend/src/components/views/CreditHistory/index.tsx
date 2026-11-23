@@ -220,7 +220,7 @@ export const CreditHistoryView = () => {
                 Free credits
               </h2>
               <p className='text-sm text-muted-foreground'>
-                Granted to your organisation at no cost. They are used before
+                Granted to your organization at no cost. They are used before
                 purchased credits and can&apos;t be refunded.
               </p>
               {freeBatches.map((batch) => (

@@ -19,6 +19,7 @@ import {
   Button,
   EXTERNAL_ROUTES,
   NetworkId,
+  ROUTES,
 } from '@auto-drive/ui';
 import { AccountInformation } from '../../molecules/AccountInformation';
 import dayjs from 'dayjs';
@@ -71,13 +72,11 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     if (e.onlyAdmin) {
       return isAdmin;
     }
+    if (e.onlyPartner) {
+      return isLoggedIn && !!account?.isPartner;
+    }
     return true;
-  }).map((section) => ({
-    ...section,
-    items: section.items.filter(
-      (item) => !item.onlyPartner || account?.isPartner,
-    ),
-  }));
+  });
 
   // Pay with AI3 is gated solely by the `buyCredits` feature flag — it is
   // available to both OneOff and Monthly accounts. The flag itself enforces
@@ -119,13 +118,17 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
     purchasedBytesRemaining -
     freeCreditBytesRemaining;
 
+  // A partner's credits are its only way to upload, so they show whether or
+  // not this member can buy more.
+  const showPurchasedCredits = hasBuyCreditsFeature || !!account?.isPartner;
+
   const nextExpiryDate = useMemo(() => {
-    if (!hasBuyCreditsFeature || !creditSummary?.nextExpiryDate) return null;
+    if (!showPurchasedCredits || !creditSummary?.nextExpiryDate) return null;
     return new Date(creditSummary.nextExpiryDate);
-  }, [hasBuyCreditsFeature, creditSummary]);
+  }, [showPurchasedCredits, creditSummary]);
 
   const creditHistoryHref = hasBuyCreditsFeature
-    ? `/${networkId}/drive/credits`
+    ? ROUTES.credits(networkId)
     : undefined;
 
   return (
@@ -162,11 +165,13 @@ export const SideNavbar = ({ networkId }: SideNavbarProps) => {
             renewalDate={renewalDate}
             uploadLimit={account?.uploadLimit ?? 0}
             uploadPending={freeRemaining}
+            isPartner={!!account?.isPartner}
+            monthlyFreeUploadBytes={account?.monthlyFreeUploadBytes ?? 0}
             freeCreditBytesRemaining={freeCreditBytesRemaining}
             purchasedBytesRemaining={
-              hasBuyCreditsFeature ? purchasedBytesRemaining : 0
+              showPurchasedCredits ? purchasedBytesRemaining : 0
             }
-            purchasedBytesTotal={hasBuyCreditsFeature ? purchasedBytesTotal : 0}
+            purchasedBytesTotal={showPurchasedCredits ? purchasedBytesTotal : 0}
             nextExpiryDate={nextExpiryDate}
             creditHistoryHref={creditHistoryHref}
           />

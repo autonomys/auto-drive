@@ -42,10 +42,13 @@ export const FileTable: FC<{
   actionButtons: FileActionButtons[];
   noFilesPlaceholder?: React.ReactNode;
   fileDetailPath?: (networkId: NetworkId, cid: string) => string;
+  // False for lists the server returns in a fixed order.
+  sortable?: boolean;
 }> = ({
   actionButtons,
   noFilesPlaceholder,
   fileDetailPath = ROUTES.objectDetails,
+  sortable = true,
 }) => {
   const user = useUserStore(({ user }) => user);
   const [downloadingCID, setDownloadingCID] = useState<string | null>(null);
@@ -141,11 +144,19 @@ export const FileTable: FC<{
           <Table className='min-w-full rounded-lg'>
             <TableHead>
               <TableHeadRow>
-                <SortableTableColumn name='Name' sortingKey='name' />
+                {sortable ? (
+                  <SortableTableColumn name='Name' sortingKey='name' />
+                ) : (
+                  <TableHeadCell>Name</TableHeadCell>
+                )}
                 <TableHeadCell>CID</TableHeadCell>
                 <TableHeadCell>Status</TableHeadCell>
                 <TableHeadCell>Size</TableHeadCell>
-                <SortableTableColumn name='Date' sortingKey='created_at' />
+                {sortable ? (
+                  <SortableTableColumn name='Date' sortingKey='created_at' />
+                ) : (
+                  <TableHeadCell>Date</TableHeadCell>
+                )}
                 <TableHeadCell className='text-right'>Actions</TableHeadCell>
               </TableHeadRow>
             </TableHead>

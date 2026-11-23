@@ -69,6 +69,13 @@ export type UsageByApiKey = {
   apiKeyId: string | null;
   /** The key's name, null if it has none or for the other kinds. */
   name: string | null;
+  /**
+   * Whose key it is: the organisation's, or one member's own. Null for the
+   * other kinds, or when the auth service did not say.
+   */
+  owner: "organization" | "member" | null;
+  /** The member's username for a member's key, else null. */
+  ownerName: string | null;
   deleted: boolean;
   uploadCount: number;
   uploadBytes: string;
