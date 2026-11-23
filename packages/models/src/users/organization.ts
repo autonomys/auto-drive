@@ -64,13 +64,6 @@ export type OrganizationMembershipChange = {
   createdAt: string;
 };
 
-/** A member as their organisation sees them. */
-export type OrganizationMemberDetails = OrganizationMember & {
-  // Null when the auth service has no name for them.
-  username: string | null;
-  provider: string | null;
-};
-
 /**
  * An offer to join a partner organisation. Organisation admins invite by
  * public ID; the user joins only by accepting it.
@@ -92,8 +85,6 @@ export type ReceivedOrganizationInvitation = {
   organizationId: string;
   organizationName: string;
   role: OrganizationRole;
-  // Null when the auth service has no name for the inviter.
-  invitedByUsername: string | null;
   createdAt: string;
   expiresAt: string;
 };
@@ -110,7 +101,8 @@ export type OrganizationOverview = {
   viewerRole: OrganizationRole | null;
   // Whether the caller may invite, remove members and change roles.
   canManageMembers: boolean;
-  members: OrganizationMemberDetails[];
+  // By public ID only: members don't see each other's sign-in names.
+  members: OrganizationMember[];
   credits: {
     purchasedBytesRemaining: string;
     // Soonest expiry of the purchased credits left, or null when none.

@@ -740,26 +740,25 @@ describe('Usage reports', () => {
         oauthUserId: 'g-1',
       },
     ])
-    jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
-      {
-        publicId: deriveUserPublicId('google', 'g-1'),
-        oauthUsername: 'bob',
-      } as UserWithOrganization,
-    ])
+    const lookup = jest
+      .spyOn(AuthManager, 'getUsersFromPublicIds')
+      .mockResolvedValue([])
 
     const { apiKeys } = await report(admin, account.id, day(0), NOW)
 
     expect(apiKeys.find((k) => k.apiKeyId === 'key-1')).toMatchObject({
       owner: 'organization',
-      ownerName: null,
+      ownerPublicId: null,
     })
+    // By public ID: members don't see each other's sign-in names.
     expect(apiKeys.find((k) => k.apiKeyId === 'key-2')).toMatchObject({
       owner: 'member',
-      ownerName: 'bob',
+      ownerPublicId: deriveUserPublicId('google', 'g-1'),
     })
+    expect(lookup).not.toHaveBeenCalled()
     expect(apiKeys.find((k) => k.kind === 'session')).toMatchObject({
       owner: null,
-      ownerName: null,
+      ownerPublicId: null,
     })
   })
 

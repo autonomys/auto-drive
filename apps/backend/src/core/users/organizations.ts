@@ -504,7 +504,10 @@ const revokeInvitation = async (
   return ok()
 }
 
-/** The caller's invitations, with the names they need to decide on them. */
+/**
+ * The caller's invitations, with the organization's name. Who sent each is
+ * left out: the invitee is not a member, and sign-in names are private.
+ */
 const getReceivedInvitations = async (
   executor: UserWithOrganization,
 ): Promise<Result<ReceivedOrganizationInvitation[], OrganizationError>> => {
@@ -514,25 +517,14 @@ const getReceivedInvitations = async (
     )
   if (invitations.length === 0) return ok([])
 
-  const [organizations, inviters] = await Promise.all([
-    AuthManager.getOrganizationSummaries([
-      ...new Set(invitations.map((i) => i.organizationId)),
-    ]),
-    AuthManager.getUsersFromPublicIds([
-      ...new Set(invitations.map((i) => i.invitedBy)),
-    ]).catch((error) => {
-      logger.warn(error, 'Invitations without inviter names')
-      return []
-    }),
+  const organizations = await AuthManager.getOrganizationSummaries([
+    ...new Set(invitations.map((i) => i.organizationId)),
   ])
   if (organizations.isErr()) return err(organizations.error)
 
   // An archived organization can't be joined, so its invitations are left out.
   const organizationNames = new Map(
     organizations.value.filter((o) => !o.archivedAt).map((o) => [o.id, o.name]),
-  )
-  const inviterNames = new Map(
-    inviters.map((u) => [u.publicId, u.oauthUsername ?? null]),
   )
   return ok(
     invitations.flatMap((invitation) => {
@@ -544,7 +536,6 @@ const getReceivedInvitations = async (
           organizationId: invitation.organizationId,
           organizationName,
           role: invitation.role,
-          invitedByUsername: inviterNames.get(invitation.invitedBy) ?? null,
           createdAt: invitation.createdAt,
           expiresAt: invitation.expiresAt,
         },
@@ -676,14 +667,7 @@ const getOverview = async (
   if (partnerAccount.isErr()) return err(partnerAccount.error)
   const account = partnerAccount.value
 
-  const [organization, users] = await Promise.all([
-    AuthManager.getOrganization(organizationId),
-    // Names are a convenience: members are listed without them if need be.
-    AuthManager.adminSearchUsers('', organizationId).catch((error) => {
-      logger.warn(error, 'Organization overview without member names')
-      return []
-    }),
-  ])
+  const organization = await AuthManager.getOrganization(organizationId)
   if (organization.isErr()) return err(organization.error)
 
   // Issues this month's free credits, so the balance below includes them.
@@ -693,7 +677,6 @@ const getOverview = async (
   )
   const terms = AccountsUseCases.getCreditTerms(account)
 
-  const usersByPublicId = new Map(users.map((u) => [u.publicId, u]))
   const viewerRole = roleOf(organization.value, executor.publicId)
   const isAutoDriveAdmin = executor.role === UserRole.Admin
   return ok({
@@ -705,14 +688,11 @@ const getOverview = async (
     canManageMembers:
       !executor.apiKeyId &&
       (isAutoDriveAdmin || viewerRole === OrganizationRole.Admin),
-    members: organization.value.memberships.map((m) => {
-      const user = usersByPublicId.get(m.publicId)
-      return {
-        ...m,
-        username: user?.oauthUsername ?? null,
-        provider: user?.oauthProvider ?? null,
-      }
-    }),
+    // Public IDs only, never sign-in names (emails for Google accounts).
+    members: organization.value.memberships.map(({ publicId, role }) => ({
+      publicId,
+      role,
+    })),
     credits: {
       purchasedBytesRemaining:
         remaining.purchasedUploadBytesRemaining.toString(),

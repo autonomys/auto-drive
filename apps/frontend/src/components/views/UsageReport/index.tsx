@@ -14,6 +14,7 @@ import {
   UsageReport,
 } from '@auto-drive/models';
 import { useNetwork } from '@/contexts/network';
+import { useUserStore } from '@/globalStates/user';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -208,10 +209,16 @@ const Balance = ({
   );
 };
 
+// A member's key shows its owner's Public ID, never their sign-in name.
 const KeyOwner = ({ row }: { row: UsageByApiKey }) => {
+  const viewerPublicId = useUserStore((state) => state.user?.publicId);
   if (row.owner === 'organization') return <>Organization</>;
   if (row.owner === 'member') {
-    return <>{row.ownerName ?? 'A member'}</>;
+    if (!row.ownerPublicId) return <>A member</>;
+    if (row.ownerPublicId === viewerPublicId) return <>You</>;
+    return (
+      <span className='font-mono text-xs'>{formatCid(row.ownerPublicId)}</span>
+    );
   }
   return <span className='text-gray-500'>—</span>;
 };

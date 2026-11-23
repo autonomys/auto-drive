@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import {
-  OrganizationMemberDetails,
+  OrganizationMember,
   OrganizationOverview,
   OrganizationRole,
 } from '@auto-drive/models';
@@ -29,31 +29,10 @@ import { formatDate } from '@/utils/time';
 import { describeMembershipChange, ROLE_LABEL } from '@/utils/organization';
 import { PendingInvitations } from './PendingInvitations';
 
-const MemberName = ({
-  member,
-  isYou,
-}: {
-  member: OrganizationMemberDetails;
-  isYou: boolean;
-}) => (
-  <span className='flex flex-col'>
-    <span className='flex items-center gap-2'>
-      {member.username ?? <span className='text-gray-500'>Unnamed</span>}
-      {isYou && (
-        <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400'>
-          You
-        </span>
-      )}
-    </span>
-    {member.provider && (
-      <span className='text-xs text-gray-500'>{member.provider}</span>
-    )}
-  </span>
-);
-
 /**
- * The organization's members. Its admins invite users, change roles and
- * remove members; everyone else sees who is in it.
+ * The organization's members, by Public ID: members don't see each other's
+ * sign-in names. Its admins invite users, change roles and remove members;
+ * everyone else sees who is in it.
  */
 export const OrganizationMembers = ({
   overview,
@@ -124,15 +103,13 @@ export const OrganizationMembers = ({
     enabled: canManageMembers,
   });
 
-  const names = new Map(
-    overview.members.map((m) => [m.publicId, m.username ?? null]),
-  );
-  const nameOf = (id: string) => names.get(id) ?? formatCid(id);
+  const nameOf = (id: string) =>
+    id === viewerPublicId ? 'You' : formatCid(id);
   // The last admin can't be demoted or removed by the organization itself.
   const adminCount = overview.members.filter(
     (m) => m.role === OrganizationRole.Admin,
   ).length;
-  const isLastAdmin = (member: OrganizationMemberDetails) =>
+  const isLastAdmin = (member: OrganizationMember) =>
     member.role === OrganizationRole.Admin && adminCount === 1;
 
   return (
@@ -145,7 +122,7 @@ export const OrganizationMembers = ({
         <p className='mt-1 text-sm text-gray-500'>
           Members upload with {overview.name}&apos;s credits, from the web app
           or their own API keys. Admins also manage members and organization API
-          keys.
+          keys. Members are shown by Public ID.
         </p>
       </div>
 
@@ -198,7 +175,6 @@ export const OrganizationMembers = ({
         <Table className='min-w-full'>
           <TableHead>
             <TableHeadRow>
-              <TableHeadCell>Name</TableHeadCell>
               <TableHeadCell>Public ID</TableHeadCell>
               <TableHeadCell>Role</TableHeadCell>
               {canManageMembers && <TableHeadCell>{''}</TableHeadCell>}
@@ -211,14 +187,17 @@ export const OrganizationMembers = ({
               return (
                 <TableBodyRow key={member.publicId}>
                   <TableBodyCell>
-                    <MemberName member={member} isYou={isYou} />
-                  </TableBodyCell>
-                  <TableBodyCell>
-                    <CopiableText
-                      text={member.publicId}
-                      displayText={formatCid(member.publicId)}
-                      className='font-mono text-sm'
-                    />
+                    <span className='flex items-center gap-2'>
+                      <CopiableText
+                        text={member.publicId}
+                        className='break-all font-mono text-sm'
+                      />
+                      {isYou && (
+                        <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400'>
+                          You
+                        </span>
+                      )}
+                    </span>
                   </TableBodyCell>
                   <TableBodyCell>
                     {canManageMembers ? (
@@ -230,7 +209,7 @@ export const OrganizationMembers = ({
                             ? 'The only admin. Make another member an admin first.'
                             : undefined
                         }
-                        aria-label={`Role of ${member.username ?? member.publicId}`}
+                        aria-label={`Role of ${member.publicId}`}
                         onChange={(e) =>
                           changeRole({
                             publicId: member.publicId,
@@ -266,7 +245,7 @@ export const OrganizationMembers = ({
                         onClick={() => {
                           const message = isYou
                             ? `Leave ${overview.name}? You return to your personal account.`
-                            : `Remove ${member.username ?? member.publicId} from ${overview.name}? They return to their personal account, and their files stay theirs.`;
+                            : `Remove ${member.publicId} from ${overview.name}? They return to their personal account, and their files stay theirs.`;
                           if (window.confirm(message)) {
                             removeMember(member.publicId);
                           }
@@ -282,7 +261,7 @@ export const OrganizationMembers = ({
             {overview.members.length === 0 && (
               <TableBodyRow>
                 <TableBodyCell
-                  colSpan={canManageMembers ? 4 : 3}
+                  colSpan={canManageMembers ? 3 : 2}
                   className='py-6 text-center text-gray-500'
                 >
                   No members

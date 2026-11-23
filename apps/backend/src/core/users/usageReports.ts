@@ -111,41 +111,17 @@ type KeyName = {
   name: string | null
   deleted: boolean
   owner: UsageByApiKey['owner']
-  ownerName: string | null
+  ownerPublicId: string | null
 }
 
 // A key belongs to the organisation when its service user owns it, else to
-// the member who made it, named by their username unless `ownerNames` is off.
-const getKeyNames = async (
-  ids: string[],
-  { ownerNames = true }: { ownerNames?: boolean } = {},
-): Promise<Map<string, KeyName>> => {
+// the member who made it, identified by public ID (not their sign-in name).
+const getKeyNames = async (ids: string[]): Promise<Map<string, KeyName>> => {
   const keys = await namesOrNone('API key names', () =>
     AuthManager.getApiKeyNames([...new Set(ids)]),
   )
-  const memberPublicIds = new Map(
-    keys.flatMap((key) =>
-      key.oauthProvider &&
-      key.oauthUserId &&
-      key.oauthProvider !== SERVICE_USER_PROVIDER
-        ? [[key.id, deriveUserPublicId(key.oauthProvider, key.oauthUserId)]]
-        : [],
-    ),
-  )
-  const users = ownerNames
-    ? await namesOrNone('API key owners', () =>
-        AuthManager.getUsersFromPublicIds([
-          ...new Set(memberPublicIds.values()),
-        ]),
-      )
-    : []
-  const usernames = new Map(
-    users.map((user) => [user.publicId, user.oauthUsername ?? null]),
-  )
-
   return new Map(
     keys.map((key) => {
-      const ownerPublicId = memberPublicIds.get(key.id)
       const owner: KeyName['owner'] = !key.oauthProvider
         ? null
         : key.oauthProvider === SERVICE_USER_PROVIDER
@@ -157,9 +133,10 @@ const getKeyNames = async (
           name: key.name,
           deleted: !!key.deletedAt,
           owner,
-          ownerName: ownerPublicId
-            ? (usernames.get(ownerPublicId) ?? null)
-            : null,
+          ownerPublicId:
+            owner === 'member' && key.oauthProvider && key.oauthUserId
+              ? deriveUserPublicId(key.oauthProvider, key.oauthUserId)
+              : null,
         },
       ]
     }),
@@ -198,7 +175,7 @@ const byApiKey = async (
       apiKeyId,
       name: key?.name ?? null,
       owner: key?.owner ?? null,
-      ownerName: key?.ownerName ?? null,
+      ownerPublicId: key?.ownerPublicId ?? null,
       deleted: key?.deleted ?? false,
       uploadCount: uploads.reduce((total, g) => total + g.count, 0),
       uploadBytes: sum(uploads.map((g) => g.bytes)),
@@ -390,7 +367,7 @@ const getUsageInteractions = async (
       const unnamed = rows.flatMap((r) =>
         r.api_key_id && !names.has(r.api_key_id) ? [r.api_key_id] : [],
       )
-      const found = await getKeyNames(unnamed, { ownerNames: false })
+      const found = await getKeyNames(unnamed)
       for (const id of unnamed) names.set(id, found.get(id)?.name ?? null)
 
       yield rows.map(
@@ -540,7 +517,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           'download_count',
           'download_bytes',
           'owner',
-          'owner_name',
+          'owner_public_id',
         ],
         report.apiKeys.map((key) => [
           key.kind,
@@ -555,7 +532,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
           key.downloadCount,
           key.downloadBytes,
           key.owner,
-          key.ownerName,
+          key.ownerPublicId,
         ]),
       )
     case 'customerReferences':

@@ -88,8 +88,8 @@ const AcceptDialog = ({
                   {name}&apos;s credits from now on.
                 </li>
                 <li>
-                  Its members see your name and Public ID, and its usage reports
-                  include your uploads.
+                  Its members see your Public ID and role, and its usage reports
+                  include your uploads and your API keys&apos; names.
                 </li>
                 <li>Your files stay yours.</li>
                 <li>
@@ -166,7 +166,7 @@ export const OrganizationInvitations = () => {
         <BannerShell key={invitation.id} criticality={BannerCriticality.Info}>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <p className='text-sm'>
-              {invitation.invitedByUsername ?? 'An admin'} invited you to join{' '}
+              You&apos;re invited to join{' '}
               <strong>{invitation.organizationName}</strong> as{' '}
               {ROLE_LABEL[invitation.role].toLowerCase()}.
             </p>

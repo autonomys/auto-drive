@@ -88,11 +88,6 @@ describe('Partner organization members, managed by its admins', () => {
         { id: organizationId, name: 'Partner', archivedAt: null, memberCount: 2 },
       ]),
     )
-    jest
-      .spyOn(AuthManager, 'getUsersFromPublicIds')
-      .mockResolvedValue([
-        { ...organizationAdmin, oauthUsername: 'alice' } as UserWithOrganization,
-      ])
   })
 
   afterEach(async () => {
@@ -119,13 +114,16 @@ describe('Partner organization members, managed by its admins', () => {
       const received = (
         await OrganizationsUseCases.getReceivedInvitations(outsider)
       )._unsafeUnwrap()
+      // Nothing about the inviter: the invitee is not a member yet.
       expect(received).toEqual([
-        expect.objectContaining({
+        {
           id: invitation.id,
+          organizationId,
           organizationName: 'Partner',
           role: OrganizationRole.Member,
-          invitedByUsername: 'alice',
-        }),
+          createdAt: invitation.createdAt,
+          expiresAt: invitation.expiresAt,
+        },
       ])
       // Nobody is moved by being invited.
       expect(addMember).not.toHaveBeenCalled()
@@ -411,13 +409,6 @@ describe('Partner organization members, managed by its admins', () => {
   })
 
   describe('overview and files', () => {
-    beforeEach(() => {
-      jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
-        { ...organizationAdmin, oauthUsername: 'alice' },
-        { ...member, oauthUsername: 'bob' },
-      ])
-    })
-
     it('shows members their organization, and admins what they manage', async () => {
       const account =
         await accountsRepository.getByOrganizationId(organizationId)
@@ -441,10 +432,6 @@ describe('Partner organization members, managed by its admins', () => {
         accountId: account!.id,
         viewerRole: OrganizationRole.Member,
         canManageMembers: false,
-        members: [
-          { publicId: organizationAdmin.publicId, username: 'alice' },
-          { publicId: member.publicId, username: 'bob' },
-        ],
         credits: {
           purchasedBytesRemaining: '0',
           // This month's allowance has been issued.
@@ -452,6 +439,11 @@ describe('Partner organization members, managed by its admins', () => {
           monthlyFreeUploadBytes: '1000',
         },
       })
+      // Members see each other by public ID, never by sign-in name.
+      expect(seen.members).toEqual([
+        { publicId: organizationAdmin.publicId, role: OrganizationRole.Admin },
+        { publicId: member.publicId, role: OrganizationRole.Member },
+      ])
       expect(
         (
           await OrganizationsUseCases.getOverview(
