@@ -686,15 +686,33 @@ const putObject = async (
     params.CustomerReference ?? null,
   )
 
+  // The client is never told this upload's id, so one that fails here could
+  // not be retried or aborted by it. abortUpload leaves an upload that has
+  // reached migration alone.
+  const discardUpload = () =>
+    UploadsUseCases.abortUpload(user, upload.id).catch((error) =>
+      logger.error(
+        error as Error,
+        'Failed to remove the upload of a failed PutObject (uploadId=%s)',
+        upload.id,
+      ),
+    )
+
   const result = await handleInternalError(
     UploadsUseCases.uploadChunk(user, upload.id, 0, params.Body),
     'Failed to upload chunk',
   )
   if (result.isErr()) {
+    await discardUpload()
     return err(result.error)
   }
 
-  const cid = await UploadsUseCases.completeUpload(user, upload.id)
+  const cid = await UploadsUseCases.completeUpload(user, upload.id).catch(
+    async (error) => {
+      await discardUpload()
+      throw error
+    },
+  )
 
   const mapping = await writeMapping(
     user,

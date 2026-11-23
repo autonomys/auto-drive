@@ -10,22 +10,16 @@ interface FilePart {
 
 // UPSERT, not INSERT: re-uploading the same PartNumber must replace the stored
 // bytes rather than fail on the (upload_id, part_index) primary key.
-const addChunk = async (
-  part: FilePart,
-  executor?: Executor,
-): Promise<FilePart> => {
+const addChunk = async (part: FilePart, executor?: Executor): Promise<void> => {
   const db = executor ?? (await getDatabase())
 
-  return db
-    .query<FilePart>(
-      `INSERT INTO uploads.file_parts (upload_id, part_index, data)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (upload_id, part_index)
-       DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
-       RETURNING *`,
-      [part.upload_id, part.part_index, part.data],
-    )
-    .then((result) => result.rows[0])
+  await db.query(
+    `INSERT INTO uploads.file_parts (upload_id, part_index, data)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (upload_id, part_index)
+     DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [part.upload_id, part.part_index, part.data],
+  )
 }
 
 const getChunksByUploadId = async (uploadId: string): Promise<FilePart[]> => {

@@ -267,6 +267,40 @@ const getUploadsByStatus = async (
   return result.rows
 }
 
+// The bytes a caller holds in uploads that are still pending: the parts stored
+// and the folder trees created within the window. LENGTH and pg_column_size
+// take a stored value's size from its header, so no part is read. The status
+// is written into the statement so that it always matches the partial index
+// uploads_pending_by_caller_idx.
+const getUnfinishedBytes = async (
+  oauthProvider: string,
+  oauthUserId: string,
+  windowMs: number,
+): Promise<number> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ bytes: string }>(
+    `SELECT COALESCE(SUM(
+       CASE WHEN u.created_at >= NOW() - ($3::bigint * INTERVAL '1 millisecond')
+            THEN COALESCE(pg_column_size(u.file_tree), 0)
+            ELSE 0
+       END
+       + COALESCE((
+           SELECT SUM(LENGTH(p.data))
+           FROM uploads.file_parts p
+           WHERE p.upload_id = u.id
+             AND p.updated_at >= NOW() - ($3::bigint * INTERVAL '1 millisecond')
+         ), 0)
+     ), 0) AS bytes
+     FROM uploads.uploads u
+     WHERE u.oauth_provider = $1 AND u.oauth_user_id = $2
+       AND u.status = '${UploadStatus.PENDING}'`,
+    [oauthProvider, oauthUserId, windowMs],
+  )
+
+  return Number(result.rows[0].bytes)
+}
+
 const getStatusByCID = async (cid: string): Promise<UploadStatus | null> => {
   const db = await getDatabase()
   const result = await db.query<{
@@ -336,6 +370,7 @@ export const uploadsRepository = {
   getUploadsByRoot,
   getUploadEntriesByRelativeId,
   getUploadsByStatus,
+  getUnfinishedBytes,
   getStatusByCID,
   claimUploadForCompletion,
   releaseUploadCompletionClaim,
