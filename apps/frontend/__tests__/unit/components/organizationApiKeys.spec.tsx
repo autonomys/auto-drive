@@ -116,7 +116,7 @@ describe('organization API keys', () => {
     expect(screen.queryByText('Create API Key')).toBeNull();
     expect(screen.queryByText('Delete')).toBeNull();
     expect(
-      screen.getByText(/Only organization admins can create them/),
+      screen.getByText(/Only organization admins can create and revoke them/),
     ).toBeTruthy();
   });
 
