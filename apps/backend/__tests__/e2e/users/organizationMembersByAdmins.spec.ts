@@ -178,6 +178,28 @@ describe('Partner organization members, managed by its admins', () => {
       ).toBe(true)
     })
 
+    it('keeps the invitation when its sender can\'t be looked up', async () => {
+      jest
+        .spyOn(AuthManager, 'addOrganizationMember')
+        .mockResolvedValue(ok(undefined))
+      const invitation = (await invite(autoDriveAdmin))._unsafeUnwrap()
+      const lookup = jest
+        .spyOn(AuthManager, 'getUserFromPublicId')
+        .mockRejectedValueOnce(new Error('Failed to fetch user'))
+
+      await expect(
+        OrganizationsUseCases.acceptInvitation(outsider, invitation.id),
+      ).rejects.toThrow('Failed to fetch user')
+      expect(lookup).toHaveBeenCalledWith(autoDriveAdmin.publicId)
+
+      // Once auth answers again, it can still be accepted.
+      expect(
+        (
+          await OrganizationsUseCases.acceptInvitation(outsider, invitation.id)
+        ).isOk(),
+      ).toBe(true)
+    })
+
     it.each<[string, [UserWithOrganization, OrganizationRole][]]>([
       ['demoted', [[organizationAdmin, OrganizationRole.Member]]],
       ['removed', []],

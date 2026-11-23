@@ -597,12 +597,12 @@ const acceptInvitation = async (
     return err(new ConflictError('This organization no longer exists'))
   }
   // The invitation acts with its sender's authority, so it lapses once they
-  // can no longer manage the organization's members.
+  // can no longer manage the organization's members. A failed lookup throws
+  // and fails the request, leaving the invitation to be retried.
   const sender = invitation.invitedBy
   if (
     roleOf(organization.value, sender) !== OrganizationRole.Admin &&
-    (await AuthManager.getUserFromPublicId(sender).catch(() => null))?.role !==
-      UserRole.Admin
+    (await AuthManager.getUserFromPublicId(sender)).role !== UserRole.Admin
   ) {
     await organizationInvitationsRepository.revoke(invitationId, null)
     return err(

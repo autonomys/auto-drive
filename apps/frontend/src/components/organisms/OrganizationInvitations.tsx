@@ -31,6 +31,7 @@ const AcceptDialog = ({
   onClose: () => void;
 }) => {
   const { api, network } = useNetwork();
+  const queryClient = useQueryClient();
   // Set once the server says joining would strand purchased credits, so the
   // user confirms that too before trying again.
   const [leavesCredits, setLeavesCredits] = useState(false);
@@ -51,6 +52,16 @@ const AcceptDialog = ({
         return;
       }
       toast.error(error.message);
+      // The invitation may be gone (lapsed, revoked, organization archived),
+      // so reload the list rather than leave a dead dialog and banner.
+      if (
+        error instanceof ApiError &&
+        (error.status === 404 || error.status === 409)
+      ) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+        setLeavesCredits(false);
+        onClose();
+      }
     },
   });
 
