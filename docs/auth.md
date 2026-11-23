@@ -55,7 +55,8 @@ The service supports multiple authentication providers:
 
 - Ethereum wallet authentication using Sign-In with Ethereum
 - Validates signed messages using the `siwe` library
-- Messages carry a one-time nonce from `POST /users/web3/nonce` and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS`
+- Messages carry a one-time nonce from `POST /users/web3/nonce`, are for chain ID 870 (mainnet) and no other, and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS` or `WEB3_AUTH_PARTNER_ORIGINS`
+- A partner origin accepts only the partner organization's end users, removed ones included, and an end user may sign in only for their own partner's origins: the explorer and every other origin refuse them. See [End users](#end-users)
 - Uses wallet address as both user ID and username
 
 ### 5. **API Key Authentication**
@@ -85,6 +86,7 @@ Environment variables:
 - `API_SECRET`: Secret for admin API authentication
 - `REVOKE_TOKEN_EMITTED_BEFORE_IN_SECONDS`: Tokens issued before this time are revoked (0 = disabled)
 - `WEB3_AUTH_ALLOWED_ORIGINS`: Comma-separated frontend origins that wallet sign-in messages may be issued for (default: `https://explorer.ai3.storage`)
+- `WEB3_AUTH_PARTNER_ORIGINS`: Comma-separated `https://origin=organizationId` pairs, each an origin of one partner organization's app that its end users' sign-in messages are issued for (default: none). Auth refuses to start if an entry isn't an https origin or an origin appears twice
 
 ## Hasura Integration
 
@@ -226,6 +228,8 @@ An organization's API keys belong to its service user, so they keep working whoe
 Partner end users are a partner organization's customers, who never use Auto Drive themselves. Each is a wallet user (`web3-wallet`, stored under the EIP-55 checksummed address, as wallet sign-in finds it) with role `partner_end_user` in the partner's organization. Only enrollment gives that role: `admin` and `member` are the only roles the member endpoints accept, and they refuse to move an end user, change their role or remove them, whether the end user is removed or not. End users own the files they upload and are charged to the organization's account, but are not listed as members or counted in member counts.
 
 The auth service owns them. What the partner gives for each one is kept on their membership row in `users.users_organizations`: `customer_reference` (the partner's own reference, unique within the organization), `upload_quota_bytes` (NULL for the account's default) and `end_user_removed_at`. All three are NULL for everyone else. Each enrollment and removal is one transaction in the auth database, so retries are safe. The backend decides who may manage end users (`/organizations/:organizationId/end-users`), checks what the partner sends and passes its cap, `PARTNER_MAX_END_USERS`.
+
+End users sign in with their wallet (EIP-4361) for one of their partner's origins in `WEB3_AUTH_PARTNER_ORIGINS`, by the same `POST /users/@me/accessToken` exchange as any wallet user, and only there. Sign-ins for a partner origin from anyone else are refused.
 
 A removed end user stays in the organization with role `partner_end_user` and `end_user_removed_at` set: they keep read-only access to their files and no longer count towards the cap. Enrolling them again clears it. They keep their customer reference while removed, so it is never given to another person.
 

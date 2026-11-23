@@ -1,13 +1,18 @@
-import { OAuthUser } from '@auto-drive/models'
+import { OAuthUser, OrganizationRole } from '@auto-drive/models'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import jwt from 'jsonwebtoken'
 import { SiweMessage } from 'siwe'
 import { config } from '../../../config.js'
-import { walletNoncesRepository } from '../../../repositories/index.js'
+import {
+  organizationMembersRepository,
+  walletNoncesRepository,
+} from '../../../repositories/index.js'
 
 // The wallet proof is exchanged for a session right after it is signed
 const NONCE_TTL_SECONDS = 10 * 60
-const CHAIN_ID = 490000
+// Mainnet
+const CHAIN_ID = 870
+const PROVIDER = 'web3-wallet'
 
 interface Web3AuthToken {
   address: string
@@ -62,7 +67,11 @@ export const getUserFromAccessToken = async (
 
   const siweMessage = new SiweMessage(message)
   const origin = new URL(siweMessage.uri).origin
-  if (!config.web3Auth.allowedOrigins.includes(origin))
+  const partnerOrganizationId = config.web3Auth.partnerOrigins.get(origin)
+  if (
+    !partnerOrganizationId &&
+    !config.web3Auth.allowedOrigins.includes(origin)
+  )
     throw new Error(`Unexpected origin: ${origin}`)
   if (siweMessage.chainId !== CHAIN_ID) throw new Error('Unexpected chain')
 
@@ -77,6 +86,20 @@ export const getUserFromAccessToken = async (
   if (!success) throw new Error(`Invalid signature: ${error?.type}`)
   if (address !== siweMessage.address) throw new Error('Address mismatch')
 
+  // A partner's origin is for its own end users, removed ones included, and
+  // they sign in for nothing else.
+  const membership =
+    await organizationMembersRepository.getOrganizationMembershipByUser(
+      PROVIDER,
+      siweMessage.address,
+    )
+  const endUserOf =
+    membership?.role === OrganizationRole.PartnerEndUser
+      ? membership.organization_id
+      : undefined
+  if (endUserOf !== partnerOrganizationId)
+    throw new Error(`Origin not allowed for this address: ${origin}`)
+
   const isFirstUse = await walletNoncesRepository.markNonceUsed(
     siweMessage.nonce,
     nonceExpiresAt,
@@ -84,7 +107,7 @@ export const getUserFromAccessToken = async (
   if (!isFirstUse) throw new Error('Nonce already used')
 
   return {
-    provider: 'web3-wallet',
+    provider: PROVIDER,
     id: siweMessage.address,
     username: siweMessage.address,
   }
