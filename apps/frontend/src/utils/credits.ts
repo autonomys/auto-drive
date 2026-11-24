@@ -4,7 +4,9 @@
  */
 
 import {
+  AccountInfo,
   PaymentMethod,
+  PurchasedCreditKind,
   USD_RATE_SCALE,
   USDC_DECIMALS,
 } from '@auto-drive/models';
@@ -94,6 +96,23 @@ export const daysUntilExpiry = (expiresAt: Date | null): number | null => {
 };
 
 /**
+ * Purchased upload bytes left. The credits summary is behind the buyCredits
+ * flag, so a user without it has none. A partner has no free storage (its
+ * upload limit is 0), so its balance less its free credits is what it bought.
+ */
+export const purchasedUploadBytesLeft = (
+  summary: { uploadBytesRemaining: string } | null,
+  account: Pick<
+    AccountInfo,
+    'isPartner' | 'pendingUploadCredits' | 'freeUploadCredits'
+  > | null,
+): number => {
+  if (summary) return Number(summary.uploadBytesRemaining);
+  if (!account?.isPartner) return 0;
+  return Math.max(0, account.pendingUploadCredits - account.freeUploadCredits);
+};
+
+/**
  * Sums the `uploadBytesRemaining` across a list of wire-format credit batch
  * objects (where bigint fields are serialised as strings) and returns the
  * total as a BigInt.
@@ -107,12 +126,20 @@ export const sumExpiringUploadBytes = (
 // Batch status classification — shared by CreditHistory and AdminCredits
 // ---------------------------------------------------------------------------
 
-export type BatchStatus = 'active' | 'expiring' | 'depleted' | 'expired';
+export type BatchStatus =
+  | 'active'
+  | 'expiring'
+  | 'depleted'
+  | 'expired'
+  | 'replaced';
 
 export interface BatchStatusFields {
+  kind: PurchasedCreditKind;
   expired: boolean;
   uploadBytesRemaining: string;
   expiresAt: string;
+  /** Monthly free credits ended by a change to the monthly amount. */
+  supersededAt?: string | null;
 }
 
 export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
@@ -124,10 +151,37 @@ export const getBatchStatus = (batch: BatchStatusFields): BatchStatus => {
   // it must never surface as "Expired" (which implies a refund is owed),
   // even if a stale expired flag is set on the row.
   if (BigInt(batch.uploadBytesRemaining) === BigInt(0)) return 'depleted';
+  // Ended early because the monthly free amount changed; a batch for the rest
+  // of the month took its place.
+  if (batch.supersededAt) return 'replaced';
   if (batch.expired) return 'expired';
+  // Monthly free credits always end within the month, so "expiring" would
+  // show for their whole life.
+  if (batch.kind === 'free_monthly') return 'active';
   const days = daysUntilExpiry(new Date(batch.expiresAt));
   if (days !== null && days <= 30) return 'expiring';
   return 'active';
+};
+
+/**
+ * What a credit batch is: purchased credits, or free credits an admin granted.
+ * Monthly free credits name their UTC month. Every place that shows a batch
+ * names it with this, so free and purchased credits are never mistaken for
+ * each other.
+ */
+export const describeBatchKind = (batch: {
+  kind: PurchasedCreditKind;
+  grantPeriod: string | null;
+}): string => {
+  if (batch.kind === 'purchase') return 'Purchased credits';
+  if (batch.kind === 'free_one_time') return 'Free credits';
+  if (!batch.grantPeriod) return 'Monthly free credits';
+  const month = new Date(batch.grantPeriod).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  return `Monthly free credits, ${month}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -159,6 +213,7 @@ export const STATUS_CLASSES: Record<BatchStatus, string> = {
     'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   depleted: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
   expired: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  replaced: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
 export const STATUS_LABEL: Record<BatchStatus, string> = {
@@ -166,6 +221,7 @@ export const STATUS_LABEL: Record<BatchStatus, string> = {
   expiring: 'Expiring soon',
   depleted: 'Depleted',
   expired: 'Expired',
+  replaced: 'Replaced',
 };
 
 /** Payment amounts and the effective purchase-time USDC/AI3 quote. */

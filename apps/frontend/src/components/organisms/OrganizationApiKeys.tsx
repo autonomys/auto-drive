@@ -26,11 +26,11 @@ export const OrganizationApiKeys = ({
     <div className='flex flex-col'>
       <p className='mb-4 text-sm text-gray-500'>
         These keys belong to the organization rather than to any one member.
-        They upload to the partner account, and files uploaded with them are
-        managed through the key rather than shown in members&apos; drives.
+        Files uploaded with them are listed under Organization → Files, not in
+        members&apos; drives.
         {data &&
           !data.canCreate &&
-          ' Only organization admins can create them.'}
+          ' Only organization admins can create and revoke them.'}
       </p>
       {isError && !data ? (
         <p className='text-sm text-gray-500'>

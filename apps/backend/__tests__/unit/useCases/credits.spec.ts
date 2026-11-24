@@ -62,6 +62,9 @@ const makeCreditRow = (
   id: 'credit-1',
   accountId: 'account-id',
   intentId: 'intent-1',
+  kind: 'purchase',
+  grantPeriod: null,
+  supersededAt: null,
   uploadBytesOriginal: BigInt(1024 * 1024 * 1024), // 1 GiB
   uploadBytesRemaining: BigInt(1024 * 1024 * 1024),
   downloadBytesOriginal: BigInt(1024 * 1024 * 1024),
@@ -107,6 +110,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
+          purchasedUploadBytesRemaining: 0n,
+          purchasedUploadBytesOriginal: 0n,
+          purchasedNextExpiryDate: null,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)
@@ -131,6 +138,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
+          purchasedUploadBytesRemaining: 0n,
+          purchasedUploadBytesOriginal: 0n,
+          purchasedNextExpiryDate: null,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)
@@ -151,6 +162,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: 0n,
           nextExpiryDate: null,
           activeRowCount: 0,
+          purchasedUploadBytesRemaining: 0n,
+          purchasedUploadBytesOriginal: 0n,
+          purchasedNextExpiryDate: null,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(githubUser)
@@ -172,6 +187,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: downloadRemaining,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 2,
+          purchasedUploadBytesRemaining: uploadRemaining,
+          purchasedUploadBytesOriginal: BigInt(100 * 1024 ** 3),
+          purchasedNextExpiryDate: FUTURE_EXPIRY,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)
@@ -191,6 +210,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: cap,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 1,
+          purchasedUploadBytesRemaining: cap,
+          purchasedUploadBytesOriginal: cap,
+          purchasedNextExpiryDate: FUTURE_EXPIRY,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)
@@ -212,6 +235,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: downloadRemaining,
           nextExpiryDate: FUTURE_EXPIRY,
           activeRowCount: 3,
+          purchasedUploadBytesRemaining: uploadRemaining,
+          purchasedUploadBytesOriginal: BigInt(50 * 1024 ** 3),
+          purchasedNextExpiryDate: FUTURE_EXPIRY,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)
@@ -231,6 +258,10 @@ describe('CreditsUseCases', () => {
           downloadBytesRemaining: BigInt(1024),
           nextExpiryDate: SOON_EXPIRY,
           activeRowCount: 5,
+          purchasedUploadBytesRemaining: BigInt(1024),
+          purchasedUploadBytesOriginal: BigInt(2048),
+          purchasedNextExpiryDate: SOON_EXPIRY,
+          freeUploadBytesRemaining: 0n,
         })
 
       const summary = await CreditsUseCases.getSummary(baseUser)

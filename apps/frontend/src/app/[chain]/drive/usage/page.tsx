@@ -1,12 +1,7 @@
-import { AccountUsage } from '@/components/views/UsageReport/AccountUsage';
-import { UserProtectedLayout } from '@/components/layouts/UserProtectedLayout';
+import { redirect } from 'next/navigation';
+import { NetworkId, ROUTES } from '@auto-drive/ui';
 
-export const dynamic = 'force-dynamic';
-
-export default async function Page() {
-  return (
-    <UserProtectedLayout>
-      <AccountUsage />
-    </UserProtectedLayout>
-  );
+// Usage moved under Organization; old links still land on it.
+export default function Page({ params }: { params: { chain: NetworkId } }) {
+  redirect(ROUTES.organizationUsage(params.chain));
 }

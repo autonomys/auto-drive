@@ -12,6 +12,8 @@ export type Account = {
   // Overrides of the global credit terms. Null means use the global default.
   maxPurchasedBytes: number | null;
   creditExpiryDays: number | null;
+  // Free upload bytes issued to a partner account each UTC month. 0 = none.
+  monthlyFreeUploadBytes: number;
 };
 
 export type AccountWithTotalSize = Account & {
@@ -30,6 +32,8 @@ export type AccountInfoWithUser = AccountInfo & {
 export type AccountInfo = Account & {
   pendingUploadCredits: number;
   pendingDownloadCredits: number;
+  // Free credit bytes left: the part of pendingUploadCredits that is free.
+  freeUploadCredits: number;
 };
 
 /** Admin account page: an account and its members, which may be none. */

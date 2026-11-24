@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment, ReactNode, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -38,6 +38,7 @@ const GiB = 1024 ** 3;
 const FIELD_LABEL = new Map([
   ['max_purchased_bytes', 'Max purchased credits'],
   ['credit_expiry_days', 'Credit expiry'],
+  ['monthly_free_upload_bytes', 'Monthly free uploads'],
   ['upload_limit', 'Upload allowance'],
   ['download_limit', 'Download allowance'],
   ['model', 'Model'],
@@ -53,6 +54,57 @@ const formatValue = (field: string, value: string | null): string => {
   if (field === 'is_partner') return value === 'true' ? 'yes' : 'no';
   return value;
 };
+
+/** A dialog on the admin account page. */
+export const AdminDialog = ({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) => (
+  <Transition appear show as={Fragment}>
+    <Dialog as='div' className='relative z-10' onClose={onClose}>
+      <TransitionChild
+        as={Fragment}
+        enter='ease-out duration-300'
+        enterFrom='opacity-0'
+        enterTo='opacity-100'
+        leave='ease-in duration-200'
+        leaveFrom='opacity-100'
+        leaveTo='opacity-0'
+      >
+        <div className='fixed inset-0 bg-background-hover' />
+      </TransitionChild>
+
+      <div className='fixed inset-0 overflow-y-auto'>
+        <div className='flex min-h-full items-center justify-center p-4 text-center'>
+          <TransitionChild
+            as={Fragment}
+            enter='ease-out duration-300'
+            enterFrom='opacity-0 scale-95'
+            enterTo='opacity-100 scale-100'
+            leave='ease-in duration-200'
+            leaveFrom='opacity-100 scale-100'
+            leaveTo='opacity-0 scale-95'
+          >
+            <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all'>
+              <DialogTitle
+                as='h3'
+                className='text-lg font-medium leading-6 text-foreground'
+              >
+                {title}
+              </DialogTitle>
+              {children}
+            </DialogPanel>
+          </TransitionChild>
+        </div>
+      </div>
+    </Dialog>
+  </Transition>
+);
 
 const TermsModal = ({
   account,
@@ -76,23 +128,31 @@ const TermsModal = ({
   const [expiryDays, setExpiryDays] = useState(
     account.creditExpiryDays === null ? '' : String(account.creditExpiryDays),
   );
+  const [monthlyFreeGiB, setMonthlyFreeGiB] = useState(
+    String(account.monthlyFreeUploadBytes / GiB),
+  );
   const [reason, setReason] = useState('');
 
   const download = Number(downloadGiB);
   const max = Number(maxGiB);
   const days = Number(expiryDays);
+  const monthlyFree = Number(monthlyFreeGiB);
   const valid =
     downloadGiB.trim() !== '' &&
     download >= 0 &&
     (maxGiB.trim() === '' || max > 0) &&
-    (expiryDays.trim() === '' || (Number.isInteger(days) && days > 0));
+    (expiryDays.trim() === '' || (Number.isInteger(days) && days > 0)) &&
+    monthlyFreeGiB.trim() !== '' &&
+    monthlyFree >= 0;
 
   const { mutate: save, isPending } = useMutation({
-    // A partner account has no free uploads, so the upload limit stays 0.
+    // A partner account has no free upload allowance, so the upload limit
+    // stays 0. Its free uploads are monthly free credits.
     mutationFn: () =>
       api.updateAccount(account.id, model, 0, Math.round(download * GiB), {
         maxPurchasedBytes: maxGiB.trim() === '' ? null : Math.round(max * GiB),
         creditExpiryDays: expiryDays.trim() === '' ? null : days,
+        monthlyFreeUploadBytes: Math.round(monthlyFree * GiB),
         reason: reason.trim() || undefined,
       }),
     onSuccess: () => {
@@ -107,114 +167,87 @@ const TermsModal = ({
     'w-full rounded border border-border bg-background px-2 py-1 text-foreground';
 
   return (
-    <Transition appear show as={Fragment}>
-      <Dialog as='div' className='relative z-10' onClose={onClose}>
-        <TransitionChild
-          as={Fragment}
-          enter='ease-out duration-300'
-          enterFrom='opacity-0'
-          enterTo='opacity-100'
-          leave='ease-in duration-200'
-          leaveFrom='opacity-100'
-          leaveTo='opacity-0'
-        >
-          <div className='fixed inset-0 bg-background-hover' />
-        </TransitionChild>
-
-        <div className='fixed inset-0 overflow-y-auto'>
-          <div className='flex min-h-full items-center justify-center p-4 text-center'>
-            <TransitionChild
-              as={Fragment}
-              enter='ease-out duration-300'
-              enterFrom='opacity-0 scale-95'
-              enterTo='opacity-100 scale-100'
-              leave='ease-in duration-200'
-              leaveFrom='opacity-100 scale-100'
-              leaveTo='opacity-0 scale-95'
-            >
-              <DialogPanel className='w-full max-w-md transform overflow-hidden rounded-2xl bg-background p-6 text-left align-middle shadow-xl transition-all'>
-                <DialogTitle
-                  as='h3'
-                  className='text-lg font-medium leading-6 text-foreground'
-                >
-                  Edit terms
-                </DialogTitle>
-                <form
-                  className='mt-4 space-y-4'
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (valid) save();
-                  }}
-                >
-                  <label className='block text-sm text-foreground'>
-                    Model
-                    <select
-                      className={inputClass}
-                      value={model}
-                      onChange={(e) => setModel(e.target.value as AccountModel)}
-                    >
-                      <option value={AccountModel.Monthly}>
-                        Monthly (allowance resets each month)
-                      </option>
-                      <option value={AccountModel.OneOff}>One-off</option>
-                    </select>
-                  </label>
-                  <label className='block text-sm text-foreground'>
-                    Download allowance (GiB)
-                    <input
-                      type='text'
-                      className={inputClass}
-                      value={downloadGiB}
-                      onChange={(e) => setDownloadGiB(e.target.value)}
-                    />
-                  </label>
-                  <label className='block text-sm text-foreground'>
-                    Max purchased credits held (GiB, empty for the default)
-                    <input
-                      type='text'
-                      className={inputClass}
-                      placeholder={`Default (${formatBytes(account.defaultCreditTerms.maxPurchasedBytes)})`}
-                      value={maxGiB}
-                      onChange={(e) => setMaxGiB(e.target.value)}
-                    />
-                  </label>
-                  <label className='block text-sm text-foreground'>
-                    Credit expiry for new purchases (days, empty for the
-                    default)
-                    <input
-                      type='text'
-                      className={inputClass}
-                      placeholder={`Default (${account.defaultCreditTerms.creditExpiryDays} days)`}
-                      value={expiryDays}
-                      onChange={(e) => setExpiryDays(e.target.value)}
-                    />
-                  </label>
-                  <label className='block text-sm text-foreground'>
-                    Reason (optional)
-                    <input
-                      type='text'
-                      className={inputClass}
-                      maxLength={500}
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                    />
-                  </label>
-                  <div className='flex justify-end'>
-                    <Button
-                      type='submit'
-                      variant='primary'
-                      disabled={!valid || isPending}
-                    >
-                      {isPending ? 'Saving…' : 'Save'}
-                    </Button>
-                  </div>
-                </form>
-              </DialogPanel>
-            </TransitionChild>
-          </div>
+    <AdminDialog title='Edit terms' onClose={onClose}>
+      <form
+        className='mt-4 space-y-4'
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save();
+        }}
+      >
+        <label className='block text-sm text-foreground'>
+          Model
+          <select
+            className={inputClass}
+            value={model}
+            onChange={(e) => setModel(e.target.value as AccountModel)}
+          >
+            <option value={AccountModel.Monthly}>
+              Monthly (allowance resets each month)
+            </option>
+            <option value={AccountModel.OneOff}>One-off</option>
+          </select>
+        </label>
+        <label className='block text-sm text-foreground'>
+          Download allowance (GiB)
+          <input
+            type='text'
+            className={inputClass}
+            value={downloadGiB}
+            onChange={(e) => setDownloadGiB(e.target.value)}
+          />
+        </label>
+        <label className='block text-sm text-foreground'>
+          Max purchased credits held (GiB, empty for the default)
+          <input
+            type='text'
+            className={inputClass}
+            placeholder={`Default (${formatBytes(account.defaultCreditTerms.maxPurchasedBytes)})`}
+            value={maxGiB}
+            onChange={(e) => setMaxGiB(e.target.value)}
+          />
+        </label>
+        <label className='block text-sm text-foreground'>
+          Credit expiry for new purchases (days, empty for the default)
+          <input
+            type='text'
+            className={inputClass}
+            placeholder={`Default (${account.defaultCreditTerms.creditExpiryDays} days)`}
+            value={expiryDays}
+            onChange={(e) => setExpiryDays(e.target.value)}
+          />
+        </label>
+        <label className='block text-sm text-foreground'>
+          Monthly free uploads (GiB, 0 for none). A change applies at once: this
+          month gets the new amount less what has been used this month.
+          <input
+            type='text'
+            className={inputClass}
+            value={monthlyFreeGiB}
+            onChange={(e) => setMonthlyFreeGiB(e.target.value)}
+          />
+        </label>
+        <label className='block text-sm text-foreground'>
+          Reason (optional)
+          <input
+            type='text'
+            className={inputClass}
+            maxLength={500}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </label>
+        <div className='flex justify-end'>
+          <Button
+            type='submit'
+            variant='primary'
+            disabled={!valid || isPending}
+          >
+            {isPending ? 'Saving…' : 'Save'}
+          </Button>
         </div>
-      </Dialog>
-    </Transition>
+      </form>
+    </AdminDialog>
   );
 };
 
@@ -246,8 +279,14 @@ export const PartnerTerms = ({
       'Free upload allowance',
       // Partner accounts created before #890 still have one until edited.
       account.uploadLimit === 0
-        ? 'None, uploads use purchased credits'
+        ? 'None, uploads use credits'
         : `${formatBytes(account.uploadLimit)} (saving the terms sets it to 0)`,
+    ],
+    [
+      'Monthly free uploads',
+      account.monthlyFreeUploadBytes === 0
+        ? 'None'
+        : `${formatBytes(account.monthlyFreeUploadBytes)} per UTC month, used before purchased credits`,
     ],
     [
       'Download allowance',

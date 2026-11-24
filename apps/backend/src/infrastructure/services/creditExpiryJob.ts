@@ -24,6 +24,12 @@ const runExpiryCheck = async (): Promise<void> => {
         rows: forfeited.expiredCount,
       })
     }
+    if (forfeited.freeUploadBytesForfeited > 0n) {
+      logger.info('Expired unused free credits', {
+        uploadBytes: forfeited.freeUploadBytesForfeited.toString(),
+        rows: forfeited.freeExpiredCount,
+      })
+    }
   } catch (error) {
     logger.error('Failed to mark expired credits', error)
   }

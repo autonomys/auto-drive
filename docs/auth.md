@@ -198,7 +198,7 @@ yarn workspace auth lambda:build
 
 #### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user
 
-The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each membership write takes the acting admin's public ID as `actor` and is recorded in `users.organization_membership_changes`.
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so they are made through the backend's `/organizations` endpoints: Auto Drive admins move users directly, and organization admins invite them, the move happening when the user accepts. Each membership write takes the acting admin's public ID as `actor` (for an accepted invitation, whoever sent it) and is recorded in `users.organization_membership_changes`.
 
 #### `POST /organizations`: Creates an organization (`{ name }`) and its service user, the user that owns the organization's API keys
 

@@ -14,7 +14,6 @@ import {
   IntentStatus,
   OrganizationRole,
   PurchasedCreditSummary,
-  User,
   UserRole,
   UserWithOrganization,
 } from '@auto-drive/models'
@@ -30,7 +29,11 @@ import {
   UnusedCreditsError,
 } from '../../../src/errors/index.js'
 
-const admin = { role: UserRole.Admin, publicId: 'admin-pub' } as User
+const admin = {
+  role: UserRole.Admin,
+  publicId: 'admin-pub',
+  organizationId: 'admin-org',
+} as UserWithOrganization
 
 const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   id: `acc-${organizationId}`,
@@ -41,12 +44,17 @@ const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   isPartner,
   maxPurchasedBytes: null,
   creditExpiryDays: null,
+  monthlyFreeUploadBytes: 0,
 })
 
 const remaining = (uploadBytesRemaining: bigint) =>
   ({
     uploadBytesRemaining,
     uploadBytesOriginal: uploadBytesRemaining,
+    purchasedUploadBytesRemaining: uploadBytesRemaining,
+    purchasedUploadBytesOriginal: uploadBytesRemaining,
+    purchasedNextExpiryDate: null,
+    freeUploadBytesRemaining: 0n,
     downloadBytesRemaining: 0n,
     nextExpiryDate: null,
     activeRowCount: uploadBytesRemaining > 0n ? 1 : 0,
@@ -80,7 +88,12 @@ describe('OrganizationsUseCases', () => {
   })
 
   it('rejects non-admin executors', async () => {
-    const user = { role: UserRole.User, publicId: 'pub1' } as User
+    // Not in partner-org, so not one of its admins either.
+    const user = {
+      role: UserRole.User,
+      publicId: 'pub1',
+      organizationId: 'personal-org',
+    } as UserWithOrganization
 
     const results = await Promise.all([
       OrganizationsUseCases.createPartnerOrganization(user, 'Partner'),
@@ -327,6 +340,18 @@ describe('OrganizationsUseCases', () => {
   })
 
   describe('removeMember', () => {
+    beforeEach(() => {
+      jest.spyOn(AuthManager, 'getOrganization').mockResolvedValue(
+        ok({
+          id: 'partner-org',
+          name: 'Partner',
+          archivedAt: null,
+          members: ['pub1'],
+          memberships: [{ publicId: 'pub1', role: OrganizationRole.Member }],
+        }),
+      )
+    })
+
     it('refuses a user with unresolved payments', async () => {
       jest
         .spyOn(intentsRepository, 'getByUserAndStatuses')
