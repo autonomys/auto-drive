@@ -151,7 +151,15 @@ export const config = {
   },
   express: {
     port: Number(env('PORT', '3000')),
+    // Largest JSON body POST /uploads/folder reads (its file tree). The other
+    // routes' JSON and URL-encoded bodies keep body-parser's default, 100 KB.
     requestSizeLimit: env('REQUEST_SIZE_LIMIT', '200mb'),
+    // Largest file part POST /uploads/file/:uploadId/chunk accepts. The default
+    // matches the S3 endpoint's per-request body limit.
+    uploadChunkMaxBytes: positiveIntEnv(
+      'UPLOAD_CHUNK_MAX_BYTES',
+      200 * 1024 * 1024,
+    ),
     corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS,
   },
   chain: {
@@ -700,7 +708,8 @@ export const config = {
     // accounts.upload_limit / accounts.download_limit and never expire.
     expiryDays: Number(env('CREDIT_EXPIRY_DAYS', '90')),
     // Maximum total purchased credit balance (in bytes) per account, summed
-    // across all active purchased_credits rows.
+    // across active purchased_credits rows that were paid for (free credits
+    // don't count).
     // Default: 100 GiB — matches the economic protection design document.
     maxBytesPerAccount: BigInt(
       env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),

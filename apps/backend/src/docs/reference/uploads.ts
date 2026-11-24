@@ -1,5 +1,14 @@
 import { autoDriveServers } from './servers.js'
 
+const customerReferenceHeader = {
+  name: 'X-Customer-Reference',
+  in: 'header',
+  required: false,
+  description:
+    'Your own reference for the customer this upload is for, shown in your usage reports. Up to 128 letters, digits, "-", "_", "." or ":". Use a pseudonymous ID, never personal data. A file in a folder upload takes the folder upload\'s reference: send the same value or none.',
+  schema: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' },
+}
+
 export const uploads = {
   paths: {
     '/uploads/file': {
@@ -7,6 +16,7 @@ export const uploads = {
         summary: 'Uploads - Upload a file',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
+        parameters: [customerReferenceHeader],
         requestBody: {
           content: {
             'application/json': {
@@ -52,6 +62,7 @@ export const uploads = {
         summary: 'Uploads - Create a new folder upload',
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
+        parameters: [customerReferenceHeader],
         requestBody: {
           content: {
             'application/json': {
@@ -106,6 +117,7 @@ export const uploads = {
               type: 'string',
             },
           },
+          customerReferenceHeader,
         ],
         requestBody: {
           content: {

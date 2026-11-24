@@ -207,6 +207,8 @@ const getRootObjectsByUser = async (
           AND oo.oauth_user_id = $2 
           AND oo.is_admin IS TRUE 
           AND oo.marked_as_deleted IS NULL 
+        -- Newest first, and a stable order so pages neither repeat nor skip.
+        ORDER BY m.created_at DESC, m.root_cid
         LIMIT $3 OFFSET $4`,
       values: [provider, userId, limit, offset],
     })

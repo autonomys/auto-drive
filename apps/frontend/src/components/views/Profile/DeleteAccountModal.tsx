@@ -6,6 +6,9 @@ import { Button } from '@auto-drive/ui';
 import toast from 'react-hot-toast';
 import { AuthService } from 'services/auth/auth';
 import { useDeletionStore } from 'globalStates/deletion';
+import { OrganizationRole } from '@auto-drive/models';
+import { useOrganization } from '@/hooks/useOrganization';
+import { useUserStore } from '@/globalStates/user';
 
 type DeleteAccountModalProps = {
   isOpen: boolean;
@@ -21,6 +24,16 @@ export const DeleteAccountModal = ({
   const [confirmText, setConfirmText] = useState('');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { overview } = useOrganization();
+  const publicId = useUserStore((state) => state.user?.publicId);
+  // The organization's credits are its own; only a member's personal account
+  // is forfeited.
+  const organizationName = overview?.name;
+  const isOnlyAdmin =
+    overview?.viewerRole === OrganizationRole.Admin &&
+    overview.members.filter((m) => m.role === OrganizationRole.Admin).length ===
+      1 &&
+    overview.members.some((m) => m.publicId === publicId);
   const setDeletionRequest = useDeletionStore(
     (state) => state.setDeletionRequest,
   );
@@ -43,7 +56,14 @@ export const DeleteAccountModal = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [isConfirmed, isSubmitting, reason, setDeletionRequest, onDeleted, onClose]);
+  }, [
+    isConfirmed,
+    isSubmitting,
+    reason,
+    setDeletionRequest,
+    onDeleted,
+    onClose,
+  ]);
 
   const handleClose = useCallback(() => {
     setConfirmText('');
@@ -90,17 +110,33 @@ export const DeleteAccountModal = ({
                         Start a 30-day grace period before your data is
                         anonymised
                       </li>
-                      <li>Expire any unused purchased credits</li>
+                      {organizationName ? (
+                        <li>
+                          Expire any unused purchased credits on your personal
+                          account. {organizationName}&apos;s credits stay with
+                          the organization.
+                        </li>
+                      ) : (
+                        <li>Expire any unused purchased credits</li>
+                      )}
                       <li>Remove your personal information from our systems</li>
                       <li>
-                        Data stored on the DSN cannot be removed and will persist
+                        Data stored on the DSN cannot be removed and will
+                        persist
                       </li>
                     </ul>
                   </div>
+                  {isOnlyAdmin && (
+                    <p className='rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
+                      You are the only admin of {organizationName}. Make another
+                      member an admin first, or nobody in it can manage its
+                      members and API keys.
+                    </p>
+                  )}
 
                   <div className='rounded-md bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'>
-                    You can cancel this request within 30 days from your
-                    profile or via the banner at the top of the page.
+                    You can cancel this request within 30 days from your profile
+                    or via the banner at the top of the page.
                   </div>
 
                   <div>

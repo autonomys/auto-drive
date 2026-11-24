@@ -16,11 +16,10 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiKey } from '@auto-drive/models';
+import { ApiKey, CreateApiKeyInput } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
-import { AuthService } from 'services/auth/auth';
 
 type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'custom' | 'never';
 
@@ -54,11 +53,13 @@ export const ApiKeyCreationModal = ({
   isOpen,
   onClose,
   onSuccess,
+  createKey,
   initialName = '',
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  createKey: (input: CreateApiKeyInput) => Promise<ApiKey>;
   initialName?: string;
 }) => {
   const [name, setName] = useState(initialName);
@@ -103,12 +104,15 @@ export const ApiKeyCreationModal = ({
     setSubmitting(true);
     const trimmed = name.trim();
     const epoch = epochRef.current;
-    AuthService.generateApiKey({
+    createKey({
       name: trimmed.length === 0 ? null : trimmed,
       expiresAt,
     })
       .then((key) => {
-        if (epochRef.current === epoch) setApiKey(key);
+        if (epochRef.current === epoch) {
+          setApiKey(key);
+          setSubmitting(false);
+        }
       })
       .catch((err: Error) => {
         if (epochRef.current === epoch) {
@@ -116,7 +120,7 @@ export const ApiKeyCreationModal = ({
           setSubmitting(false);
         }
       });
-  }, [canSubmit, name, preset, customDate]);
+  }, [canSubmit, name, preset, customDate, createKey]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -140,7 +144,12 @@ export const ApiKeyCreationModal = ({
         as='div'
         className='relative z-10'
         onClose={
-          apiKey && !hasBeenCopied ? () => {} : hasBeenCopied ? onSuccess : onClose
+          // Not while a key is being created, or it would be made unseen.
+          submitting || (apiKey && !hasBeenCopied)
+            ? () => {}
+            : hasBeenCopied
+              ? onSuccess
+              : onClose
         }
       >
         <TransitionChild

@@ -6,13 +6,15 @@ import {
   handleServiceAuth,
 } from '../services/authManager/express.js'
 import { OrganizationError } from '../errors/organizations.js'
+import { ApiKeyError } from '../errors/apikeys.js'
+import { parseCreateApiKeyBody } from './apiKeyBody.js'
 
 const logger = createLogger('http:controllers:organization')
 
 export const organizationController = Router()
 
 const handleError = (error: unknown, res: Response, message: string) => {
-  if (error instanceof OrganizationError) {
+  if (error instanceof OrganizationError || error instanceof ApiKeyError) {
     res.status(error.httpStatus).json({ error: error.message })
     return
   }
@@ -185,6 +187,71 @@ organizationController.delete(
       )
     } catch (error) {
       handleError(error, res, 'Failed to remove member')
+    }
+  },
+)
+
+// The organisation's API keys. The backend decides who may manage them.
+organizationController.get(
+  '/:organizationId/apiKeys',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.listApiKeys(req.params.organizationId),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to get API keys')
+    }
+  },
+)
+
+organizationController.post(
+  '/:organizationId/apiKeys',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    const parsed = parseCreateApiKeyBody(req.body)
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error })
+      return
+    }
+
+    try {
+      res
+        .status(201)
+        .json(
+          await OrganizationsUseCases.createApiKey(
+            req.params.organizationId,
+            parsed,
+          ),
+        )
+    } catch (error) {
+      handleError(error, res, 'Failed to create API key')
+    }
+  },
+)
+
+organizationController.delete(
+  '/:organizationId/apiKeys/:apiKeyId',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    try {
+      await OrganizationsUseCases.revokeApiKey(
+        req.params.organizationId,
+        req.params.apiKeyId,
+      )
+      res.status(204).end()
+    } catch (error) {
+      handleError(error, res, 'Failed to revoke API key')
     }
   },
 )

@@ -9,13 +9,15 @@ import { getDatabase } from '../../drivers/pg.js'
 // would also keep its indexes from being used.
 const local = (param: string) => `${param}::timestamptz::timestamp`
 
-// The bytes an interaction drew from purchased batches, and their AI3 value at
-// each batch's price. Both NULL when it has no consumption rows.
+// The bytes an interaction drew from credit batches and their AI3 value at
+// each batch's price. Free credits have no intent and are valued at 0. Both
+// NULL when it has no consumption rows.
 const CONSUMPTION = `LEFT JOIN LATERAL (
-    SELECT SUM(c.bytes) AS bytes, SUM(c.bytes * it.shannons_per_byte) AS value
+    SELECT SUM(c.bytes) AS bytes,
+           SUM(c.bytes * COALESCE(it.shannons_per_byte, 0)) AS value
     FROM interaction_credit_consumption c
     JOIN purchased_credits pc ON pc.id = c.purchased_credit_id
-    JOIN intents it ON it.id = pc.intent_id
+    LEFT JOIN intents it ON it.id = pc.intent_id
     WHERE c.interaction_id = i.id
   ) v ON true`
 
@@ -25,8 +27,9 @@ const inRange = (from: string, to: string) => `i.type IN ('upload', 'download')
 
 export type InteractionGroup = {
   type: 'upload' | 'download'
-  source: 'free_tier' | 'purchased'
+  source: 'free_tier' | 'purchased' | 'free_credits'
   apiKeyId: string | null
+  customerReference: string | null
   afterAttributionStart: boolean
   count: number
   bytes: string
@@ -43,15 +46,16 @@ const getInteractionGroups = async (
   const db = await getDatabase()
   const result = await db.query<{
     type: 'upload' | 'download'
-    source: 'free_tier' | 'purchased'
+    source: 'free_tier' | 'purchased' | 'free_credits'
     api_key_id: string | null
+    customer_reference: string | null
     after_attribution_start: boolean
     count: string
     bytes: string
     valued_bytes: string
     value: string
   }>(
-    `SELECT i.type, i.source, i.api_key_id,
+    `SELECT i.type, i.source, i.api_key_id, i.customer_reference,
             COALESCE(i.created_at >= ${local('$4')}, false)
               AS after_attribution_start,
             COUNT(*) AS count,
@@ -61,7 +65,7 @@ const getInteractionGroups = async (
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}
-     GROUP BY 1, 2, 3, 4`,
+     GROUP BY 1, 2, 3, 4, 5`,
     [accountId, from, to, attributionStart],
   )
 
@@ -69,6 +73,7 @@ const getInteractionGroups = async (
     type: row.type,
     source: row.source,
     apiKeyId: row.api_key_id,
+    customerReference: row.customer_reference,
     afterAttributionStart: row.after_attribution_start,
     count: Number(row.count),
     bytes: row.bytes,
@@ -97,7 +102,8 @@ export type PurchaseRow = {
   refunded_upload_bytes: string | null
 }
 
-// Batches granted to the account in the range, whoever paid for them.
+// Batches purchased for the account in the range, whoever paid for them. Free
+// credits have no intent and are left out.
 const getPurchases = async (
   accountId: string,
   from: Date,
@@ -122,8 +128,9 @@ const getPurchases = async (
   return result.rows
 }
 
-// The account's purchased upload bytes at `from` and `to`, and what moved in
-// between.
+// The account's upload bytes in credit batches at `from` and `to`, and what
+// moved in between. Batches are purchases and free credits alike, so `granted`
+// is both.
 //
 // Balances are worked back from each batch's current state, so they are exact
 // for any time from which every consumption is recorded, i.e. from attribution
@@ -141,10 +148,14 @@ const getPurchases = async (
 // A batch refunded before refunds recorded their bytes has its leftover taken
 // as everything not in its consumption rows, which is exact only if it was
 // granted after attribution.
+//
+// Purchased and free credits are balanced apart (`free`), so neither figure
+// mixes the two.
 const getBalance = async (
   accountId: string,
   from: Date,
   to: Date,
+  free: boolean,
 ): Promise<CreditBalance> => {
   const db = await getDatabase()
   const result = await db.query<CreditBalance>(
@@ -158,7 +169,7 @@ const getBalance = async (
        FROM interaction_credit_consumption c
        JOIN interactions i ON i.id = c.interaction_id
        JOIN purchased_credits pc ON pc.id = c.purchased_credit_id
-       WHERE pc.account_id = $1
+       WHERE pc.account_id = $1 AND (pc.intent_id IS NULL) = $4
        GROUP BY c.purchased_credit_id
      ), batches AS (
        SELECT pc.purchased_at,
@@ -174,7 +185,7 @@ const getBalance = async (
               COALESCE(c.since_to, 0) AS since_to
        FROM purchased_credits pc
        LEFT JOIN consumption c ON c.purchased_credit_id = pc.id
-       WHERE pc.account_id = $1
+       WHERE pc.account_id = $1 AND (pc.intent_id IS NULL) = $4
      )
      SELECT
        COALESCE(SUM(leftover + since_from) FILTER (
@@ -191,7 +202,7 @@ const getBalance = async (
        COALESCE(SUM(leftover + since_to) FILTER (
          WHERE purchased_at < $3 AND ended_at >= $3), 0)::text AS closing
      FROM batches`,
-    [accountId, from, to],
+    [accountId, from, to, free],
   )
   return result.rows[0]
 }
@@ -202,10 +213,11 @@ export type InteractionRow = {
   cursor: string
   created_at: Date
   type: 'upload' | 'download'
-  source: 'free_tier' | 'purchased'
+  source: 'free_tier' | 'purchased' | 'free_credits'
   size: string
   cid: string | null
   api_key_id: string | null
+  customer_reference: string | null
   value: string | null
 }
 
@@ -224,7 +236,8 @@ const getInteractionsPage = async (
   const result = await db.query<InteractionRow>(
     `SELECT i.id, i.created_at::text AS cursor,
             i.created_at::timestamptz AS created_at,
-            i.type, i.source, i.size, i.cid, i.api_key_id, v.value
+            i.type, i.source, i.size, i.cid, i.api_key_id,
+            i.customer_reference, v.value
      FROM interactions i
      ${CONSUMPTION}
      WHERE i.account_id = $1 AND ${inRange('$2', '$3')}
@@ -243,8 +256,10 @@ export type AccountSummaryRow = {
   upload_count: string
   upload_bytes: string
   ai3_value: string
+  free_credit_bytes: string
   download_bytes: string
   granted_bytes: string
+  free_credits_granted_bytes: string
 }
 
 // Headline figures for each account with usage or credits granted in the
@@ -263,6 +278,9 @@ const getAccountSummaries = async (
               COALESCE(SUM(i.size) FILTER (WHERE i.type = 'upload'), 0)
                 AS upload_bytes,
               COALESCE(SUM(v.value), 0) AS ai3_value,
+              COALESCE(SUM(i.size) FILTER (
+                WHERE i.type = 'upload' AND i.source = 'free_credits'), 0)
+                AS free_credit_bytes,
               COALESCE(SUM(i.size) FILTER (WHERE i.type = 'download'), 0)
                 AS download_bytes
        FROM interactions i
@@ -272,7 +290,11 @@ const getAccountSummaries = async (
            SELECT id FROM accounts WHERE is_partner))
        GROUP BY i.account_id
      ), grants AS (
-       SELECT account_id, SUM(upload_bytes_original) AS granted_bytes
+       SELECT account_id,
+              COALESCE(SUM(upload_bytes_original) FILTER (
+                WHERE intent_id IS NOT NULL), 0) AS granted_bytes,
+              COALESCE(SUM(upload_bytes_original) FILTER (
+                WHERE intent_id IS NULL), 0) AS free_credits_granted_bytes
        FROM purchased_credits
        WHERE purchased_at >= $1 AND purchased_at < $2
        GROUP BY account_id
@@ -281,8 +303,11 @@ const getAccountSummaries = async (
             COALESCE(u.upload_count, 0) AS upload_count,
             COALESCE(u.upload_bytes, 0) AS upload_bytes,
             COALESCE(u.ai3_value, 0) AS ai3_value,
+            COALESCE(u.free_credit_bytes, 0) AS free_credit_bytes,
             COALESCE(u.download_bytes, 0) AS download_bytes,
-            COALESCE(g.granted_bytes, 0) AS granted_bytes
+            COALESCE(g.granted_bytes, 0) AS granted_bytes,
+            COALESCE(g.free_credits_granted_bytes, 0)
+              AS free_credits_granted_bytes
      FROM accounts a
      LEFT JOIN usage u ON u.account_id = a.id
      LEFT JOIN grants g ON g.account_id = a.id
@@ -295,9 +320,46 @@ const getAccountSummaries = async (
   return result.rows
 }
 
+export type FreeCreditRow = {
+  batch_id: string
+  kind: 'free_one_time' | 'free_monthly'
+  purchased_at: Date
+  granted_by: string | null
+  grant_reason: string | null
+  grant_period: string | null
+  upload_bytes_original: string
+  expires_at: Date
+}
+
+// Free credit batches granted to the account in the range.
+const getFreeCredits = async (
+  accountId: string,
+  from: Date,
+  to: Date,
+): Promise<FreeCreditRow[]> => {
+  const db = await getDatabase()
+  const result = await db.query<FreeCreditRow>(
+    `SELECT id AS batch_id,
+            CASE WHEN grant_period IS NULL THEN 'free_one_time'
+                 ELSE 'free_monthly' END AS kind,
+            purchased_at, granted_by, grant_reason,
+            to_char(grant_period, 'YYYY-MM-DD') AS grant_period,
+            upload_bytes_original, expires_at
+     FROM purchased_credits
+     WHERE account_id = $1
+       AND intent_id IS NULL
+       AND purchased_at >= $2
+       AND purchased_at < $3
+     ORDER BY purchased_at, id`,
+    [accountId, from, to],
+  )
+  return result.rows
+}
+
 export const usageReportsRepository = {
   getInteractionGroups,
   getPurchases,
+  getFreeCredits,
   getBalance,
   getInteractionsPage,
   getAccountSummaries,

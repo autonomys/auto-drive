@@ -23,7 +23,7 @@
 #                       invalid (start > length)
 #   - GetObject / HeadObject 404 paths for missing keys
 #   - ListObjectsV2 — flat (no delimiter), pagination drain (MaxKeys + token),
-#                     MaxKeys clamping [1,1000], KeyCount, empty result,
+#                     MaxKeys 0 and the 1000 cap, KeyCount, empty result,
 #                     exact-key prefix, EncodingType=url
 #   - Multipart — 2-part integrity + composite ETag locally recomputed,
 #                 3-part out-of-order completion, UploadPart unknown UploadId
@@ -986,34 +986,39 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # ListObjectsV2 — MaxKeys clamping contract
 #
-# The controller (apps/backend/src/app/controllers/s3/s3.ts) clamps maxKeys to
-# the inclusive range [1, 1000]: rawMaxKeys ≤ 0 silently becomes 1000, and
-# any value > 1000 is capped at 1000.  These tests pin that contract.
-#
-# (The SDK migration fixed a latent crash on MaxKeys=0 inside buildListResult,
-# but the bug can no longer reach the SDK from this controller because of the
-# clamp; the fix still benefits any direct caller of the SDK function.)
+# The controller (apps/backend/src/app/controllers/s3/s3.ts) parses max-keys
+# as AWS S3 does: 0 answers an empty page that is not truncated, any value
+# above 1000 is capped at 1000, and a negative or non-integer value answers
+# 400 InvalidArgument.  These tests pin the 0 and cap cases.
 # ─────────────────────────────────────────────────────────────────────────────
 
 section "ListObjectsV2 — MaxKeys clamping"
 
-# MaxKeys=0 → silently coerced to 1000.  Under our tree prefix (3 keys) we
-# should see all 3 keys returned and IsTruncated=false.
+# The server can itself refuse a max-keys value with InvalidArgument, which the
+# AWS CLI reports as "An error occurred (...)".  Only a refusal that never left
+# the CLI counts as "cannot probe".
+rejected_client_side() {
+  ! echo "$1" | grep -q "An error occurred" \
+    && echo "$1" | grep -qi "between\|invalid\|MaxKeys"
+}
+
+# MaxKeys=0 → no keys and IsTruncated=false, even though our tree prefix holds
+# 3 keys, and MaxKeys is echoed as 0.
 ZERO_OUT=$(S3 list-objects-v2 --bucket "$TEST_BUCKET" \
     --prefix "${TREE_PREFIX}/" --max-keys 0 --no-paginate 2>&1) \
   && ZERO_EXIT=0 || ZERO_EXIT=$?
 if [[ $ZERO_EXIT -eq 0 ]]; then
   ZK_COUNT=$(echo "$ZERO_OUT" | jq '[.Contents[]?.Key] | length')
   ZK_TRUNC=$(echo "$ZERO_OUT" | jq -r '.IsTruncated // false')
-  ZK_MAX=$(echo "$ZERO_OUT" | jq -r '.MaxKeys // 0')
-  if [[ "$ZK_COUNT" == "3" && "$ZK_TRUNC" == "false" && "$ZK_MAX" == "1000" ]]; then
-    ok "MaxKeys=0 — clamped to default 1000 (3 keys, IsTruncated=false)"
+  ZK_MAX=$(echo "$ZERO_OUT" | jq -r '.MaxKeys')
+  if [[ "$ZK_COUNT" == "0" && "$ZK_TRUNC" == "false" && "$ZK_MAX" == "0" ]]; then
+    ok "MaxKeys=0 — empty page, IsTruncated=false"
   else
-    fail "MaxKeys=0 — clamp behaviour wrong" \
-      "count=${ZK_COUNT} (want 3) truncated=${ZK_TRUNC} (want false) maxKeys=${ZK_MAX} (want 1000)"
+    fail "MaxKeys=0 — wrong response" \
+      "count=${ZK_COUNT} (want 0) truncated=${ZK_TRUNC} (want false) maxKeys=${ZK_MAX} (want 0)"
   fi
 else
-  if echo "$ZERO_OUT" | grep -qi "between\|invalid\|MaxKeys"; then
+  if rejected_client_side "$ZERO_OUT"; then
     info "MaxKeys=0 — rejected client-side by AWS CLI; cannot probe clamp" \
       "$(echo "$ZERO_OUT" | head -1)"
   else
@@ -1037,7 +1042,7 @@ if [[ $BIG_EXIT -eq 0 ]]; then
       "echoed MaxKeys=${BIG_MAX} (want 1000)"
   fi
 else
-  if echo "$BIG_OUT" | grep -qi "between\|invalid\|MaxKeys"; then
+  if rejected_client_side "$BIG_OUT"; then
     info "MaxKeys=5000 — rejected client-side by AWS CLI" \
       "$(echo "$BIG_OUT" | head -1)"
   else

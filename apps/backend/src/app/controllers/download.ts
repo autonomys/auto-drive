@@ -76,7 +76,7 @@ downloadController.post(
       return
     }
 
-    const dismissalResult = await handleInternalError(
+    const dismissalResult = await handleInternalErrorResult(
       AsyncDownloadsUseCases.dismissDownload(user, downloadId),
       'Failed to dismiss download',
     )

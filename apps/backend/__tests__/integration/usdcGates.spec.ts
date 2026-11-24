@@ -117,6 +117,10 @@ describe('USDC gates (integration)', () => {
       .mockResolvedValue({
         uploadBytesRemaining: 0n,
         uploadBytesOriginal: 0n,
+        purchasedUploadBytesRemaining: 0n,
+        purchasedUploadBytesOriginal: 0n,
+        purchasedNextExpiryDate: null,
+        freeUploadBytesRemaining: 0n,
         downloadBytesRemaining: 0n,
         nextExpiryDate: null,
         activeRowCount: 0,

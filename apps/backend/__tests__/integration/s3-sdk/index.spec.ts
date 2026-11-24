@@ -1,5 +1,6 @@
 import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'zlib'
 import { createHash, randomBytes } from 'crypto'
+import { request } from 'http'
 import { dbMigration } from '../../utils/dbMigrate.js'
 import {
   AbortMultipartUploadCommand,
@@ -778,6 +779,111 @@ describe('AWS S3 - SDK', () => {
       expect(result.KeyCount).toBe(0)
       expect(result.Contents ?? []).toHaveLength(0)
       expect(result.IsTruncated).toBe(false)
+    })
+
+    describe('max-keys', () => {
+      const LISTINGS = [
+        { op: 'ListObjectsV2', query: 'list-type=2' },
+        { op: 'ListObjectVersions', query: 'versions' },
+      ]
+
+      it('ListObjectsV2 with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectsV2Command({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.KeyCount).toBe(0)
+        expect(result.Contents ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextContinuationToken).toBeUndefined()
+      })
+
+      it('ListObjectVersions with MaxKeys 0 lists nothing and is not truncated', async () => {
+        const result = await s3Client.send(
+          new ListObjectVersionsCommand({ Bucket: ListBucket, MaxKeys: 0 }),
+        )
+        expect(result.MaxKeys).toBe(0)
+        expect(result.Versions ?? []).toHaveLength(0)
+        expect(result.IsTruncated).toBe(false)
+        expect(result.NextKeyMarker).toBeUndefined()
+      })
+
+      it.each(LISTINGS)(
+        '$op reads an empty max-keys as omitted',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(200)
+          const body = await res.text()
+          expect(body).toContain('<MaxKeys>1000</MaxKeys>')
+          expect(body).toContain('<Key>a.txt</Key>')
+        },
+      )
+
+      it.each(LISTINGS)(
+        '$op answers 400 InvalidArgument for a negative max-keys',
+        async ({ query }) => {
+          const res = await fetch(`${ListBucket}?${query}&max-keys=-1`, {
+            headers: { Authorization: PROBE_AUTH },
+          })
+          expect(res.status).toBe(400)
+          const body = await res.text()
+          expect(body).toContain('<Code>InvalidArgument</Code>')
+          expect(body).toContain('<ArgumentName>max-keys</ArgumentName>')
+          expect(body).toContain('<ArgumentValue>-1</ArgumentValue>')
+        },
+      )
+
+      // As on S3: an unencoded '+' is a space, a repeated max-keys counts by
+      // its first value, and max-keys[a] is a different parameter.
+      it.each([
+        { value: '+5', argumentValue: ' 5' },
+        { value: 'abc&max-keys=10', argumentValue: 'abc' },
+      ])(
+        'ListObjectsV2 answers 400 for max-keys=$value, echoing "$argumentValue"',
+        async ({ value, argumentValue }) => {
+          const res = await fetch(
+            `${ListBucket}?list-type=2&max-keys=${value}`,
+            { headers: { Authorization: PROBE_AUTH } },
+          )
+          expect(res.status).toBe(400)
+          expect(await res.text()).toContain(
+            `<ArgumentValue>${argumentValue}</ArgumentValue>`,
+          )
+        },
+      )
+
+      it('ListObjectsV2 ignores a bracketed max-keys', async () => {
+        const res = await fetch(`${ListBucket}?list-type=2&max-keys[a]=1`, {
+          headers: { Authorization: PROBE_AUTH },
+        })
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<MaxKeys>1000</MaxKeys>')
+      })
+    })
+
+    it('reads a repeated prefix by its first value', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&prefix=subdir/&prefix=other/`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<Prefix>subdir/</Prefix>')
+      expect(body).toContain('<Key>subdir/c.txt</Key>')
+      expect(body).not.toContain('other/')
+    })
+
+    it('answers 400 InvalidArgument for a continuation token it did not issue', async () => {
+      const res = await fetch(
+        `${ListBucket}?list-type=2&continuation-token=a.txt`,
+        { headers: { Authorization: PROBE_AUTH } },
+      )
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>continuation-token</ArgumentName>',
+      )
     })
   })
 
@@ -1777,6 +1883,54 @@ describe('AWS S3 - SDK', () => {
       expect(res.status).toBe(503)
       expect(await res.text()).toContain('<Code>ServiceUnavailable</Code>')
     })
+
+    // The body parser answers this encoding 501 when it reaches the body, so a
+    // 403 shows the credentials were checked first. Sent with http.request
+    // because fetch refuses a body on GET.
+    it.each(['PUT', 'POST', 'DELETE', 'GET'])(
+      'answers an unsigned %s before reading its body',
+      async (method) => {
+        const res = await new Promise<{ status?: number; body: string }>(
+          (resolve, reject) => {
+            const req = request(
+              `${BASE_PATH}/s3/auth-test/probe.txt`,
+              {
+                method,
+                headers: {
+                  'Content-Encoding': 'aws-chunked',
+                  'Content-Length': '1',
+                },
+              },
+              (response) => {
+                let body = ''
+                response.setEncoding('utf8')
+                response.on('data', (chunk) => (body += chunk))
+                response.on('end', () =>
+                  resolve({ status: response.statusCode, body }),
+                )
+              },
+            )
+            req.on('error', reject)
+            req.end('x')
+          },
+        )
+        expect(res.status).toBe(403)
+        expect(res.body).toContain('<Code>AccessDenied</Code>')
+      },
+    )
+
+    it('authenticates a write once', async () => {
+      const lookup = jest.spyOn(AuthManager, 'getUserFromAccessToken')
+      lookup.mockClear()
+
+      const res = await fetch(`${BASE_PATH}/s3/auth-test/once.txt`, {
+        method: 'PUT',
+        headers: { Authorization: AUTH },
+        body: 'x',
+      })
+      expect(res.status).toBe(200)
+      expect(lookup).toHaveBeenCalledTimes(1)
+    })
   })
 
   // Versioned-WORM (issue #781): versioning is always on, versionId = the
@@ -2633,6 +2787,169 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  // A listing echoes the prefix, the key-marker and a resume position, and each
+  // can hold a character XML cannot carry.
+  describe('Listing values echoed into the response', () => {
+    const EchoBucket = `${BASE_PATH}/s3/echo-list`
+    const LISTINGS = [
+      { op: 'ListObjectsV2', query: 'list-type=2' },
+      { op: 'ListObjectVersions', query: 'versions' },
+    ]
+    const list = (query: string) =>
+      fetch(`${EchoBucket}?${query}`, {
+        headers: { Authorization: PROBE_AUTH },
+      })
+
+    beforeAll(async () => {
+      for (const Key of ['echo-list/d/\x01', 'echo-list/e.txt']) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+    })
+
+    it('ListObjectsV2 pages on from a key XML cannot carry', async () => {
+      // d/\x01 folds into d/ and is the last key page 1 reads, so page 1's
+      // token names it.
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: EchoBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    })
+
+    it('ListObjectsV2 pages on past a folder that fills the database batch', async () => {
+      // With a delimiter, max-keys=1 reads 110 rows, so 110 keys under d/ fill
+      // the batch and page 1 resumes from d/ + U+FFFF.
+      const FoldBucket = `${BASE_PATH}/s3/fold-list`
+      const keys = [
+        ...Array.from(
+          { length: 110 },
+          (_, i) => `fold-list/d/${String(i).padStart(3, '0')}`,
+        ),
+        'fold-list/e.txt',
+      ]
+      for (let i = 0; i < keys.length; i += 10) {
+        await Promise.all(
+          keys.slice(i, i + 10).map((Key) =>
+            s3Client.send(
+              new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+            ),
+          ),
+        )
+      }
+
+      const page1 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+        }),
+      )
+      expect(page1.CommonPrefixes?.map((p) => p.Prefix)).toEqual(['d/'])
+      expect(page1.IsTruncated).toBe(true)
+
+      const page2 = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: FoldBucket,
+          Delimiter: '/',
+          MaxKeys: 1,
+          ContinuationToken: page1.NextContinuationToken,
+        }),
+      )
+      expect(page2.CommonPrefixes ?? []).toEqual([])
+      expect(page2.Contents?.map((c) => c.Key)).toEqual(['e.txt'])
+      expect(page2.IsTruncated).toBe(false)
+    }, 120_000)
+
+    it('ListObjectsV2 pages in byte order, returning a folder once', async () => {
+      const OrderBucket = `${BASE_PATH}/s3/order-list`
+      for (const Key of [
+        'order-list/photos/a.jpg',
+        'order-list/photos.zip',
+        'order-list/photos/z.jpg',
+      ]) {
+        await s3Client.send(
+          new PutObjectCommand({ Bucket, Key, Body: Buffer.from('x') }),
+        )
+      }
+
+      const entries: string[] = []
+      let ContinuationToken: string | undefined
+      do {
+        const page = await s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: OrderBucket,
+            Delimiter: '/',
+            MaxKeys: 1,
+            ContinuationToken,
+          }),
+        )
+        entries.push(
+          ...(page.Contents ?? []).map((c) => c.Key!),
+          ...(page.CommonPrefixes ?? []).map((p) => p.Prefix!),
+        )
+        ContinuationToken = page.IsTruncated
+          ? page.NextContinuationToken
+          : undefined
+      } while (ContinuationToken && entries.length < 5)
+      expect(entries).toEqual(['photos.zip', 'photos/'])
+    })
+
+    it.each(LISTINGS)(
+      '$op without encoding-type answers 400 for a prefix XML cannot carry',
+      async ({ query }) => {
+        const res = await list(`${query}&max-keys=0&prefix=%01`)
+        expect(res.status).toBe(400)
+        expect(await res.text()).toContain(
+          '<ArgumentName>encoding-type</ArgumentName>',
+        )
+      },
+    )
+
+    it.each(LISTINGS)(
+      '$op with encoding-type=url echoes that prefix encoded',
+      async ({ query }) => {
+        const res = await list(
+          `${query}&max-keys=0&prefix=%01&encoding-type=url`,
+        )
+        expect(res.status).toBe(200)
+        expect(await res.text()).toContain('<Prefix>%01</Prefix>')
+      },
+    )
+
+    it('ListObjectVersions with encoding-type=url echoes the key-marker encoded', async () => {
+      const res = await list('versions&key-marker=d%2F%01&encoding-type=url')
+      expect(res.status).toBe(200)
+      const body = await res.text()
+      expect(body).toContain('<KeyMarker>d%2F%01</KeyMarker>')
+      expect(body).toContain('<Key>e.txt</Key>')
+    })
+
+    it('ListObjectVersions without encoding-type answers 400 for that key-marker', async () => {
+      const res = await list('versions&key-marker=d%2F%01')
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain(
+        '<ArgumentName>encoding-type</ArgumentName>',
+      )
+    })
+  })
+
   // These remain unimplemented and must return 501, never reach a write handler.
   describe('Unsupported operations return 501 NotImplemented', () => {
     it('ListParts is rejected (must not finalise the upload)', async () => {
@@ -3177,5 +3494,98 @@ describe('AWS S3 - SDK', () => {
         $response: { headers: { 'retry-after': '1' } },
       })
     }, 30_000)
+  })
+
+  // #892: a caller's own reference for the customer an object is for, recorded
+  // with the upload's interactions and never returned as object metadata.
+  describe('customer reference (x-amz-meta-customer-reference)', () => {
+    const referencesOf = async (cid: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{ customer_reference: string | null }>(
+        'SELECT customer_reference FROM interactions WHERE cid = $1',
+        [cid],
+      )
+      return result.rows.map((r) => r.customer_reference)
+    }
+
+    const cidOf = async (Key: string) => {
+      const head = await s3Client.send(new HeadObjectCommand({ Bucket, Key }))
+      expect(head.Metadata).not.toHaveProperty('customer-reference')
+      return head.Metadata!.cid
+    }
+
+    it('PutObject records it on the interaction', async () => {
+      const Key = 'customer-reference/put.bin'
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket,
+          Key,
+          Body: randomBytes(64),
+          Metadata: { 'customer-reference': 'cust:put-1' },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust:put-1'])
+    })
+
+    it('PutObject without one records NULL', async () => {
+      const Key = 'customer-reference/none.bin'
+      await s3Client.send(
+        new PutObjectCommand({ Bucket, Key, Body: randomBytes(64) }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual([null])
+    })
+
+    it('a multipart upload records the one sent when it was created', async () => {
+      const Key = 'customer-reference/multipart.bin'
+      const { UploadId } = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket,
+          Key,
+          Metadata: { 'customer-reference': 'cust-multipart' },
+        }),
+      )
+      const { ETag } = await s3Client.send(
+        new UploadPartCommand({
+          Bucket,
+          Key,
+          UploadId,
+          PartNumber: 1,
+          Body: randomBytes(64),
+        }),
+      )
+      await s3Client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key,
+          UploadId,
+          MultipartUpload: { Parts: [{ ETag, PartNumber: 1 }] },
+        }),
+      )
+      expect(await referencesOf(await cidOf(Key))).toEqual(['cust-multipart'])
+    })
+
+    const invalid = {
+      Bucket,
+      Key: 'customer-reference/invalid.bin',
+      Metadata: { 'customer-reference': 'not valid' },
+    }
+    const rejectedAsInvalid = {
+      $metadata: { httpStatusCode: 400 },
+      name: 'InvalidArgument',
+    }
+
+    it('PutObject answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(
+          new PutObjectCommand({ ...invalid, Body: randomBytes(64) }),
+        ),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
+
+    it('CreateMultipartUpload answers 400 InvalidArgument for an invalid one', async () => {
+      await expect(
+        s3Client.send(new CreateMultipartUploadCommand(invalid)),
+      ).rejects.toMatchObject(rejectedAsInvalid)
+    })
   })
 })

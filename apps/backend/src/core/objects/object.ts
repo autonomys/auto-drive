@@ -313,25 +313,34 @@ const shareObject = async (
   return ok()
 }
 
+const findOwnership = async (user: User, cid: string) => {
+  const ownerships = await ownershipRepository.getAllOwnerships(cid)
+  return ownerships.find(
+    (ownership) =>
+      ownership.oauth_provider === user.oauthProvider &&
+      ownership.oauth_user_id === user.oauthUserId,
+  )
+}
+
 const markAsDeleted = async (
   executor: User,
   cid: string,
 ): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to mark object as deleted (cid=%s)', cid)
-  const ownerships = await ownershipRepository.getOwnerships(cid)
-  const isUserOwner = ownerships.find(
-    (owner) =>
-      owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId,
-  )
+  const ownership = await findOwnership(executor, cid)
 
-  if (!isUserOwner) {
+  if (!ownership) {
     logger.warn(
       'User (%s) attempted to delete object without ownership (cid=%s)',
       executor.oauthUserId,
       cid,
     )
     return err(new ForbiddenError('User is not an owner of this object'))
+  }
+
+  if (ownership.marked_as_deleted) {
+    logger.debug('Object is already marked as deleted (cid=%s)', cid)
+    return ok()
   }
 
   await OwnershipUseCases.setObjectAsDeleted(executor, cid)
@@ -345,20 +354,20 @@ const restoreObject = async (
   cid: string,
 ): Promise<Result<void, ForbiddenError>> => {
   logger.debug('Attempting to restore object (cid=%s)', cid)
-  const deletedOwnerships = await ownershipRepository.getDeletedOwnerships(cid)
-  const isUserOwner = deletedOwnerships.find(
-    (owner) =>
-      owner.oauth_provider === executor.oauthProvider &&
-      owner.oauth_user_id === executor.oauthUserId,
-  )
+  const ownership = await findOwnership(executor, cid)
 
-  if (!isUserOwner) {
+  if (!ownership) {
     logger.warn(
       'User (%s) attempted to restore object without ownership (cid=%s)',
       executor.oauthUserId,
       cid,
     )
     return err(new ForbiddenError('User is not an owner of this object'))
+  }
+
+  if (!ownership.marked_as_deleted) {
+    logger.debug('Object is not marked as deleted (cid=%s)', cid)
+    return ok()
   }
 
   await OwnershipUseCases.restoreObject(executor, cid)

@@ -1,14 +1,20 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { Download, Loader } from 'lucide-react';
+import { ChevronDown, Download, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
-import { UsageByApiKey, UsageReport } from '@auto-drive/models';
+import {
+  CreditBalance,
+  UsageByApiKey,
+  UsageByCustomerReference,
+  UsageReport,
+} from '@auto-drive/models';
 import { useNetwork } from '@/contexts/network';
+import { useUserStore } from '@/globalStates/user';
 import { Table } from '@/components/molecules/Table';
 import {
   TableHead,
@@ -22,7 +28,7 @@ import {
 } from '@/components/molecules/Table/TableBody';
 import { formatBytes } from '@/utils/number';
 import { formatCid } from '@/utils/table';
-import { describePayment, formatAi3 } from '@/utils/credits';
+import { describeBatchKind, describePayment, formatAi3 } from '@/utils/credits';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   defaultUsageDays,
@@ -42,12 +48,79 @@ const day = (iso: string) => dayjs.utc(iso).format('MMM D, YYYY');
 const EXPORTS = [
   { label: 'Summary', table: 'summary' },
   { label: 'API keys', table: 'apiKeys' },
+  { label: 'Customer references', table: 'customerReferences' },
   { label: 'Purchases', table: 'purchases' },
+  { label: 'Free credits', table: 'freeCredits' },
   { label: 'Interactions', table: 'interactions' },
-  { label: 'JSON', table: 'report' },
+  { label: 'Full report (JSON)', table: 'report' },
 ] as const;
 
 type ExportTable = (typeof EXPORTS)[number]['table'];
+
+// One menu instead of a button per table, which crowded the page.
+const ExportMenu = ({
+  exports,
+  disabled,
+  exporting,
+  onExport,
+}: {
+  exports: readonly { label: string; table: ExportTable }[];
+  disabled: boolean;
+  exporting: ExportTable | null;
+  onExport: (table: ExportTable) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div className='relative' ref={ref}>
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={disabled || exporting !== null}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup='menu'
+        aria-expanded={open}
+      >
+        {exporting ? <Loader className='animate-spin' /> : <Download />}
+        Export
+        <ChevronDown />
+      </Button>
+      {open && (
+        <div
+          role='menu'
+          className='absolute right-0 z-20 mt-1 w-48 rounded-md border border-border bg-popover py-1 text-sm text-popover-foreground shadow-lg'
+        >
+          {exports.map(({ label, table }) => (
+            <button
+              key={table}
+              role='menuitem'
+              className='block w-full px-3 py-1.5 text-left hover:bg-background-hover'
+              onClick={() => {
+                setOpen(false);
+                onExport(table);
+              }}
+            >
+              {label}
+              <span className='ml-1 text-xs text-gray-500'>
+                {table === 'report' ? '' : 'CSV'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Stat = ({
   label,
@@ -81,7 +154,7 @@ const Section = ({
 );
 
 const KeyLabel = ({ row }: { row: UsageByApiKey }) => {
-  if (row.kind === 'session') return <>Web app</>;
+  if (row.kind === 'session') return <>Web app (all members)</>;
   if (row.kind === 'unattributed') {
     return <span className='text-gray-500'>Before attribution</span>;
   }
@@ -99,8 +172,17 @@ const KeyLabel = ({ row }: { row: UsageByApiKey }) => {
   );
 };
 
-const Balance = ({ report }: { report: UsageReport }) => {
-  const { balance, attributionStart } = report;
+// Purchased and free credits are balanced apart, so neither is taken for the
+// other.
+const Balance = ({
+  balance,
+  attributionStart,
+  free,
+}: {
+  balance: CreditBalance | null;
+  attributionStart: string | null;
+  free: boolean;
+}) => {
   if (!balance) {
     return (
       <p className='text-sm text-gray-500'>
@@ -113,13 +195,32 @@ const Balance = ({ report }: { report: UsageReport }) => {
   return (
     <div className='grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6'>
       <Stat label='Opening' value={bytes(balance.opening)} />
-      <Stat label='Granted' value={`+ ${bytes(balance.granted)}`} />
+      <Stat
+        label={free ? 'Granted' : 'Purchased'}
+        value={`+ ${bytes(balance.granted)}`}
+      />
       <Stat label='Consumed' value={`− ${bytes(balance.consumed)}`} />
       <Stat label='Expired' value={`− ${bytes(balance.expired)}`} />
-      <Stat label='Refunded' value={`− ${bytes(balance.refunded)}`} />
+      {!free && (
+        <Stat label='Refunded' value={`− ${bytes(balance.refunded)}`} />
+      )}
       <Stat label='Closing' value={bytes(balance.closing)} />
     </div>
   );
+};
+
+// A member's key shows its owner's Public ID, never their sign-in name.
+const KeyOwner = ({ row }: { row: UsageByApiKey }) => {
+  const viewerPublicId = useUserStore((state) => state.user?.publicId);
+  if (row.owner === 'organization') return <>Organization</>;
+  if (row.owner === 'member') {
+    if (!row.ownerPublicId) return <>A member</>;
+    if (row.ownerPublicId === viewerPublicId) return <>You</>;
+    return (
+      <span className='font-mono text-xs'>{formatCid(row.ownerPublicId)}</span>
+    );
+  }
+  return <span className='text-gray-500'>—</span>;
 };
 
 const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
@@ -128,9 +229,11 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
       <TableHead>
         <TableHeadRow>
           <TableHeadCell>Key</TableHeadCell>
+          <TableHeadCell>Owner</TableHeadCell>
           <TableHeadCell>Uploads</TableHeadCell>
           <TableHeadCell>Upload size</TableHeadCell>
           <TableHeadCell>Purchased</TableHeadCell>
+          <TableHeadCell>Free credits</TableHeadCell>
           <TableHeadCell>AI3 value</TableHeadCell>
           <TableHeadCell>Downloads</TableHeadCell>
           <TableHeadCell>Download size</TableHeadCell>
@@ -142,9 +245,13 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
             <TableBodyCell>
               <KeyLabel row={row} />
             </TableBodyCell>
+            <TableBodyCell>
+              <KeyOwner row={row} />
+            </TableBodyCell>
             <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
             <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.freeCreditBytes)}</TableBodyCell>
             <TableBodyCell>{ai3(row.ai3Value)}</TableBodyCell>
             <TableBodyCell>{row.downloadCount.toLocaleString()}</TableBodyCell>
             <TableBodyCell>{bytes(row.downloadBytes)}</TableBodyCell>
@@ -153,13 +260,54 @@ const ApiKeysTable = ({ rows }: { rows: UsageByApiKey[] }) => (
         {rows.length === 0 && (
           <TableBodyRow>
             <TableBodyCell
-              colSpan={7}
+              colSpan={9}
               className='py-6 text-center text-gray-500'
             >
               No activity in this range
             </TableBodyCell>
           </TableBodyRow>
         )}
+      </TableBody>
+    </Table>
+  </div>
+);
+
+const CustomerReferencesTable = ({
+  rows,
+}: {
+  rows: UsageByCustomerReference[];
+}) => (
+  <div className='overflow-x-auto'>
+    <Table className='min-w-full'>
+      <TableHead>
+        <TableHeadRow>
+          <TableHeadCell>Customer reference</TableHeadCell>
+          <TableHeadCell>Uploads</TableHeadCell>
+          <TableHeadCell>Upload size</TableHeadCell>
+          <TableHeadCell>Purchased</TableHeadCell>
+          <TableHeadCell>Free credits</TableHeadCell>
+          <TableHeadCell>AI3 value</TableHeadCell>
+        </TableHeadRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((row) => (
+          <TableBodyRow key={row.customerReference ?? ''}>
+            <TableBodyCell>
+              {row.customerReference === null ? (
+                <span className='text-gray-500'>No reference</span>
+              ) : (
+                <span className='font-mono text-xs'>
+                  {row.customerReference}
+                </span>
+              )}
+            </TableBodyCell>
+            <TableBodyCell>{row.uploadCount.toLocaleString()}</TableBodyCell>
+            <TableBodyCell>{bytes(row.uploadBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.purchasedBytes)}</TableBodyCell>
+            <TableBodyCell>{bytes(row.freeCreditBytes)}</TableBodyCell>
+            <TableBodyCell>{ai3(row.ai3Value)}</TableBodyCell>
+          </TableBodyRow>
+        ))}
       </TableBody>
     </Table>
   </div>
@@ -220,7 +368,7 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
               colSpan={6}
               className='py-6 text-center text-gray-500'
             >
-              No credits granted in this range
+              No credits purchased in this range
             </TableBodyCell>
           </TableBodyRow>
         )}
@@ -229,9 +377,52 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
   </div>
 );
 
+// Who granted the credits and why reach admins only.
+const FreeCreditsTable = ({ report }: { report: UsageReport }) => {
+  const admin = report.freeCredits.some((credit) => 'grantedBy' in credit);
+  return (
+    <div className='overflow-x-auto'>
+      <Table className='min-w-full'>
+        <TableHead>
+          <TableHeadRow>
+            <TableHeadCell>Granted</TableHeadCell>
+            <TableHeadCell>Kind</TableHeadCell>
+            <TableHeadCell>Size</TableHeadCell>
+            <TableHeadCell>Expires</TableHeadCell>
+            {admin && <TableHeadCell>By</TableHeadCell>}
+            {admin && <TableHeadCell>Reason</TableHeadCell>}
+          </TableHeadRow>
+        </TableHead>
+        <TableBody>
+          {report.freeCredits.map((credit) => (
+            <TableBodyRow key={credit.batchId}>
+              <TableBodyCell>{day(credit.grantedAt)}</TableBodyCell>
+              <TableBodyCell>
+                {describeBatchKind({
+                  kind: credit.kind,
+                  grantPeriod: credit.period,
+                })}
+              </TableBodyCell>
+              <TableBodyCell>{bytes(credit.bytes)}</TableBodyCell>
+              <TableBodyCell>{day(credit.expiresAt)}</TableBodyCell>
+              {admin && (
+                <TableBodyCell className='font-mono text-xs'>
+                  {credit.grantedBy ? formatCid(credit.grantedBy) : '—'}
+                </TableBodyCell>
+              )}
+              {admin && <TableBodyCell>{credit.reason ?? '—'}</TableBodyCell>}
+            </TableBodyRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
 /**
  * An account's usage over whole UTC days: uploads and downloads, split by API
- * key, with the credits granted and the purchased-credit balance.
+ * key and by customer reference, with the credits purchased and granted for
+ * free and the credit balance.
  */
 export const UsageReportView = ({ accountId }: { accountId: string }) => {
   const { api } = useNetwork();
@@ -288,30 +479,36 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
   };
 
   const unattributed = report ? BigInt(report.uploads.unattributedBytes) : null;
+  // Free credits are shown only for an account that had any in the range.
+  const hasFreeCredits =
+    !!report &&
+    (BigInt(report.uploads.freeCreditBytes) > BigInt(0) ||
+      report.freeCredits.length > 0 ||
+      Object.values(report.freeCreditBalance ?? {}).some(
+        (value) => BigInt(value) > BigInt(0),
+      ));
+
+  const hasCustomerReferences =
+    !!report &&
+    report.customerReferences.some((row) => row.customerReference !== null);
 
   return (
     <div className='space-y-6'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <UsageDaysPicker days={days} onChange={setDays} />
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-xs text-gray-500'>Export</span>
-          {EXPORTS.map(({ label, table }) => (
-            <Button
-              key={table}
-              variant='outline'
-              size='sm'
-              disabled={!range || exporting !== null}
-              onClick={() => download(table)}
-            >
-              {exporting === table ? (
-                <Loader className='animate-spin' />
-              ) : (
-                <Download />
-              )}
-              {label}
-            </Button>
-          ))}
-        </div>
+        <ExportMenu
+          exports={EXPORTS.filter(
+            ({ table }) =>
+              // Tables the report has nothing for are left out once it loads.
+              !report ||
+              (table !== 'customerReferences' && table !== 'freeCredits') ||
+              (table === 'customerReferences' && hasCustomerReferences) ||
+              (table === 'freeCredits' && hasFreeCredits),
+          )}
+          disabled={!range}
+          exporting={exporting}
+          onExport={download}
+        />
       </div>
 
       {!range ? (
@@ -335,8 +532,20 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             <Stat
               label='Paid with purchased credits'
               value={bytes(report.uploads.purchasedBytes)}
-              hint={`${bytes(report.uploads.freeTierBytes)} free tier`}
+              hint={
+                // Partner accounts have no free tier.
+                BigInt(report.uploads.freeTierBytes) > BigInt(0)
+                  ? `${bytes(report.uploads.freeTierBytes)} free tier`
+                  : undefined
+              }
             />
+            {hasFreeCredits && (
+              <Stat
+                label='Paid with free credits'
+                value={bytes(report.uploads.freeCreditBytes)}
+                hint='Granted at no cost, so no AI3 value'
+              />
+            )}
             <Stat
               label='AI3 value'
               value={ai3(report.uploads.ai3Value)}
@@ -357,16 +566,42 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
           )}
 
           <Section title='Purchased credit balance'>
-            <Balance report={report} />
+            <Balance
+              balance={report.balance}
+              attributionStart={report.attributionStart}
+              free={false}
+            />
           </Section>
+
+          {hasFreeCredits && (
+            <Section title='Free credit balance'>
+              <Balance
+                balance={report.freeCreditBalance}
+                attributionStart={report.attributionStart}
+                free
+              />
+            </Section>
+          )}
 
           <Section title='By API key'>
             <ApiKeysTable rows={report.apiKeys} />
           </Section>
 
-          <Section title='Credits granted'>
+          {hasCustomerReferences && (
+            <Section title='Uploads by customer reference'>
+              <CustomerReferencesTable rows={report.customerReferences} />
+            </Section>
+          )}
+
+          <Section title='Credits purchased'>
             <PurchasesTable report={report} />
           </Section>
+
+          {report.freeCredits.length > 0 && (
+            <Section title='Free credits granted'>
+              <FreeCreditsTable report={report} />
+            </Section>
+          )}
         </>
       )}
     </div>

@@ -14,7 +14,6 @@ import {
   IntentStatus,
   OrganizationRole,
   PurchasedCreditSummary,
-  User,
   UserRole,
   UserWithOrganization,
 } from '@auto-drive/models'
@@ -27,9 +26,14 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnusedCreditsError,
 } from '../../../src/errors/index.js'
 
-const admin = { role: UserRole.Admin, publicId: 'admin-pub' } as User
+const admin = {
+  role: UserRole.Admin,
+  publicId: 'admin-pub',
+  organizationId: 'admin-org',
+} as UserWithOrganization
 
 const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   id: `acc-${organizationId}`,
@@ -40,12 +44,17 @@ const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   isPartner,
   maxPurchasedBytes: null,
   creditExpiryDays: null,
+  monthlyFreeUploadBytes: 0,
 })
 
 const remaining = (uploadBytesRemaining: bigint) =>
   ({
     uploadBytesRemaining,
     uploadBytesOriginal: uploadBytesRemaining,
+    purchasedUploadBytesRemaining: uploadBytesRemaining,
+    purchasedUploadBytesOriginal: uploadBytesRemaining,
+    purchasedNextExpiryDate: null,
+    freeUploadBytesRemaining: 0n,
     downloadBytesRemaining: 0n,
     nextExpiryDate: null,
     activeRowCount: uploadBytesRemaining > 0n ? 1 : 0,
@@ -79,7 +88,12 @@ describe('OrganizationsUseCases', () => {
   })
 
   it('rejects non-admin executors', async () => {
-    const user = { role: UserRole.User, publicId: 'pub1' } as User
+    // Not in partner-org, so not one of its admins either.
+    const user = {
+      role: UserRole.User,
+      publicId: 'pub1',
+      organizationId: 'personal-org',
+    } as UserWithOrganization
 
     const results = await Promise.all([
       OrganizationsUseCases.createPartnerOrganization(user, 'Partner'),
@@ -220,10 +234,54 @@ describe('OrganizationsUseCases', () => {
       )
 
       const error = result._unsafeUnwrapErr()
-      expect(error).toBeInstanceOf(ConflictError)
+      expect(error).toBeInstanceOf(UnusedCreditsError)
       expect(error.message).toContain('1024 bytes of purchased credits')
       expect(addMemberSpy).not.toHaveBeenCalled()
     })
+
+    it('moves a user with purchased credits when the admin allows it', async () => {
+      jest
+        .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+        .mockResolvedValue(remaining(1024n))
+
+      const result = await OrganizationsUseCases.addMember(
+        admin,
+        'partner-org',
+        'pub1',
+        OrganizationRole.Member,
+        { allowUnusedCredits: true },
+      )
+
+      expect(result.isOk()).toBe(true)
+      expect(addMemberSpy).toHaveBeenCalled()
+    })
+
+    it.each([false, true])(
+      'reports unresolved payments before purchased credits (allowUnusedCredits: %s)',
+      async (allowUnusedCredits) => {
+        jest
+          .spyOn(purchasedCreditsRepository, 'getRemainingCredits')
+          .mockResolvedValue(remaining(1024n))
+        jest
+          .spyOn(intentsRepository, 'getByUserAndStatuses')
+          .mockResolvedValue([
+            { id: 'i1', status: IntentStatus.PENDING } as Intent,
+          ])
+
+        const result = await OrganizationsUseCases.addMember(
+          admin,
+          'partner-org',
+          'pub1',
+          OrganizationRole.Member,
+          { allowUnusedCredits },
+        )
+
+        const error = result._unsafeUnwrapErr()
+        expect(error).toBeInstanceOf(ConflictError)
+        expect(error).not.toBeInstanceOf(UnusedCreditsError)
+        expect(addMemberSpy).not.toHaveBeenCalled()
+      },
+    )
 
     it('refuses a user with unresolved payments', async () => {
       const lookup = jest
@@ -282,10 +340,24 @@ describe('OrganizationsUseCases', () => {
   })
 
   describe('removeMember', () => {
+    beforeEach(() => {
+      jest.spyOn(AuthManager, 'getOrganization').mockResolvedValue(
+        ok({
+          id: 'partner-org',
+          name: 'Partner',
+          archivedAt: null,
+          members: ['pub1'],
+          memberships: [{ publicId: 'pub1', role: OrganizationRole.Member }],
+        }),
+      )
+    })
+
     it('refuses a user with unresolved payments', async () => {
       jest
         .spyOn(intentsRepository, 'getByUserAndStatuses')
-        .mockResolvedValue([{ id: 'i1', status: IntentStatus.PENDING } as Intent])
+        .mockResolvedValue([
+          { id: 'i1', status: IntentStatus.PENDING } as Intent,
+        ])
       const remove = jest.spyOn(AuthManager, 'removeOrganizationMember')
 
       const result = await OrganizationsUseCases.removeMember(

@@ -170,7 +170,7 @@ yarn workspace auth lambda:build
 
 #### `POST /users/@me/onboard`: Onboards a new user (marks as onboarded and creates organization)
 
-#### `POST /users/@me/accessToken`: Creates JWT session tokens
+#### `POST /users/@me/accessToken`: Creates JWT session tokens for a signed-in user. Answers 403 for any API key, personal or organization
 
 #### `POST /users/@me/refreshToken`: Refreshes access token using refresh token
 
@@ -196,13 +196,13 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles)
+#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user
 
-The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so Auto Drive admins make them through the backend's `/organizations` endpoints. Each write takes the acting admin's public ID as `actor` and is recorded in `users.organization_membership_changes`.
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so they are made through the backend's `/organizations` endpoints: Auto Drive admins move users directly, and organization admins invite them, the move happening when the user accepts. Each membership write takes the acting admin's public ID as `actor` (for an accepted invitation, whoever sent it) and is recorded in `users.organization_membership_changes`.
 
-#### `POST /organizations`: Creates an organization (`{ name }`)
+#### `POST /organizations`: Creates an organization (`{ name }`) and its service user, the user that owns the organization's API keys
 
-#### `POST /organizations/batch`: Gets organizations by ID with their member count and archive date (`{ ids }`, up to 100)
+#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user) and archive date (`{ ids }`, up to 100)
 
 #### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
 
@@ -211,6 +211,14 @@ The endpoints below accept only the backend's service secret (`API_SECRET`), nev
 #### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`)
 
 #### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one
+
+An organization's API keys belong to its service user, so they keep working whoever leaves the organization. The backend decides who may manage them, and these endpoints take no `actor`.
+
+#### `GET /organizations/:organizationId/apiKeys`: Lists the organization's API keys (without secrets)
+
+#### `POST /organizations/:organizationId/apiKeys`: Creates an API key (`{ name?, expiresAt? }`) and returns it with its secret. An organization created before service users gets its service user here. 404 for an unknown organization, 409 for an archived one
+
+#### `DELETE /organizations/:organizationId/apiKeys/:apiKeyId`: Revokes one of the organization's API keys. 404 for any other key
 
 ## Security Considerations
 

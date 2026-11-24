@@ -13,7 +13,9 @@ import {
   AdminAccountDetails,
   Intent,
   AccountTermsChange,
+  AdminFreeCredit,
 } from '@auto-drive/models'
+import pg from 'pg'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { interactionsRepository } from '../../infrastructure/repositories/objects/interactions.js'
 import { purchasedCreditsRepository } from '../../infrastructure/repositories/users/purchasedCredits.js'
@@ -57,6 +59,7 @@ const updateAccount = async (
   terms: {
     maxPurchasedBytes?: number | null
     creditExpiryDays?: number | null
+    monthlyFreeUploadBytes?: number
     reason?: string
   } = {},
 ): Promise<
@@ -92,6 +95,15 @@ const updateAccount = async (
     )
   }
 
+  // Other accounts have the upload limit as their free allowance.
+  if (!account.isPartner && (terms.monthlyFreeUploadBytes ?? 0) > 0) {
+    return err(
+      new BadRequestError(
+        'Only a partner account can have monthly free upload credits',
+      ),
+    )
+  }
+
   logger.debug('Updating account', {
     accountId,
     model,
@@ -113,6 +125,8 @@ const updateAccount = async (
         terms.creditExpiryDays === undefined
           ? account.creditExpiryDays
           : terms.creditExpiryDays,
+      monthlyFreeUploadBytes:
+        terms.monthlyFreeUploadBytes ?? account.monthlyFreeUploadBytes,
     },
     executor.publicId,
     terms.reason,
@@ -170,6 +184,23 @@ const initAccount = async (
   )
 }
 
+/**
+ * Issues a partner's monthly free credits for the current UTC month if they
+ * have not been issued yet. Run wherever upload credits are read or used, so
+ * there is no scheduler and no month without a batch while one is needed. A
+ * change to the monthly amount applies at once (see updateAccount in the
+ * accounts repository), as a change to a regular account's upload limit does.
+ */
+const ensureMonthlyFreeCredits = async (
+  account: Pick<Account, 'id' | 'isPartner' | 'monthlyFreeUploadBytes'>,
+  client?: pg.PoolClient,
+): Promise<void> => {
+  // Skips the query for regular accounts. The amount issued is read from the
+  // account again when issuing.
+  if (!account.isPartner || account.monthlyFreeUploadBytes <= 0) return
+  await purchasedCreditsRepository.ensureMonthlyFreeCredits(account.id, client)
+}
+
 const getPendingCreditsByAccountAndType = async (
   account: Account,
   type: InteractionType,
@@ -217,6 +248,7 @@ const getPendingCreditsByAccountAndType = async (
   // OFF, those already-purchased credits remain visible and usable — this is
   // intentional: users should not lose credits they already paid for.
   if (type === InteractionType.Upload) {
+    await ensureMonthlyFreeCredits(account)
     const purchased = await purchasedCreditsRepository.getRemainingCredits(
       account.id,
     )
@@ -228,6 +260,15 @@ const getPendingCreditsByAccountAndType = async (
 
   return freeRemaining
 }
+
+// Only partners hold free credits, so other accounts skip the query.
+const getFreeUploadCredits = async (account: Account): Promise<number> =>
+  account.isPartner
+    ? Number(
+        (await purchasedCreditsRepository.getRemainingCredits(account.id))
+          .freeUploadBytesRemaining,
+      )
+    : 0
 
 const getAccountInfo = async (
   user: UserWithOrganization,
@@ -247,6 +288,7 @@ const getAccountInfo = async (
     ...account,
     pendingUploadCredits,
     pendingDownloadCredits,
+    freeUploadCredits: await getFreeUploadCredits(account),
   }
 }
 
@@ -313,6 +355,7 @@ const registerInteraction = async (
   type: InteractionType,
   size: bigint,
   cid?: string,
+  customerReference: string | null = null,
 ): Promise<void> => {
   const account = await getOrCreateAccount(user)
   const creditType = type === InteractionType.Upload ? 'upload' : 'download'
@@ -324,7 +367,7 @@ const registerInteraction = async (
     size,
   )
 
-  // One transaction for the whole interaction: drawing down purchased batches,
+  // One transaction for the whole interaction: drawing down credit batches,
   // the free-tier guard, and writing the interactions with their per-batch
   // consumption rows. Any failure rolls all of it back, so the ledger never
   // disagrees with the balances and nothing needs a compensating refund.
@@ -333,11 +376,18 @@ const registerInteraction = async (
   try {
     await client.query('BEGIN')
 
-    // consumeUpTo locks the account's purchased rows until commit, which
-    // serialises concurrent uploads against the purchased pool.
+    // consumeUpTo locks the account's credit batches (purchased, and a
+    // partner's free credits) until commit, which serialises concurrent
+    // uploads against them.
     //
     // Downloads use only the free-tier guard below. Purchased download bytes
     // are not allocated on purchase or consumed here.
+    //
+    // This month's free credits are issued on the same client first, so the
+    // month's first upload can draw on them.
+    if (type === InteractionType.Upload) {
+      await ensureMonthlyFreeCredits(account, client)
+    }
     const consumed =
       type === InteractionType.Upload
         ? await purchasedCreditsRepository.consumeUpTo(
@@ -347,12 +397,12 @@ const registerInteraction = async (
             size,
           )
         : []
-    const fromPurchased = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
-    const fromFree = size - fromPurchased
+    const fromCredits = consumed.reduce((acc, c) => acc + c.bytes, BigInt(0))
+    const fromFreeTier = size - fromCredits
 
-    // Guard: a request that only received a partial purchased allocation must
+    // Guard: a request that only received a partial credit allocation must
     // not silently overflow into free-tier credits it does not own.
-    if (fromFree > BigInt(0)) {
+    if (fromFreeTier > BigInt(0)) {
       const now = new Date()
       const start =
         account.model === AccountModel.Monthly
@@ -380,11 +430,11 @@ const registerInteraction = async (
       const freeAvailable =
         freeLimit > spentFree ? freeLimit - spentFree : BigInt(0)
 
-      if (fromFree > freeAvailable) {
+      if (fromFreeTier > freeAvailable) {
         logger.warn(
-          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFree=%d, freeAvailable=%d)',
+          'registerInteraction: insufficient free-tier credits — rejecting (accountId=%s, fromFreeTier=%d, freeAvailable=%d)',
           account.id,
-          fromFree,
+          fromFreeTier,
           freeAvailable,
         )
         throw new PaymentRequiredError(
@@ -393,38 +443,47 @@ const registerInteraction = async (
       }
     }
 
-    if (fromPurchased > BigInt(0)) {
+    // One interaction per source, so the ledger itself tells uploads paid with
+    // a partner's free credits from uploads paid with purchased credits.
+    for (const [source, batches] of [
+      [InteractionSource.FreeCredits, consumed.filter((c) => c.free)],
+      [InteractionSource.Purchased, consumed.filter((c) => !c.free)],
+    ] as const) {
+      const bytes = batches.reduce((acc, c) => acc + c.bytes, BigInt(0))
+      if (bytes === BigInt(0)) continue
       const interactionId = await InteractionsUseCases.createInteraction(
         account.id,
         type,
-        fromPurchased,
-        InteractionSource.Purchased,
+        bytes,
+        source,
         cid,
         user.apiKeyId,
+        customerReference,
         client,
       )
       await interactionsRepository.createCreditConsumption(
         interactionId,
-        consumed,
+        batches,
         client,
       )
     }
 
-    if (fromFree > BigInt(0)) {
+    if (fromFreeTier > BigInt(0)) {
       logger.debug(
-        'Covering remainder from free-tier (accountId=%s, fromPurchased=%d, fromFree=%d)',
+        'Covering remainder from free-tier (accountId=%s, fromCredits=%d, fromFreeTier=%d)',
         account.id,
-        fromPurchased,
-        fromFree,
+        fromCredits,
+        fromFreeTier,
       )
 
       await InteractionsUseCases.createInteraction(
         account.id,
         type,
-        fromFree,
+        fromFreeTier,
         InteractionSource.FreeTier,
         cid,
         user.apiKeyId,
+        customerReference,
         client,
       )
     }
@@ -500,6 +559,72 @@ const addCreditsToAccount = async (
   )
 
   return ok()
+}
+
+/**
+ * Admin: one-time free upload credits for a partner account. They are not
+ * paid for, so the holding cap does not limit them and they are never
+ * refunded. They expire after `expiresInDays`, by default the account's
+ * credit expiry.
+ */
+const grantFreeCredits = async (
+  executor: User,
+  accountId: string,
+  grant: { uploadBytes: number; expiresInDays?: number; reason: string },
+): Promise<
+  Result<
+    AdminFreeCredit,
+    ForbiddenError | ObjectNotFoundError | BadRequestError
+  >
+> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  const account = await accountsRepository.getById(accountId)
+  if (!account) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+  if (!account.isPartner) {
+    return err(
+      new BadRequestError('Free credits can only be granted to a partner'),
+    )
+  }
+
+  const credit = await purchasedCreditsRepository.createFreeCredit({
+    accountId,
+    uploadBytes: BigInt(grant.uploadBytes),
+    expiresInDays: grant.expiresInDays ?? getCreditTerms(account).expiryDays,
+    grantedBy: executor.publicId,
+    reason: grant.reason,
+  })
+
+  logger.info('Free credits granted', {
+    accountId,
+    batchId: credit.id,
+    uploadBytes: grant.uploadBytes,
+    adminPublicId: executor.publicId,
+  })
+
+  return ok(credit)
+}
+
+/** Admin: an account's free credit batches, newest first. */
+const adminGetFreeCredits = async (
+  executor: User,
+  accountId: string,
+): Promise<Result<AdminFreeCredit[], ForbiddenError | ObjectNotFoundError>> => {
+  if (executor.role !== UserRole.Admin) {
+    return err(new ForbiddenError('User does not have admin privileges'))
+  }
+
+  if (!(await accountsRepository.getById(accountId))) {
+    return err(new ObjectNotFoundError('Account not found'))
+  }
+
+  return ok(
+    await purchasedCreditsRepository.getFreeCreditsByAccountId(accountId),
+  )
 }
 
 const getTopAccounts = async (
@@ -622,6 +747,8 @@ const getAdminAccountDetails = async (
     ...account,
     pendingUploadCredits,
     pendingDownloadCredits,
+    // After the pending credits, which issue this month's free credits.
+    freeUploadCredits: await getFreeUploadCredits(account),
     // Auth returns only this organization's members; `organizationId` is
     // null for unonboarded users, who are skipped.
     members: users.filter((u): u is UserWithOrganization => !!u.organizationId),
@@ -682,6 +809,9 @@ export const AccountsUseCases = {
   adminGetAccountByOrganization,
   adminGetAccountIdsByUsers,
   adminGetTermsChanges,
+  adminGetFreeCredits,
+  grantFreeCredits,
+  ensureMonthlyFreeCredits,
   getCreditTerms,
   updateAccount,
   getOrCreateAccount,

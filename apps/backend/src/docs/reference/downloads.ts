@@ -125,26 +125,32 @@ export const downloads = {
         },
       },
     },
-    '/downloads/async/{downloadId}/status': {
+    '/downloads/{cid}/status': {
       get: {
-        summary: 'Downloads - Get async download status',
+        summary: 'Downloads - Check whether an object is cached',
+        description:
+          'Reports whether the object is in the download gateway cache, in which case it can be served without retrieving it from the DSN. This endpoint does not require authentication.',
         tags: ['Auto Drive Download Gateway'],
         servers: downloadServers,
+        security: [],
         parameters: [
           {
-            name: 'downloadId',
+            name: 'cid',
             in: 'path',
             required: true,
+            schema: {
+              type: 'string',
+            },
           },
         ],
         responses: {
           '200': {
-            description: 'Successfully retrieved async download status',
+            description: 'Cache status of the object',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
-                  $ref: '#/components/schemas/AsyncDownloadStatus',
+                  $ref: '#/components/schemas/DownloadStatus',
                 },
               },
             },
@@ -201,7 +207,7 @@ export const downloads = {
           updatedAt: { type: 'string', format: 'date-time' },
         },
       },
-      AsyncDownloadStatus: {
+      DownloadStatus: {
         type: 'object',
         properties: {
           status: {

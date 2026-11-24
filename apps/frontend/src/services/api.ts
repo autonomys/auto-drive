@@ -6,9 +6,17 @@ import {
   AccountModel,
   AccountTermsChange,
   AdminAccountDetails,
+  ApiKey,
+  CreateApiKeyInput,
+  ObjectSummary,
+  OrganizationApiKeys,
+  OrganizationInvitation,
   OrganizationMembershipChange,
+  OrganizationOverview,
   OrganizationRole,
+  PaginatedResult,
   PartnerOrganization,
+  ReceivedOrganizationInvitation,
   Banner,
   BannerCriticality,
   BannerInteractionType,
@@ -18,6 +26,7 @@ import {
   DownloadStatus,
   Intent,
   PaymentMethod,
+  PurchasedCreditKind,
   StoragePrice,
   TouChangeType,
   TouStatus,
@@ -30,9 +39,14 @@ import {
 } from '@auto-drive/models';
 
 // Wire-format of GET /credits/summary (bigint fields serialised as strings)
+// Every field but freeUploadBytesRemaining is about purchased credits only;
+// free credits are reported apart and never summed with them.
 export type CreditSummaryResponse = {
+  /** Purchased upload bytes left. */
   uploadBytesRemaining: string;
-  /** Sum of upload_bytes_original across all active (non-expired) rows. */
+  /** Free credit upload bytes left (partners only). */
+  freeUploadBytesRemaining: string;
+  /** Sum of upload_bytes_original across active purchased rows. */
   totalPurchasedBytesOriginal: string;
   downloadBytesRemaining: string;
   nextExpiryDate: string | null;
@@ -48,7 +62,13 @@ export type CreditSummaryResponse = {
 export type ExpiringCreditBatch = {
   id: string;
   accountId: string;
-  intentId: string;
+  /** Null for free credits. */
+  intentId: string | null;
+  kind: PurchasedCreditKind;
+  /** Start of the UTC month of monthly free credits, else null. */
+  grantPeriod: string | null;
+  /** Monthly free credits ended by a change to the monthly amount. */
+  supersededAt: string | null;
   uploadBytesOriginal: string;
   uploadBytesRemaining: string;
   downloadBytesOriginal: string;
@@ -58,6 +78,14 @@ export type ExpiringCreditBatch = {
   expired: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+// Wire-format of rows from GET /accounts/admin/:id/free-credits (admin).
+export type AdminFreeCreditBatch = ExpiringCreditBatch & {
+  kind: 'free_one_time' | 'free_monthly';
+  /** Admin publicId, for one-time free credits. */
+  grantedBy: string | null;
+  grantReason: string | null;
 };
 
 // Wire-format of rows from GET /credits/batches/all (admin endpoint).
@@ -530,15 +558,20 @@ export const createApiService = ({
       method: 'POST',
       body: { name },
     }),
-  /** Admin: moves a user into a partner organization. */
+  /**
+   * Admin: moves a user into a partner organization. Without
+   * `allowUnusedCredits`, a user whose account still holds purchased credits
+   * is refused with code UNUSED_PURCHASED_CREDITS.
+   */
   addOrganizationMember: (
     organizationId: string,
     publicId: string,
     role: OrganizationRole,
+    allowUnusedCredits = false,
   ): Promise<void> =>
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/members`,
-      { method: 'POST', body: { publicId, role } },
+      { method: 'POST', body: { publicId, role, allowUnusedCredits } },
     ),
   changeOrganizationMemberRole: (
     organizationId: string,
@@ -564,10 +597,110 @@ export const createApiService = ({
     adminRequest(
       `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/membership-changes`,
     ),
+  /** A partner organization as its members see it. */
+  getOrganizationOverview: (
+    organizationId: string,
+  ): Promise<OrganizationOverview> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/overview`,
+    ),
+  /** Files uploaded with the organization's API keys, newest first. */
+  getOrganizationFiles: (
+    organizationId: string,
+    limit: number,
+    offset: number,
+  ): Promise<PaginatedResult<ObjectSummary>> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/files?${new URLSearchParams({ limit: String(limit), offset: String(offset) })}`,
+    ),
+  /** Organization admins: pending invitations, newest first. */
+  getOrganizationInvitations: (
+    organizationId: string,
+  ): Promise<OrganizationInvitation[]> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations`,
+    ),
+  /** Organization admins: invites a user, who joins once they accept. */
+  inviteOrganizationMember: (
+    organizationId: string,
+    publicId: string,
+    role: OrganizationRole,
+  ): Promise<OrganizationInvitation> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations`,
+      { method: 'POST', body: { publicId, role } },
+    ),
+  revokeOrganizationInvitation: (
+    organizationId: string,
+    invitationId: string,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/invitations/${encodeURIComponent(invitationId)}`,
+      { method: 'DELETE' },
+    ),
+  /** The signed-in user's invitations to join organizations. */
+  getReceivedInvitations: (): Promise<ReceivedOrganizationInvitation[]> =>
+    adminRequest(`${apiBaseUrl}/organizations/invitations/received`),
+  /**
+   * Joins the organization. Without `allowUnusedCredits`, refused with code
+   * UNUSED_PURCHASED_CREDITS if the user's purchased credits would be left
+   * behind.
+   */
+  acceptInvitation: (
+    invitationId: string,
+    allowUnusedCredits = false,
+  ): Promise<{ organizationId: string }> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/invitations/${encodeURIComponent(invitationId)}/accept`,
+      { method: 'POST', body: { allowUnusedCredits } },
+    ),
+  declineInvitation: (invitationId: string): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/invitations/${encodeURIComponent(invitationId)}/decline`,
+      { method: 'POST' },
+    ),
+  /** A partner organization's API keys, for its members and admins. */
+  getOrganizationApiKeys: (
+    organizationId: string,
+  ): Promise<OrganizationApiKeys> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys`,
+    ),
+  /** Organization admins: the new key, with its secret shown only now. */
+  createOrganizationApiKey: (
+    organizationId: string,
+    input: CreateApiKeyInput,
+  ): Promise<ApiKey> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys`,
+      { method: 'POST', body: input },
+    ),
+  revokeOrganizationApiKey: (
+    organizationId: string,
+    apiKeyId: string,
+  ): Promise<void> =>
+    adminRequest(
+      `${apiBaseUrl}/organizations/${encodeURIComponent(organizationId)}/api-keys/${encodeURIComponent(apiKeyId)}`,
+      { method: 'DELETE' },
+    ),
   /** Admin: every change to an account's terms, newest first. */
   getAccountTermsChanges: (accountId: string): Promise<AccountTermsChange[]> =>
     adminRequest(
       `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/terms-changes`,
+    ),
+  /** Admin: an account's free credit batches, newest first. */
+  getAccountFreeCredits: (accountId: string): Promise<AdminFreeCreditBatch[]> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/free-credits`,
+    ),
+  /** Admin: grants a partner account one-time free upload credits. */
+  grantFreeCredits: (
+    accountId: string,
+    grant: { uploadBytes: number; expiresInDays: number; reason: string },
+  ): Promise<AdminFreeCreditBatch> =>
+    adminRequest(
+      `${apiBaseUrl}/accounts/admin/${encodeURIComponent(accountId)}/free-credits`,
+      { method: 'POST', body: grant },
     ),
   /** An account's usage over [from, to), for its members and admins. */
   getUsageReport: (
@@ -766,6 +899,7 @@ export const createApiService = ({
     terms: {
       maxPurchasedBytes?: number | null;
       creditExpiryDays?: number | null;
+      monthlyFreeUploadBytes?: number;
       reason?: string;
     } = {},
   ): Promise<void> => {

@@ -8,11 +8,11 @@ import {
   Building2,
   Upload,
   Download,
-  HardDrive,
   Calendar,
   Clock,
   CreditCard,
   ChartColumn,
+  KeyRound,
 } from 'lucide-react';
 import { gql, useApolloClient } from '@apollo/client';
 import { Table } from '@/components/molecules/Table';
@@ -50,7 +50,9 @@ import { useUserStore } from 'globalStates/user';
 import { useRouter } from 'next/navigation';
 import { PartnerMembers } from './PartnerMembers';
 import { PartnerTerms } from './PartnerTerms';
+import { PartnerFreeCredits } from './PartnerFreeCredits';
 import { UsageReportView } from '../UsageReport';
+import { OrganizationApiKeys } from '@/components/organisms/OrganizationApiKeys';
 
 // GraphQL query for account interactions. `$type` is `{}` for all types.
 const GET_ACCOUNT_INTERACTIONS = gql`
@@ -127,6 +129,19 @@ type Interaction = {
 type Props = {
   accountId: string;
 };
+
+const InfoCard = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
+  <div className='rounded-lg border border-gray-200 p-4'>
+    <p className='text-xs text-gray-500'>{label}</p>
+    <div className='mt-1 font-medium'>{children}</div>
+  </div>
+);
 
 export const OrganizationDetails = ({ accountId }: Props) => {
   const { network, api } = useNetwork();
@@ -263,20 +278,37 @@ export const OrganizationDetails = ({ accountId }: Props) => {
 
   return (
     <div className='space-y-6'>
-      {/* Back Button */}
+      {/* Partners are reached from their list, other accounts from the
+          dashboard's user list. */}
       <Link
-        href={ROUTES.admin(network.id)}
+        href={
+          account?.isPartner
+            ? ROUTES.adminOrganizations(network.id)
+            : ROUTES.admin(network.id)
+        }
         className='inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
       >
         <ArrowLeft className='h-4 w-4' />
-        Back to Admin Dashboard
+        {account?.isPartner
+          ? 'Back to Partner Organizations'
+          : 'Back to Admin Dashboard'}
       </Link>
 
       {/* Account Info Card */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>
-        <h1 className='mb-4 flex items-center gap-2 text-xl font-semibold'>
+        <h1 className='mb-4 flex flex-wrap items-center gap-2 text-xl font-semibold'>
           <Building2 className='h-5 w-5' />
-          Account Details
+          {account?.organization?.name ?? 'Account'}
+          {account?.isPartner && (
+            <span className='rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800'>
+              Partner
+            </span>
+          )}
+          {account?.organization?.archivedAt && (
+            <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800'>
+              Archived
+            </span>
+          )}
         </h1>
 
         {isLoading ? (
@@ -294,69 +326,63 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           </p>
         ) : (
           <div className='space-y-4'>
-            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Organization</p>
-                <p className='mt-1 flex items-center gap-2 font-medium'>
-                  {account.organization?.name ?? '—'}
-                  {account.isPartner && (
-                    <span className='rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800'>
-                      Partner
-                    </span>
-                  )}
-                  {account.organization?.archivedAt && (
-                    <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800'>
-                      Archived
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Organization ID</p>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
+              <InfoCard label='Organization ID'>
                 <CopiableText
                   text={account.organizationId}
-                  className='mt-1 break-all font-mono text-sm'
+                  className='break-all font-mono text-sm'
                 />
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Account ID</p>
+              </InfoCard>
+              <InfoCard label='Account ID'>
                 <CopiableText
                   text={account.id}
-                  className='mt-1 break-all font-mono text-sm'
+                  className='break-all font-mono text-sm'
                 />
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Model</p>
-                <p className='mt-1 font-medium'>
-                  {account.model === AccountModel.OneOff
-                    ? 'One-off'
-                    : 'Monthly'}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Upload Credits</p>
-                <p className='mt-1 font-medium'>
+              </InfoCard>
+              {/* A partner has no free storage: it uploads with credits. */}
+              {!account.isPartner && (
+                <InfoCard
+                  label={
+                    account.model === AccountModel.OneOff
+                      ? 'Free storage (one-off)'
+                      : 'Free storage (monthly)'
+                  }
+                >
                   {formatBytes(Number(account.uploadLimit))}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Pending Upload</p>
-                <p className='mt-1 font-medium'>
-                  {formatBytes(Number(account.pendingUploadCredits))}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Download Credits</p>
-                <p className='mt-1 font-medium'>
-                  {formatBytes(Number(account.downloadLimit))}
-                </p>
-              </div>
-              <div className='rounded-lg border border-gray-200 p-4'>
-                <p className='text-xs text-gray-500'>Pending Download</p>
-                <p className='mt-1 font-medium'>
-                  {formatBytes(Number(account.pendingDownloadCredits))}
-                </p>
-              </div>
+                </InfoCard>
+              )}
+              <InfoCard label='Upload credits left'>
+                {formatBytes(Number(account.pendingUploadCredits))}
+                {account.freeUploadCredits > 0 && (
+                  <span className='block text-xs font-normal text-gray-500'>
+                    incl. {formatBytes(account.freeUploadCredits)} free credits
+                  </span>
+                )}
+              </InfoCard>
+              <InfoCard
+                label={
+                  account.model === AccountModel.OneOff
+                    ? 'Download allowance (one-off)'
+                    : 'Download allowance (monthly)'
+                }
+              >
+                {formatBytes(Number(account.downloadLimit))}
+              </InfoCard>
+              <InfoCard label='Downloads left'>
+                {formatBytes(Number(account.pendingDownloadCredits))}
+              </InfoCard>
+              <InfoCard label='All-time uploads'>
+                {formatBytes(uploadStats.size)}
+                <span className='block text-xs font-normal text-gray-500'>
+                  {uploadStats.count.toLocaleString()} uploads
+                </span>
+              </InfoCard>
+              <InfoCard label='All-time downloads'>
+                {formatBytes(downloadStats.size)}
+                <span className='block text-xs font-normal text-gray-500'>
+                  {downloadStats.count.toLocaleString()} downloads
+                </span>
+              </InfoCard>
             </div>
 
             {/* Partner members are listed, with their roles, below. */}
@@ -405,6 +431,24 @@ export const OrganizationDetails = ({ accountId }: Props) => {
         )}
       </div>
 
+      {account?.isPartner && account.organization && (
+        <PartnerMembers
+          account={account}
+          organization={account.organization}
+          onChanged={() => setAccountVersion((v) => v + 1)}
+        />
+      )}
+
+      {account?.isPartner && account.organization && (
+        <div className='rounded-lg border border-gray-200 bg-background p-6'>
+          <h2 className='mb-4 flex items-center gap-2 text-lg font-semibold'>
+            <KeyRound className='h-5 w-5' />
+            Organization API Keys
+          </h2>
+          <OrganizationApiKeys organizationId={account.organizationId} />
+        </div>
+      )}
+
       {account?.isPartner && (
         <PartnerTerms
           account={account}
@@ -412,10 +456,9 @@ export const OrganizationDetails = ({ accountId }: Props) => {
         />
       )}
 
-      {account?.isPartner && account.organization && (
-        <PartnerMembers
+      {account?.isPartner && (
+        <PartnerFreeCredits
           account={account}
-          organization={account.organization}
           onChanged={() => setAccountVersion((v) => v + 1)}
         />
       )}
@@ -545,68 +588,6 @@ export const OrganizationDetails = ({ accountId }: Props) => {
           <UsageReportView accountId={account.id} />
         </div>
       )}
-
-      {/* Statistics Summary */}
-      <div className='rounded-lg border border-gray-200 bg-background p-6'>
-        <h2 className='mb-4 flex items-center gap-2 text-lg font-semibold'>
-          <HardDrive className='h-5 w-5' />
-          Usage Statistics
-        </h2>
-        <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
-          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4 dark:from-blue-900/20 dark:to-blue-800/20'>
-            <div className='flex items-center gap-3'>
-              <div className='rounded-lg bg-blue-500 p-2'>
-                <Upload className='h-5 w-5 text-white' />
-              </div>
-              <div>
-                <p className='text-xs text-gray-500'>Total Uploads</p>
-                <p className='text-xl font-bold text-blue-600 dark:text-blue-400'>
-                  {uploadStats.count.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 dark:from-emerald-900/20 dark:to-emerald-800/20'>
-            <div className='flex items-center gap-3'>
-              <div className='rounded-lg bg-emerald-500 p-2'>
-                <HardDrive className='h-5 w-5 text-white' />
-              </div>
-              <div>
-                <p className='text-xs text-gray-500'>Upload Size</p>
-                <p className='text-xl font-bold text-emerald-600 dark:text-emerald-400'>
-                  {formatBytes(uploadStats.size)}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-purple-50 to-purple-100 p-4 dark:from-purple-900/20 dark:to-purple-800/20'>
-            <div className='flex items-center gap-3'>
-              <div className='rounded-lg bg-purple-500 p-2'>
-                <Download className='h-5 w-5 text-white' />
-              </div>
-              <div>
-                <p className='text-xs text-gray-500'>Total Downloads</p>
-                <p className='text-xl font-bold text-purple-600 dark:text-purple-400'>
-                  {downloadStats.count.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-orange-50 to-orange-100 p-4 dark:from-orange-900/20 dark:to-orange-800/20'>
-            <div className='flex items-center gap-3'>
-              <div className='rounded-lg bg-orange-500 p-2'>
-                <HardDrive className='h-5 w-5 text-white' />
-              </div>
-              <div>
-                <p className='text-xs text-gray-500'>Download Size</p>
-                <p className='text-xl font-bold text-orange-600 dark:text-orange-400'>
-                  {formatBytes(downloadStats.size)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Activity Log */}
       <div className='rounded-lg border border-gray-200 bg-background p-6'>

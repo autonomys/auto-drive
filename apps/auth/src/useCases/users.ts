@@ -9,12 +9,14 @@ import {
   UserOrPublicId,
   UserRole,
   deriveUserPublicId,
+  SERVICE_USER_PROVIDER,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
 import { organizationMembersRepository } from '../repositories/organizationMembers.js'
 import { OrganizationsUseCases } from './organizations.js'
 import { createLogger } from '../drivers/logger.js'
 import { withTransaction } from '../drivers/pg.js'
+import { OrganizationConflictError } from '../errors/organizations.js'
 
 const logger = createLogger('useCases:users')
 
@@ -224,6 +226,10 @@ const updateRole = async (
   }
 
   const user = await resolveUser(userOrPublicId)
+  // An organisation's API keys must never act as an Auto Drive admin.
+  if (user.oauthProvider === SERVICE_USER_PROVIDER) {
+    throw new OrganizationConflictError('A service user cannot be given a role')
+  }
 
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)
 }

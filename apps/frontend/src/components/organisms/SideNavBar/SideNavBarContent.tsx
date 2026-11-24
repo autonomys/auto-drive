@@ -17,13 +17,13 @@ type SidebarItem = {
   icon: React.ElementType;
   label: string;
   requiresSession?: boolean;
-  // Shown only to members of a partner organisation.
-  onlyPartner?: boolean;
 };
 
 export type SidebarSection = {
   label: string;
   onlyAdmin?: boolean;
+  // Shown only to members of a partner organization.
+  onlyPartner?: boolean;
   items: SidebarItem[];
 };
 

@@ -1,4 +1,5 @@
 import pg from 'pg'
+import { SERVICE_USER_PROVIDER } from '@auto-drive/models'
 import { getDatabase } from '../drivers/pg.js'
 import { createLogger } from '../drivers/logger.js'
 
@@ -54,7 +55,8 @@ const updateOrganizationName = async (
 }
 
 // Archives an organisation once its last member has left it, keeping it and
-// its account for history and for a later restore.
+// its account for history and for a later restore. A partner's service user
+// counts: its API keys still upload to the organisation's account.
 const archiveIfEmpty = async (id: string, db: pg.Client): Promise<void> => {
   await db.query(
     `UPDATE users.organizations SET archived_at = NOW()
@@ -80,6 +82,7 @@ const unarchive = async (
   return result.rows[0] ?? null
 }
 
+// Member counts leave out the service user, as getOrganizationMemberships does.
 const getOrganizationSummaries = async (
   ids: string[],
 ): Promise<DBOrganizationSummary[]> => {
@@ -90,10 +93,11 @@ const getOrganizationSummaries = async (
     `SELECT o.id, o.name, o.archived_at,
        COUNT(m.organization_id) AS member_count
      FROM users.organizations o
-     LEFT JOIN users.users_organizations m ON m.organization_id = o.id
+     LEFT JOIN users.users_organizations m
+       ON m.organization_id = o.id AND m.oauth_provider <> $2
      WHERE o.id = ANY($1::text[])
      GROUP BY o.id, o.name, o.archived_at`,
-    [ids],
+    [ids, SERVICE_USER_PROVIDER],
   )
   return result.rows
 }

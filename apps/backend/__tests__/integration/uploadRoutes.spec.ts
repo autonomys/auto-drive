@@ -1,11 +1,16 @@
 import { createServer } from 'net'
+import { randomBytes } from 'crypto'
 import { jest } from '@jest/globals'
 import { UploadStatus } from '@auto-drive/models'
 import { config } from '../../src/config.js'
 import { AccountsUseCases } from '../../src/core/users/accounts.js'
 import { UploadsUseCases } from '../../src/core/uploads/uploads.js'
 import { uploadsRepository } from '../../src/infrastructure/repositories/uploads/uploads.js'
-import { AuthManager } from '../../src/infrastructure/services/auth/index.js'
+import {
+  AuthLookupError,
+  AuthManager,
+} from '../../src/infrastructure/services/auth/index.js'
+import { getDatabase } from '../../src/infrastructure/drivers/pg.js'
 import { dbMigration } from '../utils/dbMigrate.js'
 import { createMockUser, mockRabbitPublish } from '../utils/mocks.js'
 
@@ -15,6 +20,9 @@ describe('Upload routes answer client errors with their own status', () => {
   const user = createMockUser()
   const userWithoutCredits = createMockUser()
   const portDefault = config.express.port
+  const chunkLimitDefault = config.express.uploadChunkMaxBytes
+  // Read when the API is imported below; small so the tests can exceed it.
+  const CHUNK_LIMIT = 64 * 1024
   let base: string
 
   // The API binds config.express.port at import, and another suite in the same
@@ -38,10 +46,18 @@ describe('Upload routes answer client errors with their own status', () => {
     'X-Auth-Provider': user.oauthProvider,
   })
 
-  const postJson = (path: string, body: unknown) =>
+  const postJson = (
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+  ) =>
     fetch(`${base}${path}`, {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        ...headers,
+      },
       body: JSON.stringify(body),
     })
 
@@ -76,6 +92,7 @@ describe('Upload routes answer client errors with their own status', () => {
 
     const port = await freePort()
     config.express.port = port
+    config.express.uploadChunkMaxBytes = CHUNK_LIMIT
     base = `http://localhost:${port}`
 
     await import('../../src/app/apis/frontend.js')
@@ -99,6 +116,7 @@ describe('Upload routes answer client errors with their own status', () => {
 
   afterAll(async () => {
     config.express.port = portDefault
+    config.express.uploadChunkMaxBytes = chunkLimitDefault
     await dbMigration.down()
   })
 
@@ -189,6 +207,64 @@ describe('Upload routes answer client errors with their own status', () => {
     })
   })
 
+  describe('POST /uploads/file/:uploadId/chunk limits', () => {
+    it('answers 413 for a part over the size limit and stores nothing', async () => {
+      const upload = await createUpload()
+      const uploadChunk = jest.spyOn(UploadsUseCases, 'uploadChunk')
+
+      const response = await postChunk(
+        upload.id,
+        0,
+        Buffer.alloc(CHUNK_LIMIT + 1),
+      )
+      expect(response.status).toBe(413)
+      expect(await response.json()).toEqual({
+        error: `Chunk exceeds the ${CHUNK_LIMIT} byte limit`,
+      })
+      expect(uploadChunk).not.toHaveBeenCalled()
+    })
+
+    it('accepts a part of exactly the size limit', async () => {
+      const upload = await createUpload()
+      const response = await postChunk(upload.id, 0, Buffer.alloc(CHUNK_LIMIT))
+      expect(response.status).toBe(200)
+    })
+
+    // An oversized part is only answered 413 once its body has been read, so
+    // a 401 here shows the credentials were checked first.
+    it('answers 401 before reading the body', async () => {
+      jest
+        .spyOn(AuthManager, 'getUserFromAccessToken')
+        .mockRejectedValueOnce(new AuthLookupError('rejected', true, 401))
+      const upload = await createUpload()
+
+      const response = await postChunk(
+        upload.id,
+        0,
+        Buffer.alloc(CHUNK_LIMIT + 1),
+      )
+      expect(response.status).toBe(401)
+    })
+
+    it.each([
+      ['without a boundary', 'multipart/form-data', 'x'],
+      [
+        'cut off mid-part',
+        'multipart/form-data; boundary=b',
+        '--b\r\nContent-Disposition: form-data; name="file"; filename="f"\r\n\r\nabc',
+      ],
+    ])('answers 400 for a form %s', async (_case, contentType, body) => {
+      const upload = await createUpload()
+      const response = await fetch(`${base}/uploads/file/${upload.id}/chunk`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': contentType },
+        body,
+      })
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toMatch(/^Invalid chunk form: /)
+    })
+  })
+
   describe('POST /uploads/:uploadId/complete', () => {
     it('answers 400 when a part is missing', async () => {
       const upload = await createUpload()
@@ -246,6 +322,148 @@ describe('Upload routes answer client errors with their own status', () => {
         status: 402,
         body: { error: 'Not enough upload credits' },
       })
+    })
+  })
+
+  // #892: the caller's reference for the customer an upload is for.
+  describe('X-Customer-Reference', () => {
+    const referenced = (reference: string) => ({
+      'X-Customer-Reference': reference,
+    })
+
+    const folderTree = {
+      name: 'folder',
+      type: 'folder',
+      id: 'folder',
+      children: [{ name: 'file', type: 'file', id: 'file' }],
+    }
+
+    // Uploads one part and completes the upload; resolves to the references
+    // on the interactions it was charged as.
+    const completeAndReadReferences = async (uploadId: string) => {
+      expect((await postChunk(uploadId, 0, randomBytes(64))).status).toBe(200)
+      const completed = await postComplete(uploadId)
+      expect(completed.status).toBe(200)
+      const { cid } = await completed.json()
+
+      const db = await getDatabase()
+      const result = await db.query<{ customer_reference: string | null }>(
+        'SELECT customer_reference FROM interactions WHERE cid = $1',
+        [cid],
+      )
+      return result.rows.map((r) => r.customer_reference)
+    }
+
+    const fileUpload = { filename: 'file.bin', uploadOptions: null }
+
+    it('is recorded on the interactions of a file upload', async () => {
+      const created = await postJson(
+        '/uploads/file',
+        fileUpload,
+        referenced('cust_1.a:b-2'),
+      )
+      expect(created.status).toBe(200)
+
+      expect(await completeAndReadReferences((await created.json()).id)).toEqual(
+        ['cust_1.a:b-2'],
+      )
+    })
+
+    it('is NULL when the upload is created without one', async () => {
+      const created = await postJson('/uploads/file', fileUpload)
+      expect(created.status).toBe(200)
+
+      expect(await completeAndReadReferences((await created.json()).id)).toEqual(
+        [null],
+      )
+    })
+
+    it('set on a folder upload is recorded for its files', async () => {
+      const folder = await postJson(
+        '/uploads/folder',
+        { fileTree: folderTree, uploadOptions: null },
+        referenced('cust-folder'),
+      )
+      expect(folder.status).toBe(200)
+      const folderId = (await folder.json()).id
+      const fileInFolder = {
+        name: 'file',
+        mimeType: null,
+        relativeId: 'file',
+        uploadOptions: null,
+      }
+
+      const different = await postJson(
+        `/uploads/folder/${folderId}/file`,
+        fileInFolder,
+        referenced('cust-other'),
+      )
+      expect({
+        status: different.status,
+        body: await different.json(),
+      }).toEqual({
+        status: 400,
+        body: {
+          error:
+            'A file in a folder upload takes the customer reference of the folder upload',
+        },
+      })
+
+      for (const headers of [{}, referenced('cust-folder')]) {
+        const file = await postJson(
+          `/uploads/folder/${folderId}/file`,
+          fileInFolder,
+          headers,
+        )
+        expect(file.status).toBe(200)
+        expect(
+          await completeAndReadReferences((await file.json()).id),
+        ).toEqual(['cust-folder'])
+      }
+    })
+
+    it.each([
+      ['empty', ''],
+      ['too long', 'a'.repeat(129)],
+      ['with a space', 'cust 1'],
+      ['with a slash', 'cust/1'],
+      ['repeated', ['cust-1', 'cust-2']],
+    ])('answers 400 when it is %s', async (_case, value) => {
+      const headers = new Headers(authHeaders())
+      headers.set('Content-Type', 'application/json')
+      for (const v of [value].flat()) headers.append('X-Customer-Reference', v)
+
+      for (const [path, body] of [
+        ['/uploads/file', fileUpload],
+        ['/uploads/folder', { fileTree: folderTree, uploadOptions: null }],
+      ] as const) {
+        const response = await fetch(`${base}${path}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        })
+        expect({
+          path,
+          status: response.status,
+          body: await response.json(),
+        }).toEqual({
+          path,
+          status: 400,
+          body: {
+            error:
+              'Invalid customer reference: use 1 to 128 letters, digits, "-", "_", "." or ":"',
+          },
+        })
+      }
+    })
+
+    it('accepts 128 characters', async () => {
+      const created = await postJson(
+        '/uploads/file',
+        fileUpload,
+        referenced('a'.repeat(128)),
+      )
+      expect(created.status).toBe(200)
     })
   })
 })

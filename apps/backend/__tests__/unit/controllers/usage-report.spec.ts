@@ -61,6 +61,7 @@ describe('Usage report routes', () => {
     cid: `cid-${id}`,
     apiKeyId: null,
     apiKeyName: null,
+    customerReference: null,
     ai3Value: '20',
   })
 
@@ -86,7 +87,7 @@ describe('Usage report routes', () => {
     ],
     [
       '/accounts/a/usage-report?from=2026-01-01&to=2026-02-01&format=csv',
-      'table: format=csv needs one of summary|apiKeys|purchases',
+      'table: format=csv needs one of summary|apiKeys|customerReferences|purchases|freeCredits',
     ],
     [
       '/accounts/a/usage-report/interactions?from=2026-01-01&to=2026-02-01&format=xml',
@@ -123,12 +124,12 @@ describe('Usage report routes', () => {
     )
     const lines = (await csv.text()).split('\r\n')
     expect(lines[0]).toBe(
-      'id,created_at,type,source,bytes,cid,api_key_id,api_key_name,ai3_value',
+      'id,created_at,type,source,bytes,cid,api_key_id,api_key_name,customer_reference,ai3_value',
     )
     expect(lines.slice(1)).toEqual([
-      '1,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-1,,,0.00000000000000002',
-      '2,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-2,,,0.00000000000000002',
-      '3,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-3,,,0.00000000000000002',
+      '1,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-1,,,,0.00000000000000002',
+      '2,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-2,,,,0.00000000000000002',
+      '3,2026-11-01T00:00:00.000Z,upload,purchased,10,cid-3,,,,0.00000000000000002',
       '',
     ])
   })
