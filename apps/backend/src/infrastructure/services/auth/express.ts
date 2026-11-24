@@ -1,5 +1,9 @@
 import { NextFunction, Request, Response } from 'express'
-import { ApiKeyScope, UserWithOrganization } from '@auto-drive/models'
+import {
+  ApiKeyScope,
+  UserWithOrganization,
+  isPartnerEndUser,
+} from '@auto-drive/models'
 import { AuthManager, classifyAuthFailure } from './index.js'
 import { config } from '../../../config.js'
 import { createLogger } from '../../drivers/logger.js'
@@ -36,7 +40,7 @@ export const requireApiKeyScope =
   }
 
 /** Why the user's API key may not be used for this request, or null. */
-export const apiKeyScopeRefusal = (
+const apiKeyScopeRefusal = (
   user: UserWithOrganization,
   req: Request,
 ): string | null => {
@@ -49,6 +53,44 @@ export const apiKeyScopeRefusal = (
     ? `This API key needs the ${required} scope (it has: ${scopes.join(', ')})`
     : `Not available to API keys limited to scopes (this key has: ${scopes.join(', ')})`
 }
+
+// Whether each request's route lets partner end users in, and removed ones
+// too. Keyed by the request, like the scopes above.
+const endUserAccess = new WeakMap<Request, { removed: boolean }>()
+
+/**
+ * Lets partner end users use the routes behind it, and removed end users too
+ * when `removed` is true. Every other route refuses them. Each route that
+ * declares it must also check that the end user owns what it acts on.
+ */
+export const allowPartnerEndUsers =
+  ({ removed = false }: { removed?: boolean } = {}) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    endUserAccess.set(req, { removed })
+    next()
+  }
+
+/** Why a partner end user may not use this route, or null. */
+const partnerEndUserRefusal = (
+  user: UserWithOrganization,
+  req: Request,
+): string | null => {
+  if (!isPartnerEndUser(user)) return null
+
+  const access = endUserAccess.get(req)
+  if (!access) return 'Not available to partner end users'
+  if (user.endUserRemovedAt && !access.removed) {
+    return 'Not available to removed partner end users'
+  }
+  return null
+}
+
+/** Why the user's credential may not be used for this request, or null. */
+export const credentialRefusal = (
+  user: UserWithOrganization,
+  req: Request,
+): string | null =>
+  apiKeyScopeRefusal(user, req) ?? partnerEndUserRefusal(user, req)
 
 /**
  * Resolve the request's credentials to a user WITHOUT writing a response.
@@ -70,8 +112,8 @@ export const tryAuthenticate = async (
       credentials.provider,
       credentials.accessToken,
     )
-    // A key that may not be used here is no credential either.
-    return user && apiKeyScopeRefusal(user, req) ? null : user
+    // A key or end user that may not be used here is no credential either.
+    return user && credentialRefusal(user, req) ? null : user
   } catch (error) {
     logger.warn(error, 'Token lookup failed')
     return null
@@ -126,7 +168,7 @@ export const handleAuth = async (
     return null
   }
 
-  const refusal = apiKeyScopeRefusal(user, req)
+  const refusal = credentialRefusal(user, req)
   if (refusal) {
     res.status(403).json({ error: refusal })
     return null

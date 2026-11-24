@@ -94,8 +94,8 @@ The custom JWT tokens include Hasura-compatible claims in the `https://hasura.io
 
 ```json
 {
-  "x-hasura-default-role": "user" | "app-admin",
-  "x-hasura-allowed-roles": ["user"] | ["app-admin", "user"],
+  "x-hasura-default-role": "user" | "app-admin" | "partner_end_user",
+  "x-hasura-allowed-roles": ["user"] | ["app-admin", "user"] | ["partner_end_user"],
   "x-hasura-oauth-provider": "google",
   "x-hasura-oauth-user-id": "123456789",
   "x-hasura-organization-id": "org-uuid" | "none",
@@ -103,7 +103,7 @@ The custom JWT tokens include Hasura-compatible claims in the `https://hasura.io
 }
 ```
 
-These claims are used by Hasura for row-level security and role-based access control.
+These claims are used by Hasura for row-level security and role-based access control. Partner end users get only `partner_end_user`, which has no permissions (see [End users](#end-users)).
 
 ## Public ID Generation
 
@@ -175,11 +175,11 @@ yarn workspace auth lambda:build
 
 #### `POST /users/@me/accessToken`: Creates JWT session tokens for a signed-in user. Answers 403 for any API key, personal or organization
 
-#### `POST /users/@me/refreshToken`: Refreshes access token using refresh token
+#### `POST /users/@me/refreshToken`: Refreshes access token using refresh token. Partner end users get none: 403 for one issued to them earlier
 
 #### `DELETE /users/@me/invalidateToken`: Invalidates a refresh token
 
-#### `GET /users/@me`: Gets current user information with organization. With an API key, also the key's `apiKeyId` and `apiKeyScopes` (null for full access)
+#### `GET /users/@me`: Gets current user information with organization: `organizationId`, the user's `organizationRole` and, for partner end users, `customerReference`, `uploadQuotaBytes` and `endUserRemovedAt` (all three null for everyone else). With an API key, also the key's `apiKeyId` and `apiKeyScopes` (null for full access)
 
 #### `GET /users/@me/apiKeys`: Lists user's API keys (without secrets)
 
@@ -187,7 +187,7 @@ yarn workspace auth lambda:build
 
 #### `DELETE /users/@me/apiKeys/:id`: Deletes an API key
 
-#### `POST /users/admin/add`: Adds a user to admin role
+#### `POST /users/admin/add`: Adds a user to admin role. 409 for a partner end user, removed or not
 
 #### `POST /users/admin/remove`: Removes admin role from a user
 
@@ -232,6 +232,14 @@ The auth service owns them. What the partner gives for each one is kept on their
 End users sign in with their wallet (EIP-4361) for one of their partner's origins in `WEB3_AUTH_PARTNER_ORIGINS`, by the same `POST /users/@me/accessToken` exchange as any wallet user, and only there. Sign-ins for a partner origin from anyone else are refused.
 
 A removed end user stays in the organization with role `partner_end_user` and `end_user_removed_at` set: they keep read-only access to their files and no longer count towards the cap. Enrolling them again clears it. They keep their customer reference while removed, so it is never given to another person.
+
+End users are refused everywhere by default, so a route added later stays closed to them until it declares `allowPartnerEndUsers()`. Removed end users get the same as other end users, without uploads.
+
+- Auth: the routes that take a user's credential answer an end user's session with 403, except `GET /users/@me`, `POST /users/@me/accessToken` and `GET`, `POST` and `DELETE /users/@me/deletion`. Routes that take the service secret are unaffected.
+- Sessions: `POST /users/@me/accessToken` gives an end user a 1-hour access token only, with no refresh token: no cookie and no entry in `users.jwt_token_registry`. When it expires, the device signs a new EIP-4361 message. `POST /users/@me/refreshToken` answers a refresh token issued to an end user earlier with 403. Nothing revokes an end user's access token before it expires.
+- Hasura: their access tokens carry only the role `partner_end_user`, as `x-hasura-default-role` and the one `x-hasura-allowed-roles`. It has no permissions, so every query is refused. Without a token Hasura answers as `anonymous`, as for anyone.
+- Backend: `handleAuth` answers 403, and on a public route an end user's session counts as no credential, unless the route declares `allowPartnerEndUsers()`. It reads the role and removal time from `GET /users/@me` on each request, so deploy auth first: the backend can't tell an end user from an auth service that leaves the role out. The routes open to end users are uploads (`/uploads`, not to removed end users) and, removed or not, `GET /objects/roots` (always their own objects, whatever `scope` asks for), `GET /objects/roots/deleted`, `GET /objects/:cid` and `/summary`, `POST /objects/:cid/delete` and `/restore`, `GET /downloads/:cid` and the async downloads under `/downloads/async`. Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for, directly or through a root object that contains it. Otherwise it answers 403, and `GET /objects/:cid` and `/summary` answer as for an anonymous caller.
+- S3: takes only API keys, and end users can't create one.
 
 The membership history (`users.organization_membership_changes`) records each enrollment and re-enrollment as a move into the organization (`from_organization_id` NULL) and each removal as a move out of it (`to_organization_id` NULL), both with role `partner_end_user`. An end user never leaves the organization, so for them a move out is a removal.
 

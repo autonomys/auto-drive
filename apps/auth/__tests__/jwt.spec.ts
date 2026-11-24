@@ -32,7 +32,7 @@ describe('JWT', () => {
   it('should generate a JWT token', async () => {
     const token = await CustomJWTAuth.createSessionTokens(user)
 
-    const refreshTokenDecoded = jwt.decode(token.refreshToken)
+    const refreshTokenDecoded = jwt.decode(token.refreshToken!)
     if (typeof refreshTokenDecoded === 'string' || !refreshTokenDecoded) {
       throw new Error('Invalid refresh token')
     }
@@ -57,7 +57,7 @@ describe('JWT', () => {
     expect(accessTokenPayload.refreshTokenId).toBe(refreshTokenId)
 
     accessTokenString = token.accessToken
-    refreshTokenString = token.refreshToken
+    refreshTokenString = token.refreshToken!
   })
 
   it('should be able to authenticate with the access token', async () => {
@@ -127,14 +127,14 @@ describe('JWT', () => {
         AuthManager.getUserFromAccessToken('custom-jwt', tokens.accessToken),
       ).rejects.toThrow('Invalid access token')
       await expect(
-        CustomJWTAuth.refreshAccessToken(tokens.refreshToken),
+        CustomJWTAuth.refreshAccessToken(tokens.refreshToken!),
       ).rejects.toThrow('Invalid refresh token')
     } finally {
       config.revokeTokenEmittedBeforeInSeconds = previousCutoff
     }
 
     await expect(
-      CustomJWTAuth.refreshAccessToken(tokens.refreshToken),
+      CustomJWTAuth.refreshAccessToken(tokens.refreshToken!),
     ).resolves.toBeDefined()
   })
 

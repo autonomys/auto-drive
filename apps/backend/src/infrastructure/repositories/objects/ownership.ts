@@ -106,6 +106,27 @@ const getAllOwnerships = async (cid: string): Promise<Ownership[]> => {
   return result.rows
 }
 
+// Whether the user has a row, removed or not, for the cid or for a root object
+// that contains it.
+const isOwner = async (
+  cid: string,
+  provider: string,
+  userId: string,
+): Promise<boolean> => {
+  const db = await getDatabase()
+
+  const result = await db.query<{ owned: boolean }>({
+    text: `SELECT EXISTS (
+        SELECT 1 FROM object_ownership
+        WHERE oauth_provider = $2 AND oauth_user_id = $3
+          AND (cid = $1 OR cid IN (SELECT root_cid FROM metadata WHERE head_cid = $1))
+      ) AS owned`,
+    values: [cid, provider, userId],
+  })
+
+  return result.rows[0].owned
+}
+
 const getAdmins = async (cid: string): Promise<Ownership[]> => {
   const db = await getDatabase()
 
@@ -202,6 +223,7 @@ export const ownershipRepository = {
   restoreIfDeleted,
   getOwnerships,
   getAllOwnerships,
+  isOwner,
   getAdmins,
   getAdminOwnershipState,
 }

@@ -43,6 +43,18 @@ An organization API key can be limited to scopes when it is created (\`POST /org
 | \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
 | \`end_users\` | \`POST\`, \`GET\` and \`DELETE\` under \`/organizations/{organizationId}/end-users\`: enroll, list and remove the organization's end users |
 
+## Partner end users
+
+A partner end user's session can be used only on the routes below. Every other route that needs authentication answers it with 403, and public routes answer it as an anonymous caller. The S3 API takes only API keys, which end users can't create.
+
+| Routes | Removed end users |
+| --- | --- |
+| \`/uploads\` | No |
+| \`GET /objects/roots\` (always the end user's own objects, whatever \`scope\` asks for), \`GET /objects/roots/deleted\`, \`GET /objects/{cid}\`, \`GET /objects/{cid}/summary\`, \`POST /objects/{cid}/delete\` and \`POST /objects/{cid}/restore\` | Yes |
+| \`GET /downloads/{cid}\` and the async downloads under \`/downloads/async\` | Yes |
+
+Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for (their own, shared with them or in their trash), directly or through a root object that contains it. Anything else answers 403, except \`GET /objects/{cid}\` and its summary, which answer as for an anonymous caller.
+
 ## Purchasing Storage Credits (Pay with AI3)
 
 Third-party applications can purchase storage credits programmatically using the Intents API. The flow is:

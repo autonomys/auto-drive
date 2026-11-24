@@ -24,6 +24,11 @@ export const organizationRole = (
   member: Pick<DBOrganizationMember, 'role'>,
 ): OrganizationRole => member.role ?? OrganizationRole.Admin
 
+export const uploadQuotaBytes = (
+  member: Pick<DBOrganizationMember, 'upload_quota_bytes'>,
+): number | null =>
+  member.upload_quota_bytes === null ? null : Number(member.upload_quota_bytes)
+
 // The people in an organisation: its service user, which only holds its API
 // keys, and its partner end users, who are its customers, are left out.
 const getOrganizationMemberships = async (

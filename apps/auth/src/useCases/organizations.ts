@@ -24,6 +24,7 @@ import {
   organizationMembershipChangesRepository,
   organizationRole,
   organizationsRepository,
+  uploadQuotaBytes,
   usersRepository,
 } from '../repositories/index.js'
 import { deriveUserPublicId } from './users.js'
@@ -36,7 +37,13 @@ import {
 } from '../errors/organizations.js'
 import { ApiKeyNotFoundError } from '../errors/apikeys.js'
 
-const getOrganizationByUser = async (user: User): Promise<Organization> => {
+// The user's organisation and their membership of it.
+const getMembershipByUser = async (
+  user: User,
+): Promise<{
+  organization: Organization
+  membership: DBOrganizationMember
+}> => {
   const membership =
     await organizationMembersRepository.getOrganizationMembershipByUser(
       user.oauthProvider,
@@ -57,7 +64,23 @@ const getOrganizationByUser = async (user: User): Promise<Organization> => {
     throw new Error('Organization not found')
   }
 
-  return { id: organization.id, name: organization.name }
+  return {
+    organization: { id: organization.id, name: organization.name },
+    membership,
+  }
+}
+
+const getOrganizationByUser = async (user: User): Promise<Organization> =>
+  (await getMembershipByUser(user)).organization
+
+// Removed or not.
+const isPartnerEndUser = async (user: User): Promise<boolean> => {
+  const membership =
+    await organizationMembersRepository.getOrganizationMembershipByUser(
+      user.oauthProvider,
+      user.oauthUserId,
+    )
+  return membership?.role === OrganizationRole.PartnerEndUser
 }
 
 // Every user starts in a personal organisation of their own. Its name is not
@@ -498,10 +521,7 @@ const toPartnerEndUser = (
   ),
   // Every end user is enrolled with one.
   customerReference: membership.customer_reference as string,
-  uploadQuotaBytes:
-    membership.upload_quota_bytes === null
-      ? null
-      : Number(membership.upload_quota_bytes),
+  uploadQuotaBytes: uploadQuotaBytes(membership),
   createdAt: membership.created_at.toISOString(),
   removedAt: membership.end_user_removed_at?.toISOString() ?? null,
 })
@@ -804,7 +824,9 @@ const getMembershipChanges = async (
 }
 
 export const OrganizationsUseCases = {
+  getMembershipByUser,
   getOrganizationByUser,
+  isPartnerEndUser,
   initOrganization,
   getOrganization,
   createOrganization,

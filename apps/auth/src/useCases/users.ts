@@ -12,7 +12,11 @@ import {
   SERVICE_USER_PROVIDER,
 } from '@auto-drive/models'
 import { usersRepository } from '../repositories/users.js'
-import { organizationMembersRepository } from '../repositories/organizationMembers.js'
+import {
+  organizationMembersRepository,
+  organizationRole,
+  uploadQuotaBytes,
+} from '../repositories/organizationMembers.js'
 import { OrganizationsUseCases } from './organizations.js'
 import { createLogger } from '../drivers/logger.js'
 import { withTransaction } from '../drivers/pg.js'
@@ -85,12 +89,16 @@ const getUserWithOrganization = async (
     return { ...resolvedUser, organizationId: null }
   }
 
-  const organization =
-    await OrganizationsUseCases.getOrganizationByUser(resolvedUser)
+  const { organization, membership } =
+    await OrganizationsUseCases.getMembershipByUser(resolvedUser)
 
   return {
     ...resolvedUser,
     organizationId: organization.id,
+    organizationRole: organizationRole(membership),
+    customerReference: membership.customer_reference,
+    uploadQuotaBytes: uploadQuotaBytes(membership),
+    endUserRemovedAt: membership.end_user_removed_at?.toISOString() ?? null,
   }
 }
 
@@ -229,6 +237,16 @@ const updateRole = async (
   // An organisation's API keys must never act as an Auto Drive admin.
   if (user.oauthProvider === SERVICE_USER_PROVIDER) {
     throw new OrganizationConflictError('A service user cannot be given a role')
+  }
+  // Nor may a partner end user.
+  if (
+    role === UserRole.Admin &&
+    user.onboarded &&
+    (await OrganizationsUseCases.isPartnerEndUser(user))
+  ) {
+    throw new OrganizationConflictError(
+      'A partner end user cannot be made an admin',
+    )
   }
 
   return usersRepository.updateRole(user.oauthProvider, user.oauthUserId, role)

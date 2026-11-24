@@ -1,5 +1,14 @@
-import { User, Owner, OwnerRole, isAdminUser } from '@auto-drive/models'
+import {
+  User,
+  Owner,
+  OwnerRole,
+  UserWithOrganization,
+  isAdminUser,
+  isPartnerEndUser,
+} from '@auto-drive/models'
+import { err, ok, Result } from 'neverthrow'
 import { ownershipRepository } from '../../infrastructure/repositories/index.js'
+import { ForbiddenError } from '../../errors/index.js'
 
 const setUserAsOwner = async (user: User, cid: string) => {
   await ownershipRepository.setUserAsOwner(
@@ -78,6 +87,27 @@ const withVisibleOwners = async <T extends { owners: Owner[] }>(
   return { ...object, owners }
 }
 
+// Partner end users act only on objects they own, an object shared with them
+// or in a folder they own included. Everyone else is not affected.
+const authorizePartnerEndUser = async (
+  user: UserWithOrganization,
+  cid: string,
+): Promise<Result<void, ForbiddenError>> => {
+  if (
+    !isPartnerEndUser(user) ||
+    (await ownershipRepository.isOwner(
+      cid,
+      user.oauthProvider,
+      user.oauthUserId,
+    ))
+  ) {
+    return ok()
+  }
+  return err(
+    new ForbiddenError('Partner end users can only use their own files'),
+  )
+}
+
 export const OwnershipUseCases = {
   setUserAsOwner,
   setUserAsAdmin,
@@ -86,4 +116,5 @@ export const OwnershipUseCases = {
   getAdmins,
   restoreObject,
   withVisibleOwners,
+  authorizePartnerEndUser,
 }

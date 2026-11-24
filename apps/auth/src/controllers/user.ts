@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import {
+  allowPartnerEndUsers,
   handleAdminAuth,
   handleAuth,
   handleAuthIgnoreOnboarding,
@@ -20,6 +21,13 @@ import { createLogger } from '../drivers/logger.js'
 const logger = createLogger('controllers:user')
 
 const userController = Router()
+
+// Partner end users may use only their own user, signing in and closing their
+// account. Every other route refuses them. They get no refresh token, and
+// /@me/refreshToken refuses one issued earlier.
+userController.get('/@me', allowPartnerEndUsers())
+userController.post('/@me/accessToken', allowPartnerEndUsers())
+userController.all('/@me/deletion', allowPartnerEndUsers())
 
 userController.post('/@me/onboard', async (req: Request, res: Response) => {
   const user = await handleAuthIgnoreOnboarding(req, res)
@@ -53,13 +61,15 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   const { accessToken, refreshToken } =
     await CustomJWTAuth.createSessionTokens(user)
 
-  res
-    .cookie('refreshToken', refreshToken, {
+  // Partner end users get none.
+  if (refreshToken) {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
     })
-    .json({ accessToken })
+  }
+  res.json({ accessToken })
 })
 
 userController.post('/web3/nonce', (_req: Request, res: Response) => {
@@ -79,7 +89,10 @@ userController.post(
         return
       }
 
-      const accessToken = await refreshAccessToken(refreshToken)
+      const accessToken = await refreshAccessToken(req, res, refreshToken)
+      if (!accessToken) {
+        return
+      }
 
       res.json({ accessToken })
     } catch (error) {

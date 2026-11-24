@@ -1,4 +1,4 @@
-import { Request, Response } from 'express'
+import { NextFunction, Request, Response } from 'express'
 import {
   MaybeUser,
   OAuthUser,
@@ -6,13 +6,46 @@ import {
   User,
   UserRole,
 } from '@auto-drive/models'
-import { UsersUseCases } from '../../useCases/index.js'
+import { OrganizationsUseCases, UsersUseCases } from '../../useCases/index.js'
 import { AuthManager } from './index.js'
 import { CustomJWTAuth } from './providers/custom.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 
 const logger = createLogger('authManager:express')
+
+// The requests whose route lets partner end users in. Keyed by the request,
+// so a client cannot set it.
+const endUserRoutes = new WeakSet<Request>()
+
+/**
+ * Lets partner end users use the route behind it. Every other route that
+ * takes a user's credential refuses them, so a route added later stays closed
+ * to them until it declares this.
+ */
+export const allowPartnerEndUsers =
+  () => (req: Request, _res: Response, next: NextFunction) => {
+    endUserRoutes.add(req)
+    next()
+  }
+
+// Answers 403 and resolves true when the user is a partner end user and the
+// route does not let them in.
+const refusePartnerEndUser = async (
+  req: Request,
+  res: Response,
+  user: MaybeUser,
+): Promise<boolean> => {
+  if (
+    !user.onboarded ||
+    endUserRoutes.has(req) ||
+    !(await OrganizationsUseCases.isPartnerEndUser(user))
+  ) {
+    return false
+  }
+  res.status(403).json({ error: 'Not available to partner end users' })
+  return true
+}
 
 export const handleAuth = async (
   req: Request,
@@ -82,6 +115,9 @@ export const handleAuthIgnoreOnboarding = async (
   }
 
   const user = await UsersUseCases.getUserByOAuthUser(oauthUser)
+  if (await refusePartnerEndUser(req, res, user)) {
+    return null
+  }
   // The key and what it may be used for, which GET /@me passes on to the
   // backend.
   return oauthUser.apiKeyId
@@ -141,6 +177,9 @@ export const handleAdminAuth = async (
     })
     return false
   }
+  if (await refusePartnerEndUser(req, res, user)) {
+    return false
+  }
 
   const isAdmin = user.role === UserRole.Admin
   if (!isAdmin) {
@@ -167,8 +206,16 @@ export const handleServiceAuth = (req: Request, res: Response): boolean => {
   return true
 }
 
+// Resolves null once it has answered.
 export const refreshAccessToken = async (
+  req: Request,
+  res: Response,
   refreshToken: string,
 ): Promise<string | null> => {
+  // Partner end users get no refresh token. This refuses one issued earlier.
+  const user = await CustomJWTAuth.getUserFromRefreshToken(refreshToken)
+  if (await refusePartnerEndUser(req, res, user)) {
+    return null
+  }
   return CustomJWTAuth.refreshAccessToken(refreshToken)
 }

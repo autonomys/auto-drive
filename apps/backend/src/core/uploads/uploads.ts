@@ -69,7 +69,7 @@ const checkPermissions = async (
     upload.oauth_provider !== user.oauthProvider ||
     upload.oauth_user_id !== user.oauthUserId
   ) {
-    throw new Error('User does not have permission to upload')
+    throw new ForbiddenError('User does not have permission to upload')
   }
 }
 
@@ -179,6 +179,7 @@ const createFileInFolder = async (
   if (!upload) {
     throw new Error('Upload not found')
   }
+  await checkPermissions(upload, user)
 
   if (upload.type !== UploadType.FOLDER) {
     throw new Error('Upload is not a folder')
@@ -763,8 +764,8 @@ const abortUpload = async (
   if (!upload) {
     return err(new ObjectNotFoundError('Upload not found'))
   }
-  // Ownership check returned (not thrown) so a cross-user abort surfaces as a
-  // typed 403, not a 500 from checkPermissions' plain throw.
+  // Ownership check returned, not thrown like checkPermissions', as this
+  // returns its errors.
   if (
     upload.oauth_provider !== user.oauthProvider ||
     upload.oauth_user_id !== user.oauthUserId
