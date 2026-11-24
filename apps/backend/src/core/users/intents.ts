@@ -259,8 +259,9 @@ const parsePaymentMethod = (
 // which is the same place an unchecked purchase would have landed.
 //
 // Measures exactly what the authoritative check measures — SUM of
-// upload_bytes_remaining over active, unexpired rows — by going through
-// getRemainingCredits, whose query is that same aggregate. Any divergence
+// upload_bytes_remaining over active, unexpired purchased rows (free credits
+// don't count toward the cap) — by going through getRemainingCredits, whose
+// purchased figure is that same aggregate. Any divergence
 // between the two would surface as a pre-check that waves through purchases the
 // real check then rejects, which is the failure mode this exists to prevent.
 const checkCapHeadroom = async (
@@ -268,7 +269,7 @@ const checkCapHeadroom = async (
   requestedBytes: bigint,
 ): Promise<Result<void, CreditCapExceededError>> => {
   const cap = AccountsUseCases.getCreditTerms(account).maxBytes
-  const { uploadBytesRemaining } =
+  const { purchasedUploadBytesRemaining: uploadBytesRemaining } =
     await purchasedCreditsRepository.getRemainingCredits(account.id)
 
   // `>` mirrors the authoritative check, so a purchase that lands exactly on the

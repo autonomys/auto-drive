@@ -136,7 +136,13 @@ describe('ApiKeyUseCases', () => {
     ])
 
     expect(names).toEqual([
-      { id: apiKey.id, name: 'My key', deletedAt: expect.any(Date) },
+      {
+        id: apiKey.id,
+        name: 'My key',
+        deletedAt: expect.any(Date),
+        oauthProvider: user.oauthProvider,
+        oauthUserId: user.oauthUserId,
+      },
     ])
   })
 

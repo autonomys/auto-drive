@@ -11,6 +11,9 @@ import {
   UserXIcon,
   FlagIcon,
   ChartColumnIcon,
+  Building2Icon,
+  FolderIcon,
+  KeyRoundIcon,
 } from 'lucide-react';
 import { NetworkId, ROUTES } from '@auto-drive/ui';
 import { SidebarSection } from './SideNavBarContent';
@@ -64,12 +67,36 @@ export const SIDEBAR_DEFINITION: SidebarSection[] = [
         label: 'Developers',
         requiresSession: true,
       },
+    ],
+  },
+  {
+    // Everything about the partner organization a user belongs to.
+    label: 'Organization',
+    onlyPartner: true,
+    items: [
       {
-        href: (networkId: NetworkId) => ROUTES.usage(networkId),
+        href: (networkId: NetworkId) => ROUTES.organization(networkId),
+        icon: Building2Icon,
+        label: 'Overview',
+        requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.organizationFiles(networkId),
+        icon: FolderIcon,
+        label: 'Files',
+        requiresSession: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.organizationUsage(networkId),
         icon: ChartColumnIcon,
         label: 'Usage',
         requiresSession: true,
-        onlyPartner: true,
+      },
+      {
+        href: (networkId: NetworkId) => ROUTES.organizationApiKeys(networkId),
+        icon: KeyRoundIcon,
+        label: 'API keys',
+        requiresSession: true,
       },
     ],
   },

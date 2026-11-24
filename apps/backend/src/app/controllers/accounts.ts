@@ -18,6 +18,7 @@ import {
 import { handleError } from '../../errors/index.js'
 import { AccountModel, ApiKeyScope } from '@auto-drive/models'
 import { z } from 'zod'
+import { serializeCredit } from './credits.js'
 
 const logger = createLogger('http:controllers:accounts')
 
@@ -243,6 +244,62 @@ accountController.get(
   }),
 )
 
+// Admin-only: the account's free credit batches, newest first.
+accountController.get(
+  '/admin/:id/free-credits',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.adminGetFreeCredits(user, req.params.id),
+      'Failed to get free credits',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value.map(serializeCredit))
+  }),
+)
+
+// Admin-only: grants a partner account one-time free upload credits.
+accountController.post(
+  '/admin/:id/free-credits',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const grant = z
+      .object({
+        uploadBytes: z.number().int().positive().safe(),
+        expiresInDays: z.number().int().min(1).max(36500).optional(),
+        reason: z.string().trim().min(1).max(500),
+      })
+      .safeParse(req.body)
+    if (!grant.success) {
+      res.status(400).json({ error: queryError(grant.error) })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      AccountsUseCases.grantFreeCredits(user, req.params.id, grant.data),
+      'Failed to grant free credits',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json(serializeCredit(result.value))
+  }),
+)
+
 // Admin-only: headline usage figures for each account with activity in
 // [from, to), most upload bytes first. `partnersOnly=true` lists partner
 // accounts only.
@@ -307,7 +364,7 @@ accountController.get(
 
 // The account's usage over [from, to), for members of its organisation and
 // Auto Drive admins: JSON, or one of its tables as CSV
-// (`format=csv&table=summary|apiKeys|customerReferences|purchases`).
+// (`format=csv&table=summary|apiKeys|customerReferences|purchases|freeCredits`).
 accountController.get(
   '/:accountId/usage-report',
   requireApiKeyScope(ApiKeyScope.Usage),
@@ -520,13 +577,19 @@ accountController.post(
           .max(36500)
           .nullable()
           .optional(),
+        monthlyFreeUploadBytes: z
+          .number()
+          .int()
+          .nonnegative()
+          .safe()
+          .optional(),
         reason: z.string().trim().max(500).optional(),
       })
       .safeParse(req.body)
     if (!terms.success) {
       res.status(400).json({
         error:
-          'Invalid `maxPurchasedBytes`, `creditExpiryDays` or `reason` in body',
+          'Invalid `maxPurchasedBytes`, `creditExpiryDays`, `monthlyFreeUploadBytes` or `reason` in body',
       })
       return
     }

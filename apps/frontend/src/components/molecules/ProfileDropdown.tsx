@@ -7,6 +7,7 @@ import { CopiableText } from '@/components/atoms/CopiableText';
 import { formatCid } from '@/utils/table';
 import { useNetwork } from '@/contexts/network';
 import { ROUTES } from '@auto-drive/ui';
+import Link from 'next/link';
 
 export const ProfileDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -70,6 +71,14 @@ export const ProfileDropdown: React.FC = () => {
             )}
           </div>
           <div className='py-1'>
+            <Link
+              href={ROUTES.profile(network.id)}
+              onClick={() => setIsOpen(false)}
+              className='flex w-full items-center gap-2 px-4 py-2 text-left text-base hover:bg-background-hover'
+            >
+              Profile
+              <UserRoundIcon className='h-4 w-4' />
+            </Link>
             <button
               onClick={() =>
                 logOut({ callbackUrl: ROUTES.globalFeed(network.id) })

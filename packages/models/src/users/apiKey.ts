@@ -52,5 +52,9 @@ export type CreateApiKeyInput = {
   scopes?: ApiKeyScope[] | null
 }
 
-/** What a usage report shows of a key: enough to name it, never its secret. */
-export type ApiKeyName = Pick<ApiKey, 'id' | 'name' | 'deletedAt'>
+/**
+ * What a usage report shows of a key: enough to name it and its owner, never
+ * its secret. The owner is optional because older auth services omit it.
+ */
+export type ApiKeyName = Pick<ApiKey, 'id' | 'name' | 'deletedAt'> &
+  Partial<Pick<ApiKey, 'oauthProvider' | 'oauthUserId'>>

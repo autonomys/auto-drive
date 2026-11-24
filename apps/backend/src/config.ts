@@ -708,7 +708,8 @@ export const config = {
     // accounts.upload_limit / accounts.download_limit and never expire.
     expiryDays: Number(env('CREDIT_EXPIRY_DAYS', '90')),
     // Maximum total purchased credit balance (in bytes) per account, summed
-    // across all active purchased_credits rows.
+    // across active purchased_credits rows that were paid for (free credits
+    // don't count).
     // Default: 100 GiB — matches the economic protection design document.
     maxBytesPerAccount: BigInt(
       env('MAX_CREDITS_PER_USER', String(100 * 1024 ** 3)),

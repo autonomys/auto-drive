@@ -94,6 +94,10 @@ describe('IntentsUseCases', () => {
       .mockResolvedValue({
         uploadBytesRemaining,
         uploadBytesOriginal: uploadBytesRemaining,
+        purchasedUploadBytesRemaining: uploadBytesRemaining,
+        purchasedUploadBytesOriginal: uploadBytesRemaining,
+        purchasedNextExpiryDate: null,
+        freeUploadBytesRemaining: 0n,
         downloadBytesRemaining: 0n,
         nextExpiryDate: null,
         activeRowCount: 1,

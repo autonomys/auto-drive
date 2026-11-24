@@ -198,7 +198,14 @@ const getApiKeysByUser = async (
 const getApiKeyNames = async (ids: string[]): Promise<ApiKeyName[]> => {
   const apiKeys = await apiKeysRepository.getApiKeysByIds(ids)
 
-  return apiKeys.map(({ id, name, deletedAt }) => ({ id, name, deletedAt }))
+  // The owner lets a usage report tell an organisation's keys from members'.
+  return apiKeys.map(({ id, name, deletedAt, oauthProvider, oauthUserId }) => ({
+    id,
+    name,
+    deletedAt,
+    oauthProvider,
+    oauthUserId,
+  }))
 }
 
 export const ApiKeysUseCases = {
