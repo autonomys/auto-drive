@@ -1,6 +1,6 @@
-import { Organization, OrganizationRole } from "./organization";
-import { AccountInfo } from "./account";
-import { ApiKeyScope } from "./apiKey";
+import { Organization, OrganizationRole } from "./organization.js";
+import { AccountInfo } from "./account.js";
+import { ApiKeyScope } from "./apiKey.js";
 
 export type OAuthUser = {
   provider: string;

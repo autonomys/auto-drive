@@ -1,4 +1,4 @@
-import { ApiKeyWithoutSecret } from "./apiKey";
+import { ApiKeyWithoutSecret } from "./apiKey.js";
 
 export type Organization = {
   id: string;
