@@ -17,6 +17,16 @@ set -uo pipefail
 RCLONE_SRC=$(cd "${1:?usage: client-tests.sh <rclone source checkout>}" && pwd) || exit 1
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
+if [ -n "${RCLONE_TESTS:-}" ]; then
+  known=$(sed -n 's/^  - path: //p' "$HERE/rclone-test-all.yaml")
+  IFS=, read -ra wanted <<<"$RCLONE_TESTS"
+  for t in "${wanted[@]}"; do
+    grep -qxF "$t" <<<"$known" || {
+      echo "RCLONE_TESTS: '$t' is not a test path in rclone-test-all.yaml" >&2
+      exit 1
+    }
+  done
+fi
 ENDPOINT=${AUTO_DRIVE_TEST_ENDPOINT:-http://127.0.0.1:28640}
 KEY=${AUTO_DRIVE_TEST_ACCESS_KEY_ID:-0123456789abcdef0123456789abcdef}
 mkdir -p "${OUTPUT_DIR:-client-test-output}"
@@ -49,8 +59,11 @@ step() {
 }
 
 step "Build rclone" bash -c "cd '$RCLONE_SRC' && go build -o '$OUT/bin/rclone' ."
+# -timeout applies to each try: three tries of a suite that hangs, plus the
+# rest of the job, must fit in the workflow's 45 minutes.
 step "rclone integration suites" bash -c "cd '$RCLONE_SRC' && go run ./fstest/test_all \
-  -config '$HERE/rclone-test-all.yaml' -remotes TestS3Autonomys: -tests '${RCLONE_TESTS:-}' -maxtries 3 -output '$OUT/test_all'"
+  -config '$HERE/rclone-test-all.yaml' -remotes TestS3Autonomys: -tests '${RCLONE_TESTS:-}' \
+  -maxtries 3 -timeout 8m -output '$OUT/test_all'"
 
 export AUTO_DRIVE_ENDPOINT=$ENDPOINT AUTO_DRIVE_API_KEY=$KEY RCLONE_REMOTE=TestS3Autonomys
 export PATH=$OUT/bin:$PATH
