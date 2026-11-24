@@ -67,6 +67,7 @@ describe('user content served from the shared origin', () => {
     expect(response.headers.get('content-type')).toMatch(/^text\/html/)
     expect(response.headers.get('content-security-policy')).toBe('sandbox')
     expect(response.headers.get('vary')).toMatch(/sec-fetch-dest/i)
+    expect(response.headers.get('vary')).toMatch(/service-worker/i)
     expect(await response.text()).toBe(page)
   })
 
@@ -90,6 +91,7 @@ describe('user content served from the shared origin', () => {
         'inline; filename="index.html"; filename*=UTF-8\'\'index.html',
       )
       expect(response.headers.get('vary')).toMatch(/sec-fetch-dest/i)
+      expect(response.headers.get('vary')).toMatch(/service-worker/i)
     },
   )
 

@@ -42,6 +42,7 @@ export const applyUserContentHeaders = (req: Request, res: Response) => {
   const essence = contentTypeEssence(res.getHeader('Content-Type'))
   if (SANDBOX_EXEMPT_CONTENT_TYPES.has(essence)) return
   res.vary('Sec-Fetch-Dest')
+  res.vary('Service-Worker')
 
   if (!isFrameRequest(req)) {
     res.setHeader('Content-Security-Policy', USER_CONTENT_CSP)
