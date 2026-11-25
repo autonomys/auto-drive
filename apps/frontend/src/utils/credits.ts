@@ -8,6 +8,7 @@ import {
   PaymentMethod,
   PurchasedCreditKind,
   USD_RATE_SCALE,
+  UsageFreeCreditChange,
   USDC_DECIMALS,
 } from '@auto-drive/models';
 import { shannonsToAi3 } from '@autonomys/auto-utils';
@@ -174,7 +175,7 @@ export const describeBatchKind = (batch: {
   grantPeriod: string | null;
 }): string => {
   if (batch.kind === 'purchase') return 'Purchased credits';
-  if (batch.kind === 'free_one_time') return 'Free credits';
+  if (batch.kind === 'free_one_time') return 'One-time free credits';
   if (!batch.grantPeriod) return 'Monthly free credits';
   const month = new Date(batch.grantPeriod).toLocaleDateString('en-US', {
     month: 'long',
@@ -182,6 +183,44 @@ export const describeBatchKind = (batch: {
     timeZone: 'UTC',
   });
   return `Monthly free credits, ${month}`;
+};
+
+/**
+ * What a change to an account's free credits was, in words. Amounts are
+ * formatted with `format`.
+ */
+export const describeFreeCreditChange = (
+  change: Pick<
+    UsageFreeCreditChange,
+    'type' | 'period' | 'monthlyBefore' | 'monthlyAfter'
+  >,
+  format: (bytes: number) => string,
+): string => {
+  const month = change.period
+    ? describeBatchKind({ kind: 'free_monthly', grantPeriod: change.period })
+    : 'Monthly free credits';
+  switch (change.type) {
+    case 'grant':
+      return 'One-time free credits granted';
+    case 'monthly':
+      return month;
+    case 'expiry':
+      return change.period
+        ? `${month}: expired unused`
+        : 'One-time free credits: expired unused';
+    case 'monthly_change': {
+      const before = Number(change.monthlyBefore ?? 0);
+      const after = Number(change.monthlyAfter ?? 0);
+      if (change.monthlyBefore === null || change.monthlyAfter === null) {
+        return 'Monthly amount changed';
+      }
+      if (before === 0) return `Monthly amount set to ${format(after)}`;
+      if (after === 0) {
+        return `Monthly free credits stopped (were ${format(before)})`;
+      }
+      return `Monthly amount ${after > before ? 'raised' : 'lowered'} from ${format(before)} to ${format(after)}`;
+    }
+  }
 };
 
 // ---------------------------------------------------------------------------

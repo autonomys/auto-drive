@@ -661,6 +661,36 @@ describe('Partner free credits', () => {
       ).toBe(0)
     })
 
+    it('belongs to the monthly model: one-off ends it and refuses it', async () => {
+      const { member, account } = await createMonthlyPartner(100)
+      await upload(member, 30n)
+      const oneOff = (monthlyFreeUploadBytes?: number) =>
+        AccountsUseCases.updateAccount(
+          admin,
+          account.id,
+          AccountModel.OneOff,
+          0,
+          1000,
+          { monthlyFreeUploadBytes },
+        )
+
+      // Kept from before, or set: refused, and nothing changes.
+      for (const bytes of [undefined, 100]) {
+        expect((await oneOff(bytes))._unsafeUnwrapErr()).toBeInstanceOf(
+          BadRequestError,
+        )
+      }
+      expect(await freeCreditsLeft(member)).toBe(70n)
+
+      // Switching with the amount at 0 ends this month's credits at once.
+      expect((await oneOff(0)).isOk()).toBe(true)
+      expect(await freeCreditsLeft(member)).toBe(0n)
+      expect(await accountsRepository.getById(account.id)).toMatchObject({
+        model: AccountModel.OneOff,
+        monthlyFreeUploadBytes: 0,
+      })
+    })
+
     it('still keeps a partner upload limit at 0', async () => {
       const { account } = await createPartner()
 

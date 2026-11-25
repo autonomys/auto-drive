@@ -119,16 +119,28 @@ export const OrganizationUsageView = () => (
             {formatBytes(Number(overview.credits.purchasedBytesRemaining), 2)}
           </strong>{' '}
           purchased
-          {Number(overview.credits.freeCreditBytesRemaining) > 0 && (
+          {Number(overview.credits.monthlyFreeUploadBytes) > 0 && (
             <>
               {' · '}
               <strong>
                 {formatBytes(
-                  Number(overview.credits.freeCreditBytesRemaining),
+                  Number(overview.credits.monthlyFreeBytesRemaining),
                   2,
                 )}
               </strong>{' '}
-              free credits
+              monthly free
+            </>
+          )}
+          {overview.credits.oneTimeFreeGrantCount > 0 && (
+            <>
+              {' · '}
+              <strong>
+                {formatBytes(
+                  Number(overview.credits.oneTimeFreeBytesRemaining),
+                  2,
+                )}
+              </strong>{' '}
+              one-time free
             </>
           )}
         </p>

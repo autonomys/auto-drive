@@ -27,9 +27,10 @@ import {
   TableBodyRow,
 } from '@/components/molecules/Table/TableBody';
 import { CopiableText } from '@/components/atoms/CopiableText';
+import { ByteAmountInput } from '@/components/molecules/ByteAmountInput';
+import { amountToBytes, ByteUnit } from '@/utils/byteUnits';
 import { AdminDialog } from './PartnerTerms';
 
-const GiB = 1024 ** 3;
 const DAY = 24 * 60 * 60 * 1000;
 
 const GrantModal = ({
@@ -42,7 +43,7 @@ const GrantModal = ({
   onGranted: () => void;
 }) => {
   const { api } = useNetwork();
-  const [amountGiB, setAmountGiB] = useState('');
+  const [amount, setAmount] = useState({ amount: '', unit: 'GB' as ByteUnit });
   const [expiryDays, setExpiryDays] = useState(
     String(
       account.creditExpiryDays ?? account.defaultCreditTerms.creditExpiryDays,
@@ -51,10 +52,9 @@ const GrantModal = ({
   const [reason, setReason] = useState('');
   const [confirming, setConfirming] = useState(false);
 
-  const uploadBytes = Math.round(Number(amountGiB) * GiB);
+  const uploadBytes = amountToBytes(amount.amount, amount.unit) ?? 0;
   const days = Number(expiryDays);
   const valid =
-    Number.isSafeInteger(uploadBytes) &&
     uploadBytes > 0 &&
     Number.isInteger(days) &&
     days >= 1 &&
@@ -81,14 +81,16 @@ const GrantModal = ({
 
   return (
     <AdminDialog
-      title={confirming ? 'Confirm free credits' : 'Grant free credits'}
+      title={
+        confirming ? 'Confirm free credits' : 'Grant one-time free credits'
+      }
       onClose={onClose}
     >
       {confirming ? (
         <div className='mt-4 space-y-4 text-sm text-foreground'>
           <p>
-            Grant <strong>{formatBytes(uploadBytes)}</strong> of free upload
-            credits, expiring on{' '}
+            Grant <strong>{formatBytes(uploadBytes)}</strong> of one-time free
+            upload credits, expiring on{' '}
             <strong>
               {formatDate(new Date(Date.now() + days * DAY).toISOString())}
             </strong>
@@ -123,15 +125,12 @@ const GrantModal = ({
             if (valid) setConfirming(true);
           }}
         >
-          <label className='block text-sm text-foreground'>
-            Amount (GiB)
-            <input
-              type='text'
-              className={inputClass}
-              value={amountGiB}
-              onChange={(e) => setAmountGiB(e.target.value)}
-            />
-          </label>
+          <ByteAmountInput
+            label='Amount'
+            amount={amount.amount}
+            unit={amount.unit}
+            onChange={setAmount}
+          />
           <label className='block text-sm text-foreground'>
             Expires after (days)
             <input
@@ -191,15 +190,20 @@ export const PartnerFreeCredits = ({
 
   return (
     <div className='rounded-lg border border-gray-200 bg-background p-6'>
-      <div className='mb-4 flex items-center justify-between'>
+      <div className='mb-2 flex items-center justify-between'>
         <h2 className='flex items-center gap-2 text-lg font-semibold'>
           <Gift className='h-5 w-5' />
           Free Credits
         </h2>
         <Button variant='lightAccent' onClick={() => setGranting(true)}>
-          Grant free credits
+          Grant one-time credits
         </Button>
       </div>
+      <p className='mb-4 text-sm text-gray-500'>
+        Newest first. Monthly free credits are issued from the terms; one-time
+        credits are granted here or when saving one-off terms. Free credits are
+        used before purchased ones. The usage report below explains each change.
+      </p>
       {isLoading ? (
         <div className='flex items-center justify-center py-4'>
           <Loader className='h-5 w-5 animate-spin' />
@@ -245,7 +249,15 @@ export const PartnerFreeCredits = ({
                       {formatBytes(Number(credit.uploadBytesOriginal))}
                     </TableBodyCell>
                     <TableBodyCell>
-                      {formatBytes(Number(credit.uploadBytesRemaining))}
+                      {status === 'replaced' ? (
+                        // Not usable any more: it ended with this left.
+                        <span className='text-gray-500'>
+                          0 ({formatBytes(Number(credit.uploadBytesRemaining))}{' '}
+                          ended)
+                        </span>
+                      ) : (
+                        formatBytes(Number(credit.uploadBytesRemaining))
+                      )}
                     </TableBodyCell>
                     <TableBodyCell>
                       {formatDate(credit.expiresAt)}
@@ -253,6 +265,11 @@ export const PartnerFreeCredits = ({
                     <TableBodyCell>
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+                        title={
+                          status === 'replaced' && credit.supersededAt
+                            ? `Ended ${formatDate(credit.supersededAt)}, when the monthly amount changed. A batch for the rest of the month took its place.`
+                            : undefined
+                        }
                       >
                         {STATUS_LABEL[status]}
                       </span>

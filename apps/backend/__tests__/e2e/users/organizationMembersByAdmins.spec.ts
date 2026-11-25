@@ -494,6 +494,13 @@ describe('Partner organization members, managed by its admins', () => {
           { monthlyFreeUploadBytes: 1_000, reason: 'monthly allowance' },
         )
       )._unsafeUnwrap()
+      ;(
+        await AccountsUseCases.grantFreeCredits(autoDriveAdmin, account!.id, {
+          uploadBytes: 250,
+          expiresInDays: 30,
+          reason: 'pilot',
+        })
+      )._unsafeUnwrap()
 
       const seen = (
         await OrganizationsUseCases.getOverview(member, organizationId)
@@ -506,11 +513,16 @@ describe('Partner organization members, managed by its admins', () => {
         canManageMembers: false,
         credits: {
           purchasedBytesRemaining: '0',
-          // This month's allowance has been issued.
-          freeCreditBytesRemaining: '1000',
+          // This month's allowance has been issued, apart from the grant.
+          freeCreditBytesRemaining: '1250',
           monthlyFreeUploadBytes: '1000',
+          monthlyFreeBytesRemaining: '1000',
+          oneTimeFreeBytesRemaining: '250',
+          oneTimeFreeBytesGranted: '250',
+          oneTimeFreeGrantCount: 1,
         },
       })
+      expect(seen.credits.oneTimeFreeNextExpiry).not.toBeNull()
       // Members see each other by public ID, never by sign-in name.
       expect(seen.members).toEqual([
         { publicId: organizationAdmin.publicId, role: OrganizationRole.Admin },

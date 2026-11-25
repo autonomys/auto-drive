@@ -11,6 +11,7 @@ import {
   CreditBalance,
   UsageByApiKey,
   UsageByCustomerReference,
+  UsageFreeCreditChange,
   UsageReport,
 } from '@auto-drive/models';
 import { useNetwork } from '@/contexts/network';
@@ -28,7 +29,11 @@ import {
 } from '@/components/molecules/Table/TableBody';
 import { formatBytes } from '@/utils/number';
 import { formatCid } from '@/utils/table';
-import { describeBatchKind, describePayment, formatAi3 } from '@/utils/credits';
+import {
+  describeFreeCreditChange,
+  describePayment,
+  formatAi3,
+} from '@/utils/credits';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   defaultUsageDays,
@@ -44,13 +49,20 @@ const ai3 = (shannons: string) => formatAi3(BigInt(shannons));
 // Report ranges are whole UTC days, so dates show the UTC calendar day.
 dayjs.extend(utc);
 const day = (iso: string) => dayjs.utc(iso).format('MMM D, YYYY');
+const ZERO = BigInt(0);
+// A change in bytes, with its sign.
+const signed = (value: string) => {
+  const n = BigInt(value);
+  if (n === ZERO) return bytes('0');
+  return `${n > ZERO ? '+' : '−'} ${bytes((n < ZERO ? -n : n).toString())}`;
+};
 
 const EXPORTS = [
   { label: 'Summary', table: 'summary' },
   { label: 'API keys', table: 'apiKeys' },
   { label: 'Customer references', table: 'customerReferences' },
   { label: 'Purchases', table: 'purchases' },
-  { label: 'Free credits', table: 'freeCredits' },
+  { label: 'Free credit batches', table: 'freeCredits' },
   { label: 'Interactions', table: 'interactions' },
   { label: 'Full report (JSON)', table: 'report' },
 ] as const;
@@ -198,9 +210,21 @@ const Balance = ({
       <Stat
         label={free ? 'Granted' : 'Purchased'}
         value={`+ ${bytes(balance.granted)}`}
+        hint={free ? 'One-time grants and monthly issues' : undefined}
       />
+      {free && (
+        <Stat
+          label='Adjusted'
+          value={signed(balance.adjusted)}
+          hint='Changes to the monthly amount'
+        />
+      )}
       <Stat label='Consumed' value={`− ${bytes(balance.consumed)}`} />
-      <Stat label='Expired' value={`− ${bytes(balance.expired)}`} />
+      <Stat
+        label='Expired'
+        value={`− ${bytes(balance.expired)}`}
+        hint={free ? 'Ended unused' : undefined}
+      />
       {!free && (
         <Stat label='Refunded' value={`− ${bytes(balance.refunded)}`} />
       )}
@@ -377,44 +401,81 @@ const PurchasesTable = ({ report }: { report: UsageReport }) => (
   </div>
 );
 
-// Who granted the credits and why reach admins only.
-const FreeCreditsTable = ({ report }: { report: UsageReport }) => {
-  const admin = report.freeCredits.some((credit) => 'grantedBy' in credit);
+// Who granted the credits or changed the amount, and why, reach admins only.
+const FreeCreditHistory = ({
+  changes,
+}: {
+  changes: UsageFreeCreditChange[];
+}) => {
+  const admin = changes.some((change) => 'by' in change);
   return (
-    <div className='overflow-x-auto'>
-      <Table className='min-w-full'>
-        <TableHead>
-          <TableHeadRow>
-            <TableHeadCell>Granted</TableHeadCell>
-            <TableHeadCell>Kind</TableHeadCell>
-            <TableHeadCell>Size</TableHeadCell>
-            <TableHeadCell>Expires</TableHeadCell>
-            {admin && <TableHeadCell>By</TableHeadCell>}
-            {admin && <TableHeadCell>Reason</TableHeadCell>}
-          </TableHeadRow>
-        </TableHead>
-        <TableBody>
-          {report.freeCredits.map((credit) => (
-            <TableBodyRow key={credit.batchId}>
-              <TableBodyCell>{day(credit.grantedAt)}</TableBodyCell>
-              <TableBodyCell>
-                {describeBatchKind({
-                  kind: credit.kind,
-                  grantPeriod: credit.period,
-                })}
-              </TableBodyCell>
-              <TableBodyCell>{bytes(credit.bytes)}</TableBodyCell>
-              <TableBodyCell>{day(credit.expiresAt)}</TableBodyCell>
-              {admin && (
-                <TableBodyCell className='font-mono text-xs'>
-                  {credit.grantedBy ? formatCid(credit.grantedBy) : '—'}
-                </TableBodyCell>
-              )}
-              {admin && <TableBodyCell>{credit.reason ?? '—'}</TableBodyCell>}
-            </TableBodyRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className='space-y-2'>
+      <div className='overflow-x-auto'>
+        <Table className='min-w-full'>
+          <TableHead>
+            <TableHeadRow>
+              <TableHeadCell>When (UTC)</TableHeadCell>
+              <TableHeadCell>Change</TableHeadCell>
+              <TableHeadCell>Credits</TableHeadCell>
+              <TableHeadCell>Expires</TableHeadCell>
+              {admin && <TableHeadCell>By</TableHeadCell>}
+              {admin && <TableHeadCell>Reason</TableHeadCell>}
+            </TableHeadRow>
+          </TableHead>
+          <TableBody>
+            {changes.map((change, i) => {
+              const n = BigInt(change.bytes);
+              return (
+                <TableBodyRow key={`${change.at}-${change.type}-${i}`}>
+                  <TableBodyCell className='whitespace-nowrap'>
+                    {dayjs.utc(change.at).format('MMM D, YYYY HH:mm')}
+                  </TableBodyCell>
+                  <TableBodyCell>
+                    {describeFreeCreditChange(change, formatBytes)}
+                  </TableBodyCell>
+                  <TableBodyCell
+                    className={`whitespace-nowrap font-medium ${
+                      n > ZERO
+                        ? 'text-green-700 dark:text-green-400'
+                        : n < ZERO
+                          ? 'text-red-700 dark:text-red-400'
+                          : ''
+                    }`}
+                  >
+                    {signed(change.bytes)}
+                  </TableBodyCell>
+                  <TableBodyCell>
+                    {change.expiresAt ? day(change.expiresAt) : '—'}
+                  </TableBodyCell>
+                  {admin && (
+                    <TableBodyCell className='font-mono text-xs'>
+                      {change.by
+                        ? formatCid(change.by)
+                        : change.type === 'monthly'
+                          ? 'Monthly terms'
+                          : '—'}
+                    </TableBodyCell>
+                  )}
+                  {admin && (
+                    <TableBodyCell>{change.reason ?? '—'}</TableBodyCell>
+                  )}
+                </TableBodyRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <p className='text-xs text-gray-500'>
+        Newest first. Uploads are counted under Consumed above.
+        {changes.some((change) => change.type === 'monthly_change') && (
+          <>
+            {' '}
+            A change to the monthly amount applies at once: what is left of the
+            month&apos;s free credits ends, and the new amount less what the
+            month has used takes its place. Credits shows the difference.
+          </>
+        )}
+      </p>
     </div>
   );
 };
@@ -484,6 +545,7 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
     !!report &&
     (BigInt(report.uploads.freeCreditBytes) > BigInt(0) ||
       report.freeCredits.length > 0 ||
+      report.freeCreditChanges.length > 0 ||
       Object.values(report.freeCreditBalance ?? {}).some(
         (value) => BigInt(value) > BigInt(0),
       ));
@@ -583,6 +645,12 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             </Section>
           )}
 
+          {report.freeCreditChanges.length > 0 && (
+            <Section title='Free credit history'>
+              <FreeCreditHistory changes={report.freeCreditChanges} />
+            </Section>
+          )}
+
           <Section title='By API key'>
             <ApiKeysTable rows={report.apiKeys} />
           </Section>
@@ -596,12 +664,6 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
           <Section title='Credits purchased'>
             <PurchasesTable report={report} />
           </Section>
-
-          {report.freeCredits.length > 0 && (
-            <Section title='Free credits granted'>
-              <FreeCreditsTable report={report} />
-            </Section>
-          )}
         </>
       )}
     </div>

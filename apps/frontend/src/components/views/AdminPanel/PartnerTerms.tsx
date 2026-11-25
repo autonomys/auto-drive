@@ -32,13 +32,13 @@ import {
   TableBodyRow,
 } from '@/components/molecules/Table/TableBody';
 import { CopiableText } from '@/components/atoms/CopiableText';
-
-const GiB = 1024 ** 3;
+import { ByteAmountInput } from '@/components/molecules/ByteAmountInput';
+import { amountToBytes, bytesToAmount, ByteUnit } from '@/utils/byteUnits';
 
 const FIELD_LABEL = new Map([
   ['max_purchased_bytes', 'Max purchased credits'],
   ['credit_expiry_days', 'Credit expiry'],
-  ['monthly_free_upload_bytes', 'Monthly free uploads'],
+  ['monthly_free_upload_bytes', 'Monthly free credits'],
   ['upload_limit', 'Upload allowance'],
   ['download_limit', 'Download allowance'],
   ['model', 'Model'],
@@ -106,6 +106,12 @@ export const AdminDialog = ({
   </Transition>
 );
 
+// An optional byte amount: null when left empty, undefined when invalid.
+const optionalBytes = (value: { amount: string; unit: ByteUnit }) =>
+  value.amount.trim() === ''
+    ? null
+    : (amountToBytes(value.amount, value.unit) ?? undefined);
+
 const TermsModal = ({
   account,
   onClose,
@@ -117,46 +123,88 @@ const TermsModal = ({
 }) => {
   const { api } = useNetwork();
   const [model, setModel] = useState(account.model);
-  const [downloadGiB, setDownloadGiB] = useState(
-    String(account.downloadLimit / GiB),
+  const [download, setDownload] = useState(() =>
+    bytesToAmount(account.downloadLimit),
   );
-  const [maxGiB, setMaxGiB] = useState(
+  const [max, setMax] = useState(() =>
     account.maxPurchasedBytes === null
-      ? ''
-      : String(account.maxPurchasedBytes / GiB),
+      ? { amount: '', unit: 'GB' as ByteUnit }
+      : bytesToAmount(account.maxPurchasedBytes),
   );
   const [expiryDays, setExpiryDays] = useState(
     account.creditExpiryDays === null ? '' : String(account.creditExpiryDays),
   );
-  const [monthlyFreeGiB, setMonthlyFreeGiB] = useState(
-    String(account.monthlyFreeUploadBytes / GiB),
+  const [monthlyFree, setMonthlyFree] = useState(() =>
+    bytesToAmount(account.monthlyFreeUploadBytes),
+  );
+  const [grantAmount, setGrantAmount] = useState({
+    amount: '',
+    unit: 'GB' as ByteUnit,
+  });
+  const [grantDays, setGrantDays] = useState(
+    String(
+      account.creditExpiryDays ?? account.defaultCreditTerms.creditExpiryDays,
+    ),
   );
   const [reason, setReason] = useState('');
 
-  const download = Number(downloadGiB);
-  const max = Number(maxGiB);
+  const monthly = model === AccountModel.Monthly;
+  const downloadBytes = amountToBytes(download.amount, download.unit);
+  const maxBytes = optionalBytes(max);
   const days = Number(expiryDays);
-  const monthlyFree = Number(monthlyFreeGiB);
+  const monthlyFreeBytes = amountToBytes(monthlyFree.amount, monthlyFree.unit);
+  // One-off accounts get one-time free credits, granted on save.
+  const grantBytes = monthly ? null : optionalBytes(grantAmount);
+  const grantExpiryDays = Number(grantDays);
+  const granting = typeof grantBytes === 'number' && grantBytes > 0;
+  // Switching to one-off ends the monthly free credits.
+  const endsMonthly = !monthly && account.monthlyFreeUploadBytes > 0;
+
   const valid =
-    downloadGiB.trim() !== '' &&
-    download >= 0 &&
-    (maxGiB.trim() === '' || max > 0) &&
+    downloadBytes !== null &&
+    maxBytes !== undefined &&
+    (maxBytes === null || maxBytes > 0) &&
     (expiryDays.trim() === '' || (Number.isInteger(days) && days > 0)) &&
-    monthlyFreeGiB.trim() !== '' &&
-    monthlyFree >= 0;
+    (!monthly || monthlyFreeBytes !== null) &&
+    grantBytes !== undefined &&
+    (!granting ||
+      (Number.isInteger(grantExpiryDays) &&
+        grantExpiryDays >= 1 &&
+        grantExpiryDays <= 36500 &&
+        reason.trim() !== ''));
 
   const { mutate: save, isPending } = useMutation({
-    // A partner account has no free upload allowance, so the upload limit
-    // stays 0. Its free uploads are monthly free credits.
-    mutationFn: () =>
-      api.updateAccount(account.id, model, 0, Math.round(download * GiB), {
-        maxPurchasedBytes: maxGiB.trim() === '' ? null : Math.round(max * GiB),
+    mutationFn: async () => {
+      // A partner account has no free upload allowance, so the upload limit
+      // stays 0. Its free uploads are free credits.
+      await api.updateAccount(account.id, model, 0, downloadBytes!, {
+        maxPurchasedBytes: maxBytes ?? null,
         creditExpiryDays: expiryDays.trim() === '' ? null : days,
-        monthlyFreeUploadBytes: Math.round(monthlyFree * GiB),
+        monthlyFreeUploadBytes: monthly ? monthlyFreeBytes! : 0,
         reason: reason.trim() || undefined,
-      }),
-    onSuccess: () => {
-      toast.success('Terms updated');
+      });
+      if (!granting) return { granted: false, grantError: null };
+      try {
+        await api.grantFreeCredits(account.id, {
+          uploadBytes: grantBytes,
+          expiresInDays: grantExpiryDays,
+          reason: reason.trim(),
+        });
+        return { granted: true, grantError: null };
+      } catch (error) {
+        return { granted: false, grantError: error as Error };
+      }
+    },
+    onSuccess: ({ granted, grantError }) => {
+      if (grantError) {
+        toast.error(
+          `Terms saved, but the free credits were not granted: ${grantError.message}`,
+        );
+      } else {
+        toast.success(
+          granted ? 'Terms saved and free credits granted' : 'Terms updated',
+        );
+      }
       onSaved();
       onClose();
     },
@@ -165,6 +213,7 @@ const TermsModal = ({
 
   const inputClass =
     'w-full rounded border border-border bg-background px-2 py-1 text-foreground';
+  const noteClass = 'mt-1 block text-xs text-gray-500';
 
   return (
     <AdminDialog title='Edit terms' onClose={onClose}>
@@ -182,31 +231,82 @@ const TermsModal = ({
             value={model}
             onChange={(e) => setModel(e.target.value as AccountModel)}
           >
-            <option value={AccountModel.Monthly}>
-              Monthly (allowance resets each month)
-            </option>
+            <option value={AccountModel.Monthly}>Monthly</option>
             <option value={AccountModel.OneOff}>One-off</option>
           </select>
+          <span className={noteClass}>
+            {monthly
+              ? 'Free credits are issued every UTC month and the download allowance resets monthly.'
+              : 'Free credits are granted as one-time amounts and the download allowance is not renewed.'}
+          </span>
         </label>
-        <label className='block text-sm text-foreground'>
-          Download allowance (GiB)
-          <input
-            type='text'
-            className={inputClass}
-            value={downloadGiB}
-            onChange={(e) => setDownloadGiB(e.target.value)}
-          />
-        </label>
-        <label className='block text-sm text-foreground'>
-          Max purchased credits held (GiB, empty for the default)
-          <input
-            type='text'
-            className={inputClass}
-            placeholder={`Default (${formatBytes(account.defaultCreditTerms.maxPurchasedBytes)})`}
-            value={maxGiB}
-            onChange={(e) => setMaxGiB(e.target.value)}
-          />
-        </label>
+
+        <fieldset className='space-y-3 rounded-lg border border-gray-200 p-3'>
+          <legend className='px-1 text-sm font-medium text-foreground'>
+            Free credits
+          </legend>
+          {monthly ? (
+            <ByteAmountInput
+              label='Monthly free credits (0 for none)'
+              amount={monthlyFree.amount}
+              unit={monthlyFree.unit}
+              onChange={setMonthlyFree}
+            >
+              <span className={noteClass}>
+                A change applies at once: what is left of this month&apos;s
+                ends, and the new amount less what this month has used replaces
+                it.
+              </span>
+            </ByteAmountInput>
+          ) : (
+            <>
+              {endsMonthly && (
+                <p className='rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'>
+                  This stops the monthly free credits of{' '}
+                  {formatBytes(account.monthlyFreeUploadBytes)}: what is left of
+                  this month&apos;s ends now.
+                </p>
+              )}
+              <ByteAmountInput
+                label='One-time free credits to grant now (optional)'
+                amount={grantAmount.amount}
+                unit={grantAmount.unit}
+                placeholder='None'
+                onChange={setGrantAmount}
+              >
+                <span className={noteClass}>
+                  Added to what was granted before, and listed under Free
+                  Credits. Granted credits can&apos;t be taken back.
+                </span>
+              </ByteAmountInput>
+              {granting && (
+                <label className='block text-sm text-foreground'>
+                  Expires after (days)
+                  <input
+                    type='text'
+                    className={inputClass}
+                    value={grantDays}
+                    onChange={(e) => setGrantDays(e.target.value)}
+                  />
+                </label>
+              )}
+            </>
+          )}
+        </fieldset>
+
+        <ByteAmountInput
+          label='Download allowance'
+          amount={download.amount}
+          unit={download.unit}
+          onChange={setDownload}
+        />
+        <ByteAmountInput
+          label='Max purchased credits held (empty for the default)'
+          amount={max.amount}
+          unit={max.unit}
+          placeholder={`Default (${formatBytes(account.defaultCreditTerms.maxPurchasedBytes)})`}
+          onChange={setMax}
+        />
         <label className='block text-sm text-foreground'>
           Credit expiry for new purchases (days, empty for the default)
           <input
@@ -218,17 +318,7 @@ const TermsModal = ({
           />
         </label>
         <label className='block text-sm text-foreground'>
-          Monthly free uploads (GiB, 0 for none). A change applies at once: this
-          month gets the new amount less what has been used this month.
-          <input
-            type='text'
-            className={inputClass}
-            value={monthlyFreeGiB}
-            onChange={(e) => setMonthlyFreeGiB(e.target.value)}
-          />
-        </label>
-        <label className='block text-sm text-foreground'>
-          Reason (optional)
+          {granting ? 'Reason (required for a grant)' : 'Reason (optional)'}
           <input
             type='text'
             className={inputClass}
@@ -243,7 +333,11 @@ const TermsModal = ({
             variant='primary'
             disabled={!valid || isPending}
           >
-            {isPending ? 'Saving…' : 'Save'}
+            {isPending
+              ? 'Saving…'
+              : granting
+                ? `Save and grant ${formatBytes(grantBytes)}`
+                : 'Save'}
           </Button>
         </div>
       </form>
@@ -274,7 +368,20 @@ export const PartnerTerms = ({
     queryFn: () => api.getAccountTermsChanges(account.id),
   });
 
+  // Shared with the Free Credits section, which loads the same list.
+  const { data: freeCredits } = useQuery({
+    queryKey: [
+      'adminAccountFreeCredits',
+      account.id,
+      account.monthlyFreeUploadBytes,
+    ],
+    queryFn: () => api.getAccountFreeCredits(account.id),
+  });
+  const grants = freeCredits?.filter((c) => c.kind === 'free_one_time');
+  const monthly = account.model === AccountModel.Monthly;
+
   const terms = [
+    ['Model', monthly ? 'Monthly' : 'One-off'],
     [
       'Free upload allowance',
       // Partner accounts created before #890 still have one until edited.
@@ -282,12 +389,35 @@ export const PartnerTerms = ({
         ? 'None, uploads use credits'
         : `${formatBytes(account.uploadLimit)} (saving the terms sets it to 0)`,
     ],
-    [
-      'Monthly free uploads',
-      account.monthlyFreeUploadBytes === 0
-        ? 'None'
-        : `${formatBytes(account.monthlyFreeUploadBytes)} per UTC month, used before purchased credits`,
-    ],
+    // A one-off account has no monthly free credits.
+    ...(monthly || account.monthlyFreeUploadBytes > 0
+      ? [
+          [
+            'Monthly free credits',
+            account.monthlyFreeUploadBytes === 0
+              ? 'None'
+              : `${formatBytes(account.monthlyFreeUploadBytes)} per UTC month`,
+          ],
+        ]
+      : []),
+    // Shown on the monthly model only once there are any.
+    ...(!monthly || (grants && grants.length > 0)
+      ? [
+          [
+            'One-time free credits',
+            !grants
+              ? '…'
+              : grants.length === 0
+                ? 'None granted'
+                : `${formatBytes(
+                    grants.reduce(
+                      (total, c) => total + Number(c.uploadBytesOriginal),
+                      0,
+                    ),
+                  )} in ${grants.length} grant${grants.length === 1 ? '' : 's'}`,
+          ],
+        ]
+      : []),
     [
       'Download allowance',
       `${formatBytes(account.downloadLimit)} (${account.model === AccountModel.Monthly ? 'resets monthly' : 'one-off'})`,
@@ -390,6 +520,10 @@ export const PartnerTerms = ({
           onClose={() => setEditing(false)}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: changesKey });
+            // A save can grant free credits or end the month's.
+            queryClient.invalidateQueries({
+              queryKey: ['adminAccountFreeCredits', account.id],
+            });
             onChanged();
           }}
         />

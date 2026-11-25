@@ -174,6 +174,15 @@ const getBalance = async (
      ), batches AS (
        SELECT pc.purchased_at,
               pc.upload_bytes_original AS original,
+              -- Monthly free credits issued by a change to the monthly
+              -- amount, in its transaction, and those it ended: adjusted,
+              -- not granted or expired.
+              (pc.grant_period IS NOT NULL AND EXISTS (
+                SELECT 1 FROM account_terms_changes t
+                WHERE t.account_id = pc.account_id
+                  AND t.field = 'monthly_free_upload_bytes'
+                  AND t.created_at = pc.purchased_at)) AS by_change,
+              pc.superseded_at IS NOT NULL AS superseded,
               CASE
                 WHEN pc.refunded_at IS NULL THEN pc.upload_bytes_remaining
                 ELSE COALESCE(pc.refunded_upload_bytes,
@@ -191,11 +200,17 @@ const getBalance = async (
        COALESCE(SUM(leftover + since_from) FILTER (
          WHERE purchased_at < $2 AND ended_at >= $2), 0)::text AS opening,
        COALESCE(SUM(original) FILTER (
-         WHERE purchased_at >= $2 AND purchased_at < $3), 0)::text AS granted,
+         WHERE NOT by_change AND purchased_at >= $2 AND purchased_at < $3),
+         0)::text AS granted,
+       (COALESCE(SUM(original) FILTER (
+          WHERE by_change AND purchased_at >= $2 AND purchased_at < $3), 0)
+        - COALESCE(SUM(leftover) FILTER (
+          WHERE superseded AND ended_at >= $2 AND ended_at < $3), 0))::text
+         AS adjusted,
        COALESCE(SUM(since_from - since_to), 0)::text AS consumed,
        COALESCE(SUM(leftover) FILTER (
-         WHERE NOT refunded AND ended_at >= $2 AND ended_at < $3), 0)::text
-         AS expired,
+         WHERE NOT refunded AND NOT superseded
+           AND ended_at >= $2 AND ended_at < $3), 0)::text AS expired,
        COALESCE(SUM(leftover) FILTER (
          WHERE refunded AND ended_at >= $2 AND ended_at < $3), 0)::text
          AS refunded,
@@ -356,10 +371,75 @@ const getFreeCredits = async (
   return result.rows
 }
 
+export type FreeCreditChangeBatchRow = {
+  batch_id: string
+  purchased_at: Date
+  superseded_at: Date | null
+  expires_at: Date
+  grant_period: string | null
+  upload_bytes_original: string
+  upload_bytes_remaining: string
+  granted_by: string | null
+  grant_reason: string | null
+}
+
+export type MonthlyTermsChangeRow = {
+  created_at: Date
+  old_value: string | null
+  new_value: string | null
+  changed_by: string
+  reason: string | null
+}
+
+/**
+ * What the free credit changes in the range are made of: the free batches
+ * granted, ended by a change to the monthly amount, or expired unused in it,
+ * and the changes to the monthly amount. A change writes its terms change,
+ * ends the month's batch and issues the new one in one transaction, so all
+ * three have the same time.
+ */
+const getFreeCreditChanges = async (
+  accountId: string,
+  from: Date,
+  to: Date,
+): Promise<{
+  batches: FreeCreditChangeBatchRow[]
+  termsChanges: MonthlyTermsChangeRow[]
+}> => {
+  const db = await getDatabase()
+  const [batches, termsChanges] = await Promise.all([
+    db.query<FreeCreditChangeBatchRow>(
+      `SELECT id AS batch_id, purchased_at, superseded_at, expires_at,
+              to_char(grant_period, 'YYYY-MM-DD') AS grant_period,
+              upload_bytes_original, upload_bytes_remaining,
+              granted_by, grant_reason
+       FROM purchased_credits
+       WHERE account_id = $1
+         AND intent_id IS NULL
+         AND ((purchased_at >= $2 AND purchased_at < $3)
+           OR (superseded_at >= $2 AND superseded_at < $3)
+           OR (superseded_at IS NULL AND upload_bytes_remaining > 0
+               AND expires_at >= $2 AND expires_at < $3))`,
+      [accountId, from, to],
+    ),
+    db.query<MonthlyTermsChangeRow>(
+      `SELECT created_at, old_value, new_value, changed_by, reason
+       FROM account_terms_changes
+       WHERE account_id = $1
+         AND field = 'monthly_free_upload_bytes'
+         AND created_at >= $2
+         AND created_at < $3`,
+      [accountId, from, to],
+    ),
+  ])
+  return { batches: batches.rows, termsChanges: termsChanges.rows }
+}
+
 export const usageReportsRepository = {
   getInteractionGroups,
   getPurchases,
   getFreeCredits,
+  getFreeCreditChanges,
   getBalance,
   getInteractionsPage,
   getAccountSummaries,
