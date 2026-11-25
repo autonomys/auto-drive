@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import {
   Loader,
   ArrowLeft,
@@ -348,14 +348,15 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                       : 'Free storage (monthly)'
                   }
                 >
-                  {formatBytes(Number(account.uploadLimit))}
+                  {formatStorageSize(Number(account.uploadLimit))}
                 </InfoCard>
               )}
               <InfoCard label='Upload credits left'>
-                {formatBytes(Number(account.pendingUploadCredits))}
+                {formatStorageSize(Number(account.pendingUploadCredits))}
                 {account.freeUploadCredits > 0 && (
                   <span className='block text-xs font-normal text-gray-500'>
-                    incl. {formatBytes(account.freeUploadCredits)} free credits
+                    incl. {formatStorageSize(account.freeUploadCredits)} free
+                    credits
                   </span>
                 )}
               </InfoCard>
@@ -366,19 +367,19 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                     : 'Download allowance (monthly)'
                 }
               >
-                {formatBytes(Number(account.downloadLimit))}
+                {formatStorageSize(Number(account.downloadLimit))}
               </InfoCard>
               <InfoCard label='Downloads left'>
-                {formatBytes(Number(account.pendingDownloadCredits))}
+                {formatStorageSize(Number(account.pendingDownloadCredits))}
               </InfoCard>
               <InfoCard label='All-time uploads'>
-                {formatBytes(uploadStats.size)}
+                {formatStorageSize(uploadStats.size)}
                 <span className='block text-xs font-normal text-gray-500'>
                   {uploadStats.count.toLocaleString()} uploads
                 </span>
               </InfoCard>
               <InfoCard label='All-time downloads'>
-                {formatBytes(downloadStats.size)}
+                {formatStorageSize(downloadStats.size)}
                 <span className='block text-xs font-normal text-gray-500'>
                   {downloadStats.count.toLocaleString()} downloads
                 </span>
@@ -494,13 +495,13 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                 <div className='rounded-lg border border-gray-200 p-4'>
                   <p className='text-xs text-gray-500'>Bytes Purchased</p>
                   <p className='mt-1 font-medium'>
-                    {formatBytes(Number(purchases.bytesPurchased))}
+                    {formatStorageSize(Number(purchases.bytesPurchased))}
                   </p>
                 </div>
                 <div className='rounded-lg border border-gray-200 p-4'>
                   <p className='text-xs text-gray-500'>Bytes Remaining</p>
                   <p className='mt-1 font-medium'>
-                    {formatBytes(Number(purchases.bytesRemaining))}
+                    {formatStorageSize(Number(purchases.bytesRemaining))}
                   </p>
                 </div>
                 <div className='rounded-lg border border-gray-200 p-4'>
@@ -547,10 +548,14 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                               </Link>
                             </TableBodyCell>
                             <TableBodyCell>
-                              {formatBytes(Number(batch.uploadBytesOriginal))}
+                              {formatStorageSize(
+                                Number(batch.uploadBytesOriginal),
+                              )}
                             </TableBodyCell>
                             <TableBodyCell>
-                              {formatBytes(Number(batch.uploadBytesRemaining))}
+                              {formatStorageSize(
+                                Number(batch.uploadBytesRemaining),
+                              )}
                             </TableBodyCell>
                             <TableBodyCell>
                               {describePayment(batch).amountPaid}
@@ -671,7 +676,7 @@ export const OrganizationDetails = ({ accountId }: Props) => {
                       )}
                     </TableBodyCell>
                     <TableBodyCell className='font-medium'>
-                      {formatBytes(Number(interaction.size))}
+                      {formatStorageSize(Number(interaction.size))}
                     </TableBodyCell>
                     <TableBodyCell>
                       <span className='flex items-center gap-1 text-sm text-gray-500'>

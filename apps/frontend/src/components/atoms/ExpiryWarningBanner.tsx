@@ -56,8 +56,8 @@ export const ExpiryWarningBanner = () => {
         Purchased credits expiring soon!
       </h3>
       <p className='mt-1 text-sm'>
-        {totalMB > 0 ? `${totalMB.toFixed(0)} MiB of` : 'Some of your'}{' '}
-        purchased storage credits will expire
+        {totalMB > 0 ? `${totalMB.toFixed(0)} MB of` : 'Some of your'} purchased
+        storage credits will expire
         {daysLeft !== null && daysLeft > 0
           ? ` in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
           : ' today'}

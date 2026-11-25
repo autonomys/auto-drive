@@ -21,6 +21,7 @@ import { AccountsUseCases } from '../../../src/core/users/accounts.js'
 import { CreditsUseCases } from '../../../src/core/users/credits.js'
 import { IntentsUseCases } from '../../../src/core/users/intents.js'
 import { OrganizationsUseCases } from '../../../src/core/users/organizations.js'
+import { UsageReportsUseCases } from '../../../src/core/users/usageReports.js'
 import { AuthManager } from '../../../src/infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
 import { purchasedCreditsRepository } from '../../../src/infrastructure/repositories/users/purchasedCredits.js'
@@ -287,6 +288,82 @@ describe('Partner free credits', () => {
       ])
       for (const ended of monthly.filter((b) => b.supersededAt)) {
         expect(ended.expiresAt.getTime()).toBe(ended.supersededAt!.getTime())
+      }
+    })
+
+    it('reports changes to the amount as adjustments, in the account report and the admin list', async () => {
+      const attributionStart = config.usageReports.attributionStart
+      const from = new Date(Date.now() - DAY)
+      config.usageReports.attributionStart = from
+      try {
+        // Set from 0 to 100: the month's first issue, granted.
+        const { member, account } = await createMonthlyPartner(100)
+        await upload(member, 30n)
+        // Raised: the 70 left end and 300 less the 30 used replace them.
+        await setTerms(account.id, { monthlyFreeUploadBytes: 300 })
+        // Lowered below the 30 used: the 270 left end, nothing replaces them.
+        await setTerms(account.id, { monthlyFreeUploadBytes: 20 })
+        // Raised: 150 less the 30 used.
+        await setTerms(account.id, { monthlyFreeUploadBytes: 150 })
+
+        const range = { from, to: new Date(Date.now() + DAY) }
+        const report = (
+          await UsageReportsUseCases.getUsageReport(
+            admin as UserWithOrganization,
+            account.id,
+            range,
+          )
+        )._unsafeUnwrap()
+        expect(report.freeCreditBalance).toEqual({
+          opening: '0',
+          granted: '100',
+          adjusted: '50',
+          consumed: '30',
+          expired: '0',
+          refunded: '0',
+          closing: '120',
+        })
+        expect(report.freeCreditChanges).toMatchObject([
+          {
+            type: 'monthly_change',
+            bytes: '120',
+            monthlyBefore: '20',
+            monthlyAfter: '150',
+          },
+          {
+            type: 'monthly_change',
+            bytes: '-270',
+            monthlyBefore: '300',
+            monthlyAfter: '20',
+          },
+          {
+            type: 'monthly_change',
+            bytes: '200',
+            monthlyBefore: '100',
+            monthlyAfter: '300',
+          },
+          { type: 'monthly', bytes: '100' },
+          {
+            type: 'monthly_change',
+            bytes: '0',
+            monthlyBefore: '0',
+            monthlyAfter: '100',
+          },
+        ])
+
+        // The admin list nets the changes the same way: granted + adjusted.
+        const summaries = (
+          await UsageReportsUseCases.adminGetAccountUsageSummaries(
+            admin,
+            range,
+            { partnersOnly: true, limit: 100 },
+          )
+        )._unsafeUnwrap()
+        expect(
+          summaries.find((s) => s.accountId === account.id),
+        ).toMatchObject({ freeCreditsGrantedBytes: '150' })
+      } finally {
+        config.usageReports.attributionStart = attributionStart
       }
     })
 
@@ -659,6 +736,36 @@ describe('Partner free credits', () => {
       expect(
         (await accountsRepository.getById(personal.id))?.monthlyFreeUploadBytes,
       ).toBe(0)
+    })
+
+    it('belongs to the monthly model: one-off ends it and refuses it', async () => {
+      const { member, account } = await createMonthlyPartner(100)
+      await upload(member, 30n)
+      const oneOff = (monthlyFreeUploadBytes?: number) =>
+        AccountsUseCases.updateAccount(
+          admin,
+          account.id,
+          AccountModel.OneOff,
+          0,
+          1000,
+          { monthlyFreeUploadBytes },
+        )
+
+      // Kept from before, or set: refused, and nothing changes.
+      for (const bytes of [undefined, 100]) {
+        expect((await oneOff(bytes))._unsafeUnwrapErr()).toBeInstanceOf(
+          BadRequestError,
+        )
+      }
+      expect(await freeCreditsLeft(member)).toBe(70n)
+
+      // Switching with the amount at 0 ends this month's credits at once.
+      expect((await oneOff(0)).isOk()).toBe(true)
+      expect(await freeCreditsLeft(member)).toBe(0n)
+      expect(await accountsRepository.getById(account.id)).toMatchObject({
+        model: AccountModel.OneOff,
+        monthlyFreeUploadBytes: 0,
+      })
     })
 
     it('still keeps a partner upload limit at 0', async () => {

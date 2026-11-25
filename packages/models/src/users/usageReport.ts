@@ -50,6 +50,12 @@ export type UsageReport = {
   /** Free credit batches granted in the range, oldest first. */
   freeCredits: UsageFreeCredit[];
   /**
+   * What changed the free credit balance in the range, apart from uploads,
+   * newest first: grants, monthly issues, changes to the monthly amount and
+   * credits that expired unused.
+   */
+  freeCreditChanges: UsageFreeCreditChange[];
+  /**
    * Purchased credits only. Null when the range starts before attribution.
    */
   balance: CreditBalance | null;
@@ -140,12 +146,48 @@ export type UsageFreeCredit = {
 };
 
 /**
+ * A change to an account's free credits.
+ *
+ * - `grant`: one-time free credits an admin granted.
+ * - `monthly`: a month's free credits, issued at the monthly amount.
+ * - `monthly_change`: an admin changed the monthly amount. The month's
+ *   credits left end and the new amount less what the month has used takes
+ *   their place, so `bytes` is the difference: positive when raised,
+ *   negative when lowered. 0 when the month had no credits issued yet: the
+ *   month's first issue, at the new amount, is then listed as `monthly`.
+ * - `expiry`: credits that ended unused.
+ */
+export type UsageFreeCreditChange = {
+  at: string;
+  type: "grant" | "monthly" | "monthly_change" | "expiry";
+  /** Bytes added (positive) or taken away (negative). */
+  bytes: string;
+  /** The UTC month of monthly free credits, as its first day (YYYY-MM-DD). */
+  period: string | null;
+  /** When the credits this change added expire; null if it added none. */
+  expiresAt: string | null;
+  /** `monthly_change` only: the monthly amount before and after. */
+  monthlyBefore: string | null;
+  monthlyAfter: string | null;
+  /** Admins only: who granted the credits or changed the amount, and why. */
+  by?: string | null;
+  reason?: string | null;
+};
+
+/**
  * Upload bytes in one kind of credit batch, purchased or free: opening +
- * granted − consumed − expired − refunded = closing.
+ * granted + adjusted − consumed − expired − refunded = closing.
  */
 export type CreditBalance = {
   opening: string;
   granted: string;
+  /**
+   * Free credits only, else 0: what changes to the monthly amount added
+   * (positive) or took away (negative). Credits they ended are counted here,
+   * not as expired, and credits they issued in place of those here, not as
+   * granted. A month's first issue is granted, whatever issued it.
+   */
+  adjusted: string;
   consumed: string;
   expired: string;
   refunded: string;
@@ -181,6 +223,10 @@ export type AccountUsageSummary = {
   downloadBytes: string;
   /** Bytes of credits purchased in the range. */
   grantedBytes: string;
-  /** Bytes of free credits granted in the range. */
+  /**
+   * Bytes of free credits granted in the range, net of changes to the monthly
+   * amount: the account report's granted + adjusted. Negative when a change
+   * took away more than the range granted.
+   */
   freeCreditsGrantedBytes: string;
 };

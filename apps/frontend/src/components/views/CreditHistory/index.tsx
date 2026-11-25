@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
 import { useUserStore } from '../../../globalStates/user';
-import { formatBytes } from '../../../utils/number';
+import { formatStorageSize } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
   daysUntilExpiry,
@@ -37,7 +37,8 @@ const ConsumptionBar = ({ batch }: { batch: ExpiringCreditBatch }) => {
         />
       </div>
       <p className='text-xs text-muted-foreground'>
-        {formatBytes(consumed, 1)} used of {formatBytes(original, 1)} ({pct}%)
+        {formatStorageSize(consumed, 1)} used of{' '}
+        {formatStorageSize(original, 1)} ({pct}%)
       </p>
     </div>
   );
@@ -78,7 +79,7 @@ const BatchCard = ({ batch }: { batch: ExpiringCreditBatch }) => {
 
         <div className='shrink-0 text-right text-sm'>
           <p className='font-medium text-foreground'>
-            {formatBytes(Number(BigInt(batch.uploadBytesRemaining)), 1)}{' '}
+            {formatStorageSize(Number(BigInt(batch.uploadBytesRemaining)), 1)}{' '}
             remaining
           </p>
         </div>

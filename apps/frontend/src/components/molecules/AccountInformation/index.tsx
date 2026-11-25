@@ -1,6 +1,6 @@
 import { utcToLocalRelativeTime } from '../../../utils/time';
 import { AccountModel } from '@auto-drive/models';
-import { formatBytes } from '../../../utils/number';
+import { formatStorageSize } from '../../../utils/number';
 import Link from 'next/link';
 
 interface CreditLimitsProps {
@@ -85,7 +85,7 @@ export const AccountInformation = ({
           <div className='flex items-center justify-between'>
             <span className='text-xs font-medium'>Free storage</span>
             <span className='text-xs text-muted-foreground'>
-              {formatBytes(Math.max(0, uploadPending), 2)} left
+              {formatStorageSize(Math.max(0, uploadPending), 2)} left
             </span>
           </div>
           <div className='h-1.5 w-full rounded-full bg-muted'>
@@ -95,8 +95,8 @@ export const AccountInformation = ({
             />
           </div>
           <div className='text-xs text-muted-foreground'>
-            {formatBytes(Math.max(0, freeUsed), 2)} used of{' '}
-            {formatBytes(uploadLimit, 2)} free quota
+            {formatStorageSize(Math.max(0, freeUsed), 2)} used of{' '}
+            {formatStorageSize(uploadLimit, 2)} free quota
           </div>
           {model === AccountModel.Monthly && (
             <div className='text-xs text-muted-foreground'>
@@ -116,7 +116,7 @@ export const AccountInformation = ({
           <div className='flex items-center justify-between'>
             <span className='text-xs font-medium'>Free credits</span>
             <span className='text-xs font-medium'>
-              {formatBytes(freeCreditBytesRemaining, 2)} left
+              {formatStorageSize(freeCreditBytesRemaining, 2)} left
             </span>
           </div>
           <div className='text-xs text-muted-foreground'>
@@ -126,7 +126,7 @@ export const AccountInformation = ({
               so they are not added on top. */}
           {monthlyFreeUploadBytes > 0 && (
             <div className='text-xs text-muted-foreground'>
-              {formatBytes(monthlyFreeUploadBytes, 2)} a month, renews in{' '}
+              {formatStorageSize(monthlyFreeUploadBytes, 2)} a month, renews in{' '}
               {utcToLocalRelativeTime(freeCreditsIssueDate.toISOString())}
             </div>
           )}
@@ -153,7 +153,7 @@ export const AccountInformation = ({
           <div className='flex items-center justify-between'>
             <span className='text-xs font-medium'>Purchased credits</span>
             <span className='text-xs font-medium'>
-              {formatBytes(purchasedBytesRemaining, 2)} left
+              {formatStorageSize(purchasedBytesRemaining, 2)} left
             </span>
           </div>
 
@@ -168,8 +168,8 @@ export const AccountInformation = ({
                 />
               </div>
               <div className='text-xs text-muted-foreground'>
-                {formatBytes(purchasedUsed, 2)} used of{' '}
-                {formatBytes(purchasedBytesTotal, 2)} purchased
+                {formatStorageSize(purchasedUsed, 2)} used of{' '}
+                {formatStorageSize(purchasedBytesTotal, 2)} purchased
               </div>
             </>
           )}

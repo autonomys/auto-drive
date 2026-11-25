@@ -148,9 +148,9 @@ export const CreditsUpdateModal = ({
                           setDownloadCreditsUnit(Number(e.target.value))
                         }
                       >
-                        <option value={1024 ** 2}>MiB</option>
-                        <option value={1024 ** 3}>GiB</option>
-                        <option value={1024 ** 4}>TiB</option>
+                        <option value={1024 ** 2}>MB</option>
+                        <option value={1024 ** 3}>GB</option>
+                        <option value={1024 ** 4}>TB</option>
                       </select>
                     </div>
                     <div className='flex items-center space-x-2'>
@@ -168,9 +168,9 @@ export const CreditsUpdateModal = ({
                           setUploadCreditsUnit(Number(e.target.value))
                         }
                       >
-                        <option value={1024 ** 2}>MiB</option>
-                        <option value={1024 ** 3}>GiB</option>
-                        <option value={1024 ** 4}>TiB</option>
+                        <option value={1024 ** 2}>MB</option>
+                        <option value={1024 ** 3}>GB</option>
+                        <option value={1024 ** 4}>TB</option>
                       </select>
                     </div>
                     <div className='flex justify-end'>

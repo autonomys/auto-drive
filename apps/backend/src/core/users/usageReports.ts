@@ -5,6 +5,7 @@ import {
   UsageByApiKey,
   UsageByCustomerReference,
   UsageFreeCredit,
+  UsageFreeCreditChange,
   UsageInteraction,
   UsagePurchase,
   UsageReport,
@@ -25,9 +26,11 @@ import {
 import { AuthManager } from '../../infrastructure/services/auth/index.js'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import {
+  FreeCreditChangeBatchRow,
   FreeCreditRow,
   InteractionGroup,
   InteractionRow,
+  MonthlyTermsChangeRow,
   PurchaseRow,
   usageReportsRepository,
 } from '../../infrastructure/repositories/users/usageReports.js'
@@ -261,6 +264,122 @@ const toFreeCredit = (row: FreeCreditRow, admin: boolean): UsageFreeCredit => ({
   ...(admin && { grantedBy: row.granted_by, reason: row.grant_reason }),
 })
 
+// The UTC month `date` is in, as its first day (YYYY-MM-DD).
+const utcMonth = (date: Date) => `${date.toISOString().slice(0, 7)}-01`
+
+// When the monthly free credits of a UTC month end: when the next one starts.
+const monthEnd = (period: string) => {
+  const start = new Date(`${period}T00:00:00Z`)
+  return new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+  ).toISOString()
+}
+
+/**
+ * The free credit changes in the range, newest first, which add up to the
+ * free credit balance's granted, adjusted and expired. A change to the
+ * monthly amount is matched to the batches it ended and issued by time, as
+ * they are written in its transaction.
+ */
+const toFreeCreditChanges = (
+  {
+    batches,
+    termsChanges,
+  }: {
+    batches: FreeCreditChangeBatchRow[]
+    termsChanges: MonthlyTermsChangeRow[]
+  },
+  from: Date,
+  to: Date,
+  admin: boolean,
+): UsageFreeCreditChange[] => {
+  const inRange = (date: Date | null) =>
+    date !== null && date >= from && date < to
+  const who = (by: string | null, reason: string | null) =>
+    admin ? { by, reason } : {}
+
+  const amountChanges = new Map<
+    number,
+    UsageFreeCreditChange & { delta: bigint }
+  >()
+  const amountChangeAt = (at: Date) => {
+    let change = amountChanges.get(at.getTime())
+    if (!change) {
+      change = {
+        at: at.toISOString(),
+        type: 'monthly_change',
+        bytes: '0',
+        delta: BigInt(0),
+        period: utcMonth(at),
+        expiresAt: null,
+        monthlyBefore: null,
+        monthlyAfter: null,
+        ...who(null, null),
+      }
+      amountChanges.set(at.getTime(), change)
+    }
+    return change
+  }
+  for (const row of termsChanges) {
+    Object.assign(amountChangeAt(row.created_at), {
+      monthlyBefore: row.old_value,
+      monthlyAfter: row.new_value,
+      ...who(row.changed_by, row.reason),
+    })
+  }
+
+  const changes: UsageFreeCreditChange[] = []
+  for (const row of batches) {
+    const period = row.grant_period
+    if (row.superseded_at && inRange(row.superseded_at)) {
+      const change = amountChangeAt(row.superseded_at)
+      change.delta -= BigInt(row.upload_bytes_remaining)
+      change.period = period
+    }
+    if (inRange(row.purchased_at)) {
+      if (row.by_change && period !== null) {
+        const change = amountChangeAt(row.purchased_at)
+        change.delta += BigInt(row.upload_bytes_original)
+        change.period = period
+        change.expiresAt = monthEnd(period)
+      } else {
+        changes.push({
+          at: row.purchased_at.toISOString(),
+          type: period === null ? 'grant' : 'monthly',
+          bytes: row.upload_bytes_original,
+          period,
+          expiresAt:
+            period === null ? row.expires_at.toISOString() : monthEnd(period),
+          monthlyBefore: null,
+          monthlyAfter: null,
+          ...who(row.granted_by, row.grant_reason),
+        })
+      }
+    }
+    if (
+      !row.superseded_at &&
+      inRange(row.expires_at) &&
+      BigInt(row.upload_bytes_remaining) > BigInt(0)
+    ) {
+      changes.push({
+        at: row.expires_at.toISOString(),
+        type: 'expiry',
+        bytes: `-${row.upload_bytes_remaining}`,
+        period,
+        expiresAt: null,
+        monthlyBefore: null,
+        monthlyAfter: null,
+        ...who(null, null),
+      })
+    }
+  }
+  for (const { delta, ...change } of amountChanges.values()) {
+    changes.push({ ...change, bytes: delta.toString() })
+  }
+
+  return changes.sort((a, b) => b.at.localeCompare(a.at))
+}
+
 const getUsageReport = async (
   executor: UserWithOrganization,
   accountId: string,
@@ -276,23 +395,30 @@ const getUsageReport = async (
   const { from, to } = resolved.value
   const { attributionStart } = config.usageReports
   const balanced = attributionStart && from >= attributionStart
-  const [groups, purchases, freeCredits, balance, freeCreditBalance] =
-    await Promise.all([
-      usageReportsRepository.getInteractionGroups(
-        accountId,
-        from,
-        to,
-        attributionStart,
-      ),
-      usageReportsRepository.getPurchases(accountId, from, to),
-      usageReportsRepository.getFreeCredits(accountId, from, to),
-      balanced
-        ? usageReportsRepository.getBalance(accountId, from, to, false)
-        : null,
-      balanced
-        ? usageReportsRepository.getBalance(accountId, from, to, true)
-        : null,
-    ])
+  const [
+    groups,
+    purchases,
+    freeCredits,
+    freeCreditChanges,
+    balance,
+    freeCreditBalance,
+  ] = await Promise.all([
+    usageReportsRepository.getInteractionGroups(
+      accountId,
+      from,
+      to,
+      attributionStart,
+    ),
+    usageReportsRepository.getPurchases(accountId, from, to),
+    usageReportsRepository.getFreeCredits(accountId, from, to),
+    usageReportsRepository.getFreeCreditChanges(accountId, from, to),
+    balanced
+      ? usageReportsRepository.getBalance(accountId, from, to, false)
+      : null,
+    balanced
+      ? usageReportsRepository.getBalance(accountId, from, to, true)
+      : null,
+  ])
 
   const uploads = groups.filter((g) => g.type === 'upload')
   const purchased = uploads.filter((g) => g.source === 'purchased')
@@ -325,6 +451,12 @@ const getUsageReport = async (
     purchases: purchases.map(toPurchase),
     freeCredits: freeCredits.map((row) =>
       toFreeCredit(row, executor.role === UserRole.Admin),
+    ),
+    freeCreditChanges: toFreeCreditChanges(
+      freeCreditChanges,
+      from,
+      to,
+      executor.role === UserRole.Admin,
     ),
     balance,
     freeCreditBalance,
@@ -496,6 +628,7 @@ const usageReportCsv = (report: UsageReport, table: UsageReportTable) => {
         ['purchased_closing_balance_bytes', balance?.closing],
         ['free_credit_opening_balance_bytes', freeCreditBalance?.opening],
         ['free_credit_granted_bytes', freeCreditBalance?.granted],
+        ['free_credit_adjusted_bytes', freeCreditBalance?.adjusted],
         ['free_credit_consumed_bytes', freeCreditBalance?.consumed],
         ['free_credit_expired_bytes', freeCreditBalance?.expired],
         ['free_credit_closing_balance_bytes', freeCreditBalance?.closing],

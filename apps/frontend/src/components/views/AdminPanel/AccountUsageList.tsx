@@ -19,7 +19,7 @@ import {
   TableBodyCell,
 } from '@/components/molecules/Table/TableBody';
 import { UsageDaysPicker } from '@/components/views/UsageReport/UsageDaysPicker';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import { formatCid } from '@/utils/table';
 import { formatAi3 } from '@/utils/credits';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -30,7 +30,7 @@ import {
   UsageDays,
 } from '@/utils/usageReport';
 
-const bytes = (value: string) => formatBytes(Number(value));
+const bytes = (value: string) => formatStorageSize(Number(value));
 
 // The most rows the backend returns; a full page means the list is cut off.
 const ACCOUNT_LIMIT = 1000;

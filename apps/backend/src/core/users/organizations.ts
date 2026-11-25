@@ -690,9 +690,10 @@ const getOverview = async (
 
   // Issues this month's free credits, so the balance below includes them.
   await AccountsUseCases.ensureMonthlyFreeCredits(account)
-  const remaining = await purchasedCreditsRepository.getRemainingCredits(
-    account.id,
-  )
+  const [remaining, free] = await Promise.all([
+    purchasedCreditsRepository.getRemainingCredits(account.id),
+    purchasedCreditsRepository.getFreeCreditSummary(account.id),
+  ])
   const terms = AccountsUseCases.getCreditTerms(account)
 
   const viewerRole = roleOf(organization.value, executor.publicId)
@@ -718,6 +719,11 @@ const getOverview = async (
         remaining.purchasedNextExpiryDate?.toISOString() ?? null,
       freeCreditBytesRemaining: remaining.freeUploadBytesRemaining.toString(),
       monthlyFreeUploadBytes: account.monthlyFreeUploadBytes.toString(),
+      monthlyFreeBytesRemaining: free.monthlyRemaining.toString(),
+      oneTimeFreeBytesRemaining: free.oneTimeRemaining.toString(),
+      oneTimeFreeBytesGranted: free.oneTimeGranted.toString(),
+      oneTimeFreeGrantCount: free.oneTimeGrantCount,
+      oneTimeFreeNextExpiry: free.oneTimeNextExpiry?.toISOString() ?? null,
       maxPurchasedBytes: terms.maxBytes.toString(),
       creditExpiryDays: terms.expiryDays,
     },
