@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
-import { formatBytes } from '../../../utils/number';
+import { formatStorageSize } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
   ArrowLeft,
@@ -55,7 +55,10 @@ const EconomicsCard = ({
         Purchased upload bytes expiring
       </p>
       <p className='mt-1 text-2xl font-semibold text-foreground'>
-        {formatBytes(Number(BigInt(economics.totalExpiringUploadBytes)), 1)}
+        {formatStorageSize(
+          Number(BigInt(economics.totalExpiringUploadBytes)),
+          1,
+        )}
       </p>
     </div>
     <div className='rounded-lg border border-border bg-card p-4'>
@@ -63,7 +66,10 @@ const EconomicsCard = ({
         Purchased download bytes expiring
       </p>
       <p className='mt-1 text-2xl font-semibold text-foreground'>
-        {formatBytes(Number(BigInt(economics.totalExpiringDownloadBytes)), 1)}
+        {formatStorageSize(
+          Number(BigInt(economics.totalExpiringDownloadBytes)),
+          1,
+        )}
       </p>
     </div>
   </div>
@@ -269,10 +275,10 @@ const AccountBatchGroupSection = ({
           {group.userPublicIds.length > 1 &&
             ` (${group.userPublicIds.length} users)`}
           {group.walletCount > 1 && ` (${group.walletCount} wallets)`} ·{' '}
-          {formatBytes(group.totalPurchased, 1)} purchased ·{' '}
-          {formatBytes(group.totalRemaining, 1)} remaining ·{' '}
+          {formatStorageSize(group.totalPurchased, 1)} purchased ·{' '}
+          {formatStorageSize(group.totalRemaining, 1)} remaining ·{' '}
           <span className={group.totalExpiredUnused > 0 ? 'text-red-500' : ''}>
-            {formatBytes(group.totalExpiredUnused, 1)} expired
+            {formatStorageSize(group.totalExpiredUnused, 1)} expired
           </span>
         </span>
         {group.refundableCount > 0 && (
@@ -371,10 +377,10 @@ const AccountBatchGroupSection = ({
                     {formatDate(batch.purchasedAt)}
                   </td>
                   <td className='px-4 py-2 text-xs'>
-                    {formatBytes(original, 1)}
+                    {formatStorageSize(original, 1)}
                   </td>
                   <td className='px-4 py-2 text-xs'>
-                    {formatBytes(remaining, 1)}
+                    {formatStorageSize(remaining, 1)}
                   </td>
                   <td className='px-4 py-2'>
                     <div className='flex items-center gap-2'>

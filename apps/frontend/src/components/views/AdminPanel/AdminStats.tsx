@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import {
   Loader,
   TrendingUp,
@@ -415,7 +415,7 @@ export const AdminStats = () => {
                     Upload Size
                   </p>
                   <p className='text-2xl font-bold text-emerald-600 dark:text-emerald-400'>
-                    {formatBytes(stats.uploadSize)}
+                    {formatStorageSize(stats.uploadSize)}
                   </p>
                 </div>
               </div>
@@ -447,7 +447,7 @@ export const AdminStats = () => {
                     Download Size
                   </p>
                   <p className='text-2xl font-bold text-orange-600 dark:text-orange-400'>
-                    {formatBytes(stats.downloadSize)}
+                    {formatStorageSize(stats.downloadSize)}
                   </p>
                 </div>
               </div>
@@ -541,7 +541,7 @@ export const AdminStats = () => {
                           </Link>
                         </TableBodyCell>
                         <TableBodyCell className='font-semibold'>
-                          {formatBytes(account.totalSize)}
+                          {formatStorageSize(account.totalSize)}
                         </TableBodyCell>
                       </TableBodyRow>
                     ))
@@ -608,7 +608,7 @@ export const AdminStats = () => {
                           </Link>
                         </TableBodyCell>
                         <TableBodyCell className='font-semibold'>
-                          {formatBytes(account.totalSize)}
+                          {formatStorageSize(account.totalSize)}
                         </TableBodyCell>
                       </TableBodyRow>
                     ))
