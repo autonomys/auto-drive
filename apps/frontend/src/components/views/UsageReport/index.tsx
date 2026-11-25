@@ -27,7 +27,7 @@ import {
   TableBodyRow,
   TableBodyCell,
 } from '@/components/molecules/Table/TableBody';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import { formatCid } from '@/utils/table';
 import {
   describeFreeCreditChange,
@@ -44,7 +44,7 @@ import {
 } from '@/utils/usageReport';
 import { UsageDaysPicker } from './UsageDaysPicker';
 
-const bytes = (value: string) => formatBytes(Number(value));
+const bytes = (value: string) => formatStorageSize(Number(value));
 const ai3 = (shannons: string) => formatAi3(BigInt(shannons));
 // Report ranges are whole UTC days, so dates show the UTC calendar day.
 dayjs.extend(utc);
@@ -431,7 +431,7 @@ const FreeCreditHistory = ({
                     {dayjs.utc(change.at).format('MMM D, YYYY HH:mm')}
                   </TableBodyCell>
                   <TableBodyCell>
-                    {describeFreeCreditChange(change, formatBytes)}
+                    {describeFreeCreditChange(change, formatStorageSize)}
                   </TableBodyCell>
                   <TableBodyCell
                     className={`whitespace-nowrap font-medium ${

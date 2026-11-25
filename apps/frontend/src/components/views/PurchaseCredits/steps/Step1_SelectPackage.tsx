@@ -6,7 +6,7 @@ import { UsdEstimateNote } from '../UsdEstimateNote';
 import { usePrices } from '../../../../hooks/usePrices';
 import { usePaymentIntent } from '../../../../hooks/usePaymentIntent';
 import { useUserStore } from '../../../../globalStates/user';
-import { formatBytes } from '../../../../utils/number';
+import { formatStorageSize } from '../../../../utils/number';
 import { isPackageOverCap } from '../../../../utils/credits';
 
 type PackageOption = {
@@ -121,7 +121,10 @@ export const PurchaseStep1SelectPackage = ({
         {purchaseBlocked && (
           <div className='mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200'>
             <strong>Credit cap reached.</strong> You already hold{' '}
-            {formatBytes(Number(creditSummary?.uploadBytesRemaining ?? 0), 2)}{' '}
+            {formatStorageSize(
+              Number(creditSummary?.uploadBytesRemaining ?? 0),
+              2,
+            )}{' '}
             of purchased credits, the most this account can hold at once. Use
             some of them before purchasing more.
           </div>

@@ -18,7 +18,7 @@ import {
   AdminAccountDetails,
 } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import { formatDate } from '@/utils/time';
 import { Table } from '@/components/molecules/Table';
 import {
@@ -48,7 +48,7 @@ const FIELD_LABEL = new Map([
 const formatValue = (field: string, value: string | null): string => {
   if (value === null) return 'default';
   if (field.endsWith('_bytes') || field.endsWith('_limit')) {
-    return formatBytes(Number(value));
+    return formatStorageSize(Number(value));
   }
   if (field === 'credit_expiry_days') return `${value} days`;
   if (field === 'is_partner') return value === 'true' ? 'yes' : 'no';
@@ -263,8 +263,8 @@ const TermsModal = ({
               {endsMonthly && (
                 <p className='rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'>
                   This stops the monthly free credits of{' '}
-                  {formatBytes(account.monthlyFreeUploadBytes)}: what is left of
-                  this month&apos;s ends now.
+                  {formatStorageSize(account.monthlyFreeUploadBytes)}: what is
+                  left of this month&apos;s ends now.
                 </p>
               )}
               <ByteAmountInput
@@ -304,7 +304,7 @@ const TermsModal = ({
           label='Max purchased credits held (empty for the default)'
           amount={max.amount}
           unit={max.unit}
-          placeholder={`Default (${formatBytes(account.defaultCreditTerms.maxPurchasedBytes)})`}
+          placeholder={`Default (${formatStorageSize(account.defaultCreditTerms.maxPurchasedBytes)})`}
           onChange={setMax}
         />
         <label className='block text-sm text-foreground'>
@@ -336,7 +336,7 @@ const TermsModal = ({
             {isPending
               ? 'Saving…'
               : granting
-                ? `Save and grant ${formatBytes(grantBytes)}`
+                ? `Save and grant ${formatStorageSize(grantBytes)}`
                 : 'Save'}
           </Button>
         </div>
@@ -387,7 +387,7 @@ export const PartnerTerms = ({
       // Partner accounts created before #890 still have one until edited.
       account.uploadLimit === 0
         ? 'None, uploads use credits'
-        : `${formatBytes(account.uploadLimit)} (saving the terms sets it to 0)`,
+        : `${formatStorageSize(account.uploadLimit)} (saving the terms sets it to 0)`,
     ],
     // A one-off account has no monthly free credits.
     ...(monthly || account.monthlyFreeUploadBytes > 0
@@ -396,7 +396,7 @@ export const PartnerTerms = ({
             'Monthly free credits',
             account.monthlyFreeUploadBytes === 0
               ? 'None'
-              : `${formatBytes(account.monthlyFreeUploadBytes)} per UTC month`,
+              : `${formatStorageSize(account.monthlyFreeUploadBytes)} per UTC month`,
           ],
         ]
       : []),
@@ -409,7 +409,7 @@ export const PartnerTerms = ({
               ? '…'
               : grants.length === 0
                 ? 'None granted'
-                : `${formatBytes(
+                : `${formatStorageSize(
                     grants.reduce(
                       (total, c) => total + Number(c.uploadBytesOriginal),
                       0,
@@ -420,13 +420,13 @@ export const PartnerTerms = ({
       : []),
     [
       'Download allowance',
-      `${formatBytes(account.downloadLimit)} (${account.model === AccountModel.Monthly ? 'resets monthly' : 'one-off'})`,
+      `${formatStorageSize(account.downloadLimit)} (${account.model === AccountModel.Monthly ? 'resets monthly' : 'one-off'})`,
     ],
     [
       'Max purchased credits held',
       account.maxPurchasedBytes === null
-        ? `Default (${formatBytes(defaultCreditTerms.maxPurchasedBytes)})`
-        : formatBytes(account.maxPurchasedBytes),
+        ? `Default (${formatStorageSize(defaultCreditTerms.maxPurchasedBytes)})`
+        : formatStorageSize(account.maxPurchasedBytes),
     ],
     [
       'Credit expiry for new purchases',

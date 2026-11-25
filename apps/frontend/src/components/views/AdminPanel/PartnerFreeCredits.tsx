@@ -7,7 +7,7 @@ import { Gift, Loader } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import { AdminAccountDetails } from '@auto-drive/models';
 import { useNetwork } from 'contexts/network';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import { formatDate } from '@/utils/time';
 import {
   describeBatchKind,
@@ -89,8 +89,8 @@ const GrantModal = ({
       {confirming ? (
         <div className='mt-4 space-y-4 text-sm text-foreground'>
           <p>
-            Grant <strong>{formatBytes(uploadBytes)}</strong> of one-time free
-            upload credits, expiring on{' '}
+            Grant <strong>{formatStorageSize(uploadBytes)}</strong> of one-time
+            free upload credits, expiring on{' '}
             <strong>
               {formatDate(new Date(Date.now() + days * DAY).toISOString())}
             </strong>
@@ -246,17 +246,20 @@ export const PartnerFreeCredits = ({
                     </TableBodyCell>
                     <TableBodyCell>{credit.grantReason ?? '—'}</TableBodyCell>
                     <TableBodyCell>
-                      {formatBytes(Number(credit.uploadBytesOriginal))}
+                      {formatStorageSize(Number(credit.uploadBytesOriginal))}
                     </TableBodyCell>
                     <TableBodyCell>
                       {status === 'replaced' ? (
                         // Not usable any more: it ended with this left.
                         <span className='text-gray-500'>
-                          0 ({formatBytes(Number(credit.uploadBytesRemaining))}{' '}
+                          0 (
+                          {formatStorageSize(
+                            Number(credit.uploadBytesRemaining),
+                          )}{' '}
                           ended)
                         </span>
                       ) : (
-                        formatBytes(Number(credit.uploadBytesRemaining))
+                        formatStorageSize(Number(credit.uploadBytesRemaining))
                       )}
                     </TableBodyCell>
                     <TableBodyCell>

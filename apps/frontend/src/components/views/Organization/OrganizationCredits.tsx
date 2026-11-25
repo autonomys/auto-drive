@@ -8,11 +8,11 @@ import { Button, ROUTES } from '@auto-drive/ui';
 import { OrganizationOverview } from '@auto-drive/models';
 import { useNetwork } from '@/contexts/network';
 import { useUserStore } from '@/globalStates/user';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 
 dayjs.extend(utc);
 
-const bytes = (value: string) => formatBytes(Number(value), 2);
+const bytes = (value: string) => formatStorageSize(Number(value), 2);
 const day = (date: dayjs.Dayjs | string) => dayjs(date).format('MMM D, YYYY');
 
 const Card = ({
