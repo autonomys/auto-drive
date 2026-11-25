@@ -39,6 +39,8 @@ const newAddress = () => {
 }
 
 const CREATED_AT = '2026-11-23T00:00:00.000Z'
+// The per-person maximum of every partner account in these tests.
+const MAX_QUOTA = 10_000
 
 // The auth service owns end users and is mocked: these tests cover who may
 // call the routes, what they check and what they pass to auth.
@@ -55,6 +57,12 @@ describe('End users', () => {
   >
   let removeInAuth: jest.SpiedFunction<
     typeof AuthManager.removeOrganizationEndUser
+  >
+  let setQuotaInAuth: jest.SpiedFunction<
+    typeof AuthManager.setOrganizationEndUserQuota
+  >
+  let setMaxInRepository: jest.SpiedFunction<
+    typeof accountsRepository.setMaxEndUserQuota
   >
 
   beforeAll(async () => {
@@ -103,6 +111,7 @@ describe('End users', () => {
           organizationId: id,
           model: AccountModel.Monthly,
           isPartner: id.startsWith('partner'),
+          maxEndUserQuotaBytes: MAX_QUOTA,
         }) as Account,
     )
     jest.spyOn(AuthManager, 'getOrganization').mockImplementation(async (id) =>
@@ -126,6 +135,7 @@ describe('End users', () => {
             publicId: `pub-${endUser.address}`,
             createdAt: CREATED_AT,
             removedAt: null,
+            closedAt: null,
           })),
         ),
       )
@@ -135,6 +145,25 @@ describe('End users', () => {
     removeInAuth = jest
       .spyOn(AuthManager, 'removeOrganizationEndUser')
       .mockResolvedValue(ok(undefined))
+    setQuotaInAuth = jest
+      .spyOn(AuthManager, 'setOrganizationEndUserQuota')
+      .mockImplementation(async (_id, address, uploadQuotaBytes) =>
+        ok({
+          address,
+          publicId: `pub-${address}`,
+          customerReference: 'customer-1',
+          uploadQuotaBytes,
+          createdAt: CREATED_AT,
+          removedAt: null,
+          closedAt: null,
+        }),
+      )
+    setMaxInRepository = jest
+      .spyOn(accountsRepository, 'setMaxEndUserQuota')
+      .mockImplementation(
+        async (id, maxEndUserQuotaBytes) =>
+          ({ id, maxEndUserQuotaBytes }) as Account,
+      )
   })
 
   afterEach(() => {
@@ -274,6 +303,7 @@ describe('End users', () => {
         publicId: `pub-${r.address}`,
         createdAt: CREATED_AT,
         removedAt: null,
+        closedAt: null,
       })),
     })
   })
@@ -394,6 +424,7 @@ describe('End users', () => {
           uploadQuotaBytes: null,
           createdAt: CREATED_AT,
           removedAt: CREATED_AT,
+          closedAt: null,
         },
       ] satisfies PartnerEndUser[],
       totalCount: 3,
@@ -413,5 +444,167 @@ describe('End users', () => {
       expect([query, (await list(query)).status]).toEqual([query, 400])
     }
     expect(listInAuth).toHaveBeenCalledTimes(2)
+  })
+
+  describe('quotas', () => {
+    const setQuota = (
+      address: string,
+      body: unknown,
+      organization = organizationId,
+    ) =>
+      fetch(`${baseUrl}/organizations/${organization}/end-users/${address}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(body),
+      })
+    const setMax = (body: unknown, organization = organizationId) =>
+      fetch(`${baseUrl}/organizations/${organization}/max-end-user-quota`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+      })
+
+    it.each([
+      ['an organization admin, signed in', orgAdmin, [200, 200]],
+      ['a member, signed in', member, [403, 403]],
+      ['the organization key', () => orgKey(null), [200, 403]],
+      [
+        'the organization key with end_user_enrollment',
+        () => orgKey([ApiKeyScope.EndUserEnrollment]),
+        [200, 403],
+      ],
+      [
+        'the organization key with end_user_removal',
+        () => orgKey([ApiKeyScope.EndUserRemoval]),
+        [403, 403],
+      ],
+      [
+        'the organization key with usage',
+        () => orgKey([ApiKeyScope.Usage]),
+        [403, 403],
+      ],
+      [
+        'a key of another organization',
+        () => orgKey(null, 'partner-other'),
+        [403, 403],
+      ],
+      [
+        'a personal key of an organization admin',
+        () => ({ ...orgAdmin(), apiKeyId: 'personal-key' }),
+        [403, 403],
+      ],
+      ['an Auto Drive admin, signed in', autoDriveAdmin, [403, 403]],
+    ])(
+      'answers a quota change and the maximum from %s',
+      async (_, as, statuses) => {
+        caller = as()
+
+        const responses = [
+          await setQuota(newAddress().input, { uploadQuotaBytes: 100 }),
+          await setMax({ maxEndUserQuotaBytes: 5000 }),
+        ]
+
+        expect(responses.map((r) => r.status)).toEqual(statuses)
+        expect(
+          [setQuotaInAuth, setMaxInRepository].map(
+            (mock) => mock.mock.calls.length,
+          ),
+        ).toEqual(statuses.map((status) => (status === 403 ? 0 : 1)))
+      },
+    )
+
+    it('changes a quota in auth, up to the maximum, recording the key', async () => {
+      caller = orgKey([ApiKeyScope.EndUserEnrollment])
+      const { input, address } = newAddress()
+
+      const response = await setQuota(input, { uploadQuotaBytes: MAX_QUOTA })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(
+        expect.objectContaining({ address, uploadQuotaBytes: MAX_QUOTA }),
+      )
+      expect((await setQuota(input, { uploadQuotaBytes: null })).status).toBe(
+        200,
+      )
+      expect(setQuotaInAuth.mock.calls).toEqual([
+        [organizationId, address, MAX_QUOTA, caller.publicId, 'org-key'],
+        [organizationId, address, null, caller.publicId, 'org-key'],
+      ])
+
+      const above = await setQuota(input, { uploadQuotaBytes: MAX_QUOTA + 1 })
+      expect(above.status).toBe(400)
+      expect((await above.json()).error).toContain(String(MAX_QUOTA))
+      for (const body of [
+        {},
+        { uploadQuotaBytes: 0 },
+        { uploadQuotaBytes: -1 },
+        { uploadQuotaBytes: 1.5 },
+        { uploadQuotaBytes: '100' },
+      ]) {
+        expect([body, (await setQuota(input, body)).status]).toEqual([
+          body,
+          400,
+        ])
+      }
+      expect(
+        (await setQuota('not-an-address', { uploadQuotaBytes: 1 })).status,
+      ).toBe(400)
+      expect(setQuotaInAuth).toHaveBeenCalledTimes(2)
+
+      setQuotaInAuth.mockResolvedValueOnce(
+        err(new NotFoundError('Not an active end user of this organization')),
+      )
+      expect((await setQuota(input, { uploadQuotaBytes: 1 })).status).toBe(404)
+    })
+
+    it('refuses to enroll anyone with a quota above the maximum', async () => {
+      caller = orgKey([ApiKeyScope.EndUserEnrollment])
+
+      const above = await enroll([
+        { address: newAddress().input, customerReference: 'c1' },
+        {
+          address: newAddress().input,
+          customerReference: 'c2',
+          uploadQuotaBytes: MAX_QUOTA + 1,
+        },
+      ])
+      expect(above.status).toBe(400)
+      expect(enrollInAuth).not.toHaveBeenCalled()
+
+      const atMax = await enroll([
+        {
+          address: newAddress().input,
+          customerReference: 'c3',
+          uploadQuotaBytes: MAX_QUOTA,
+        },
+      ])
+      expect(atMax.status).toBe(201)
+    })
+
+    it('lets an organization admin set the maximum on the account', async () => {
+      caller = orgAdmin()
+
+      const response = await setMax({ maxEndUserQuotaBytes: 0 })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ maxEndUserQuotaBytes: 0 })
+      expect(setMaxInRepository).toHaveBeenCalledWith(
+        `account-${organizationId}`,
+        0,
+        'org-admin',
+      )
+
+      for (const body of [
+        {},
+        { maxEndUserQuotaBytes: -1 },
+        { maxEndUserQuotaBytes: 1.5 },
+        { maxEndUserQuotaBytes: '1' },
+      ]) {
+        expect([body, (await setMax(body)).status]).toEqual([body, 400])
+      }
+      expect(setMaxInRepository).toHaveBeenCalledTimes(1)
+
+      organizationId = `personal-${v4()}`
+      caller = orgAdmin()
+      expect((await setMax({ maxEndUserQuotaBytes: 1 })).status).toBe(404)
+    })
   })
 })

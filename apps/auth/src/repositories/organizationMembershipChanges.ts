@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { v4 } from 'uuid'
-import { OrganizationRole } from '@auto-drive/models'
+import { EndUserChange, OrganizationRole } from '@auto-drive/models'
 import { getDatabase } from '../drivers/pg.js'
 
 type DBOrganizationMembershipChange = {
@@ -12,6 +12,9 @@ type DBOrganizationMembershipChange = {
   role: OrganizationRole | null
   actor: string
   actor_api_key_id: string | null
+  end_user_change: EndUserChange | null
+  // A bigint, which pg returns as a string.
+  upload_quota_bytes: string | null
   created_at: Date
 }
 
@@ -25,14 +28,18 @@ const recordChange = async (
     actor: string
     // The organisation API key that made the change, if one did.
     actorApiKeyId?: string | null
+    // For partner end users only.
+    endUserChange?: EndUserChange | null
+    uploadQuotaBytes?: number | null
   },
   db: pg.Client,
 ): Promise<void> => {
   await db.query(
     `INSERT INTO users.organization_membership_changes
        (id, oauth_provider, oauth_user_id, from_organization_id,
-        to_organization_id, role, actor, actor_api_key_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        to_organization_id, role, actor, actor_api_key_id, end_user_change,
+        upload_quota_bytes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       v4(),
       change.oauthProvider,
@@ -42,6 +49,8 @@ const recordChange = async (
       change.role,
       change.actor,
       change.actorApiKeyId ?? null,
+      change.endUserChange ?? null,
+      change.uploadQuotaBytes ?? null,
     ],
   )
 }

@@ -5,7 +5,7 @@ const customerReferenceHeader = {
   in: 'header',
   required: false,
   description:
-    'Your own reference for the customer this upload is for, shown in your usage reports. Up to 128 letters, digits, "-", "_", "." or ":". Use a pseudonymous ID, never personal data. A file in a folder upload takes the folder upload\'s reference: send the same value or none.',
+    'Your own reference for the customer this upload is for, shown in your usage reports. Up to 128 letters, digits, "-", "_", "." or ":". Use a pseudonymous ID, never personal data. A file in a folder upload takes the folder upload\'s reference: send the same value or none. Ignored for a partner end user, whose uploads always carry the reference they were enrolled with.',
   schema: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' },
 }
 

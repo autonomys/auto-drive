@@ -7,6 +7,7 @@ import {
   ApiKey,
   ApiKeyScope,
   ApiKeyWithoutSecret,
+  EndUserChange,
   Organization,
   OrganizationMembershipChange,
   OrganizationRole,
@@ -529,6 +530,7 @@ const toPartnerEndUser = (
   uploadQuotaBytes: uploadQuotaBytes(membership),
   createdAt: membership.created_at.toISOString(),
   removedAt: membership.end_user_removed_at?.toISOString() ?? null,
+  closedAt: membership.end_user_closed_at?.toISOString() ?? null,
 })
 
 const isUniqueViolation = (error: unknown) =>
@@ -736,6 +738,7 @@ const enrollEndUsers = async ({
             role: OrganizationRole.PartnerEndUser,
             actor,
             actorApiKeyId,
+            uploadQuotaBytes: endUser.uploadQuotaBytes,
           },
           db,
         )
@@ -813,6 +816,72 @@ const removeEndUser = async ({
   })
 }
 
+/**
+ * Sets an active end user's upload quota, null to follow the account's
+ * per-person maximum, which the backend checks it against. Setting the quota
+ * they already have changes nothing, so a retry is safe. Returns the end user.
+ */
+const setEndUserQuota = async ({
+  organizationId,
+  address,
+  uploadQuotaBytes: quota,
+  actor,
+  actorApiKeyId = null,
+}: {
+  organizationId: string
+  address: string
+  uploadQuotaBytes: number | null
+  actor: string
+  // The organisation API key making the request, if one is.
+  actorApiKeyId?: string | null
+}): Promise<PartnerEndUser> => {
+  const oauthUserId = parseAddress(address)
+
+  return withTransaction(async (db) => {
+    const membership =
+      await organizationMembersRepository.getMembershipForUpdate(
+        organizationId,
+        WALLET_PROVIDER,
+        oauthUserId,
+        db,
+      )
+    if (
+      membership?.role !== OrganizationRole.PartnerEndUser ||
+      membership.end_user_removed_at
+    ) {
+      throw new OrganizationNotFoundError(
+        'Not an active end user of this organization',
+      )
+    }
+    if (uploadQuotaBytes(membership) === quota) {
+      return toPartnerEndUser(membership)
+    }
+
+    const updated = await organizationMembersRepository.setEndUserQuota(
+      organizationId,
+      WALLET_PROVIDER,
+      oauthUserId,
+      quota,
+      db,
+    )
+    await organizationMembershipChangesRepository.recordChange(
+      {
+        oauthProvider: WALLET_PROVIDER,
+        oauthUserId,
+        fromOrganizationId: organizationId,
+        toOrganizationId: organizationId,
+        role: OrganizationRole.PartnerEndUser,
+        actor,
+        actorApiKeyId,
+        endUserChange: EndUserChange.QuotaChanged,
+        uploadQuotaBytes: quota,
+      },
+      db,
+    )
+    return toPartnerEndUser(updated)
+  })
+}
+
 // A page of the organisation's end users, removed ones included, in the order
 // they were first enrolled.
 const listEndUsers = async ({
@@ -854,6 +923,9 @@ const getMembershipChanges = async (
     role: row.role,
     actor: row.actor,
     actorApiKeyId: row.actor_api_key_id,
+    endUserChange: row.end_user_change,
+    uploadQuotaBytes:
+      row.upload_quota_bytes === null ? null : Number(row.upload_quota_bytes),
     createdAt: row.created_at.toISOString(),
   }))
 }
@@ -871,6 +943,7 @@ export const OrganizationsUseCases = {
   removeMember,
   enrollEndUsers,
   removeEndUser,
+  setEndUserQuota,
   listEndUsers,
   getMembershipChanges,
   listApiKeys,

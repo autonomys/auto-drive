@@ -74,6 +74,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
         uploadLimit: 1000,
         downloadLimit: 1000,
       }
@@ -123,6 +124,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: 5000,
         creditExpiryDays: 30,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       const updateSpy = jest
@@ -176,6 +178,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
         uploadLimit: 0,
         downloadLimit: 1000,
       })
@@ -222,6 +225,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
 
       jest
@@ -252,6 +256,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
 
       const initSpy = jest
@@ -283,6 +288,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
 
       const initSpy = jest
@@ -305,6 +311,7 @@ describe('AccountsUseCases', () => {
       maxPurchasedBytes: null,
       creditExpiryDays: null,
       monthlyFreeUploadBytes: 0,
+      maxEndUserQuotaBytes: 0,
       uploadLimit: 1000,
       downloadLimit: 1000,
     }
@@ -496,6 +503,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
       const member = {
         publicId: 'pub1',
@@ -540,6 +548,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
       jest.spyOn(accountsRepository, 'getById').mockResolvedValue(account)
       jest.spyOn(AuthManager, 'adminSearchUsers').mockResolvedValue([
@@ -599,6 +608,7 @@ describe('AccountsUseCases', () => {
       maxPurchasedBytes: null,
       creditExpiryDays: null,
       monthlyFreeUploadBytes: 0,
+      maxEndUserQuotaBytes: 0,
     }
 
     beforeEach(() => {
@@ -693,6 +703,7 @@ describe('AccountsUseCases', () => {
       maxPurchasedBytes: null,
       creditExpiryDays: null,
       monthlyFreeUploadBytes: 0,
+      maxEndUserQuotaBytes: 0,
     }
 
     beforeEach(() => {
@@ -788,6 +799,7 @@ describe('AccountsUseCases', () => {
                 maxPurchasedBytes: null,
                 creditExpiryDays: null,
                 monthlyFreeUploadBytes: 0,
+                maxEndUserQuotaBytes: 0,
               }
             : null,
         )
@@ -837,6 +849,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       })
       jest
         .spyOn(
@@ -864,6 +877,7 @@ describe('AccountsUseCases', () => {
           maxPurchasedBytes: null,
           creditExpiryDays: null,
           monthlyFreeUploadBytes: 0,
+          maxEndUserQuotaBytes: 0,
           pendingUploadCredits: 100,
           pendingDownloadCredits: 50,
           freeUploadCredits: 0,
@@ -882,6 +896,7 @@ describe('AccountsUseCases', () => {
         maxPurchasedBytes: null,
         creditExpiryDays: null,
         monthlyFreeUploadBytes: 0,
+        maxEndUserQuotaBytes: 0,
       }
       jest.spyOn(AuthManager, 'getUsersFromPublicIds').mockResolvedValue([
         { publicId: 'pub1', organizationId: 'org1' },
@@ -932,6 +947,7 @@ describe('AccountsUseCases', () => {
           maxPurchasedBytes: null,
           creditExpiryDays: null,
           monthlyFreeUploadBytes: 0,
+          maxEndUserQuotaBytes: 0,
         }))
       jest
         .spyOn(

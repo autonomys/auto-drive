@@ -33,7 +33,8 @@ const endUserSchema = {
     uploadQuotaBytes: {
       type: 'integer',
       nullable: true,
-      description: 'Null for the default of the organization',
+      description:
+        'Null to follow the per-person maximum of the organization. The quota that applies is never more than that maximum.',
     },
     createdAt: {
       type: 'string',
@@ -47,7 +48,21 @@ const endUserSchema = {
       description:
         'When the end user was removed. Null unless they are removed now.',
     },
+    closedAt: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description:
+        'When the end user closed their account, which also removed them. Null unless they did and have not been enrolled again since.',
+    },
   },
+}
+
+const addressParameter = {
+  name: 'address',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
 }
 
 const endUsersAccess = (scopes: string) =>
@@ -118,7 +133,7 @@ export const organizations = {
                           minimum: 1,
                           nullable: true,
                           description:
-                            'The upload quota of the end user. Omitted for the default of the organization.',
+                            'The upload quota of the end user, at most the per-person maximum of the organization. Omitted to follow that maximum.',
                         },
                       },
                     },
@@ -144,7 +159,7 @@ export const organizations = {
           },
           '400': {
             description:
-              'An invalid body or address, or an address or customer reference given twice',
+              'An invalid body or address, an address or customer reference given twice, or a quota above the per-person maximum of the organization',
           },
           '401': { description: 'Unauthorized' },
           '403': {
@@ -202,20 +217,55 @@ export const organizations = {
       },
     },
     '/organizations/{organizationId}/end-users/{address}': {
+      patch: {
+        summary: 'Organizations - Change the quota of an end user',
+        description: `${endUsersAccess('`end_user_enrollment`')} Sets the upload quota of an end user who is not removed, at most the organization's per-person maximum, or with null makes it follow that maximum. The quota is a total: it counts every byte the end user has uploaded, removed files included, and never resets. A quota below what they have used refuses their further uploads and removes nothing. Setting the quota they have changes nothing, so a request can be retried.`,
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter, addressParameter],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['uploadQuotaBytes'],
+                properties: {
+                  uploadQuotaBytes: {
+                    type: 'integer',
+                    minimum: 1,
+                    nullable: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'The end user',
+            content: { 'application/json': { schema: endUserSchema } },
+          },
+          '400': {
+            description:
+              'An invalid body or address, or a quota above the per-person maximum of the organization',
+          },
+          '401': { description: 'Unauthorized' },
+          '403': {
+            description:
+              'Not an organization admin or the organization API key, or a key without the end_user_enrollment scope',
+          },
+          '404': {
+            description:
+              'Not a partner organization, or not an end user of the organization who is not removed',
+          },
+        },
+      },
       delete: {
         summary: 'Organizations - Remove an end user',
         description: `${endUsersAccess('`end_user_removal`')} Auto Drive admins may remove them too. The end user stays in the organization with read-only access to their files and no longer counts towards its end users. Enrolling them again undoes it. Removing an end user already removed succeeds, so a request can be retried.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
-        parameters: [
-          organizationIdParameter,
-          {
-            name: 'address',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' },
-          },
-        ],
+        parameters: [organizationIdParameter, addressParameter],
         responses: {
           '204': { description: 'Removed, now or before' },
           '400': { description: 'Not an address' },
@@ -228,6 +278,48 @@ export const organizations = {
             description:
               'Not a partner organization, or not an end user of the organization',
           },
+        },
+      },
+    },
+    '/organizations/{organizationId}/max-end-user-quota': {
+      put: {
+        summary: 'Organizations - Set the per-person maximum',
+        description:
+          'For the admins of the organization, signed in; every API key is refused. The most any one end user may upload in total, and the quota of every end user enrolled without one. 0, the initial value, lets no end user upload. Lowering it applies at once to every end user. Recorded in the terms history of the account.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['maxEndUserQuotaBytes'],
+                properties: {
+                  maxEndUserQuotaBytes: { type: 'integer', minimum: 0 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'The per-person maximum',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: { maxEndUserQuotaBytes: { type: 'integer' } },
+                },
+              },
+            },
+          },
+          '400': { description: 'Not a non-negative integer' },
+          '401': { description: 'Unauthorized' },
+          '403': {
+            description: 'Not an organization admin, or an API key',
+          },
+          '404': { description: 'Not a partner organization' },
         },
       },
     },

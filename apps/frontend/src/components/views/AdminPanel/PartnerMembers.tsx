@@ -7,6 +7,7 @@ import { History, Loader, Users } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import {
   AdminAccountDetails,
+  EndUserChange,
   MEMBER_ROLES,
   OrganizationMembershipChange,
   OrganizationRole,
@@ -39,6 +40,12 @@ const describeChange = (
   change: OrganizationMembershipChange,
   organizationId: string,
 ): string => {
+  if (change.endUserChange === EndUserChange.QuotaChanged) {
+    return 'Upload quota changed';
+  }
+  if (change.endUserChange === EndUserChange.AccountClosed) {
+    return 'Closed their account';
+  }
   if (change.fromOrganizationId === change.toOrganizationId) {
     return `Role changed to ${change.role ? ROLE_LABEL[change.role] : '—'}`;
   }

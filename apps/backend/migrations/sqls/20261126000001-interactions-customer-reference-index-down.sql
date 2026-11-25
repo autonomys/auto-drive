@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS public.idx_interactions_account_customer_reference;

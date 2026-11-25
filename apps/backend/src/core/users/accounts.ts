@@ -14,6 +14,7 @@ import {
   Intent,
   AccountTermsChange,
   AdminFreeCredit,
+  isPartnerEndUser,
 } from '@auto-drive/models'
 import pg from 'pg'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
@@ -32,6 +33,12 @@ import {
   PaymentRequiredError,
 } from '../../errors/index.js'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
+import { stampCustomerReference } from '../uploads/customerReference.js'
+import {
+  checkEndUserQuota,
+  lockEndUserQuota,
+  sendEndUserMetric,
+} from './endUserQuota.js'
 
 const logger = createLogger('AccountsUseCases')
 
@@ -359,6 +366,7 @@ const registerInteraction = async (
 ): Promise<void> => {
   const account = await getOrCreateAccount(user)
   const creditType = type === InteractionType.Upload ? 'upload' : 'download'
+  customerReference = stampCustomerReference(user, customerReference)
 
   logger.debug(
     'Registering interaction (accountId=%s, type=%s, size=%d)',
@@ -386,6 +394,10 @@ const registerInteraction = async (
     // This month's free credits are issued on the same client first, so the
     // month's first upload can draw on them.
     if (type === InteractionType.Upload) {
+      // A partner end user's quota, checked again here with their uploads
+      // serialised, as the size is final only now.
+      await lockEndUserQuota(user, account, client)
+      await checkEndUserQuota(user, account, size, client)
       await ensureMonthlyFreeCredits(account, client)
     }
     const consumed =
@@ -494,6 +506,13 @@ const registerInteraction = async (
     throw error
   } finally {
     client.release()
+  }
+
+  if (type === InteractionType.Upload && isPartnerEndUser(user)) {
+    sendEndUserMetric(account.organizationId, 'uploaded', {
+      count: 1,
+      bytes: size,
+    })
   }
 }
 

@@ -14,6 +14,9 @@ export type Account = {
   creditExpiryDays: number | null;
   // Free upload bytes issued to a partner account each UTC month. 0 = none.
   monthlyFreeUploadBytes: number;
+  // The most any one of a partner's end users may upload in total, set by its
+  // organisation admins. 0 until they set it, so end users can't upload.
+  maxEndUserQuotaBytes: number;
 };
 
 export type AccountWithTotalSize = Account & {

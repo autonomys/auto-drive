@@ -19,6 +19,7 @@ type DBAccount = {
   max_purchased_bytes: string | null
   credit_expiry_days: number | null
   monthly_free_upload_bytes: string
+  max_end_user_quota_bytes: string
 }
 
 type DBAccountTermsChange = {
@@ -59,6 +60,7 @@ const mapRows = (rows: DBAccount[]): Account[] => {
       row.max_purchased_bytes === null ? null : Number(row.max_purchased_bytes),
     creditExpiryDays: row.credit_expiry_days,
     monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
+    maxEndUserQuotaBytes: Number(row.max_end_user_quota_bytes),
   }))
 }
 
@@ -76,6 +78,7 @@ const mapRowsWithSize = (
       row.max_purchased_bytes === null ? null : Number(row.max_purchased_bytes),
     creditExpiryDays: row.credit_expiry_days,
     monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
+    maxEndUserQuotaBytes: Number(row.max_end_user_quota_bytes),
     totalSize: Number(row.total_size),
   }))
 }
@@ -254,6 +257,55 @@ const updateAccount = async (
   }
 }
 
+// Sets the most any one of the account's partner end users may upload, and
+// records the change in the terms history in the same transaction.
+const setMaxEndUserQuota = async (
+  id: string,
+  maxEndUserQuotaBytes: number,
+  changedBy: string,
+): Promise<Account> => {
+  const db = await getDatabase()
+  const client = await db.connect()
+  try {
+    await client.query('BEGIN')
+    const before = (
+      await client.query<DBAccount>(
+        'SELECT * FROM accounts WHERE id = $1 FOR UPDATE',
+        [id],
+      )
+    ).rows[0]
+    if (!before) throw new Error(`Account ${id} not found`)
+
+    const after = (
+      await client.query<DBAccount>(
+        'UPDATE accounts SET max_end_user_quota_bytes = $1 WHERE id = $2 RETURNING *',
+        [maxEndUserQuotaBytes, id],
+      )
+    ).rows[0]
+    if (
+      String(before.max_end_user_quota_bytes) !==
+      String(after.max_end_user_quota_bytes)
+    ) {
+      await insertTermsChange(
+        client,
+        id,
+        'max_end_user_quota_bytes',
+        before.max_end_user_quota_bytes,
+        after.max_end_user_quota_bytes,
+        changedBy,
+      )
+    }
+
+    await client.query('COMMIT')
+    return mapRows([after])[0]
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 const getTermsChanges = async (
   accountId: string,
 ): Promise<AccountTermsChange[]> => {
@@ -320,6 +372,7 @@ export const accountsRepository = {
   getByOrganizationId,
   createAccount,
   updateAccount,
+  setMaxEndUserQuota,
   getAll,
   getById,
   getTopAccountsWithinPeriod,

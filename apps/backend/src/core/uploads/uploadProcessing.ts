@@ -32,6 +32,7 @@ import {
   UserWithOrganization,
   UploadArtifacts,
   FolderArtifacts,
+  isPartnerEndUser,
 } from '@auto-drive/models'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
@@ -48,6 +49,7 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from '../users/accounts.js'
 import { UploadPartsChangedError } from './errors.js'
 import { BadRequestError, PaymentRequiredError } from '../../errors/index.js'
+import { checkEndUserQuota } from '../users/endUserQuota.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -378,6 +380,14 @@ const handleFileUploadFinalization = async (
   const upload = await uploadsRepository.getUploadEntryById(uploadId)
   if (pendingCredits < metadata.totalSize) {
     throw new PaymentRequiredError('Not enough upload credits')
+  }
+  // Before the file is given to them: registerInteraction checks again.
+  if (isPartnerEndUser(user)) {
+    await checkEndUserQuota(
+      user,
+      await AccountsUseCases.getOrCreateAccount(user),
+      metadata.totalSize.valueOf(),
+    )
   }
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)

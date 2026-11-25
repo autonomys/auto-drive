@@ -1,5 +1,6 @@
 import { err, ok, Result } from 'neverthrow'
-import { BadRequestError } from '../../errors/index.js'
+import { UserWithOrganization, isPartnerEndUser } from '@auto-drive/models'
+import { BadRequestError, ForbiddenError } from '../../errors/index.js'
 
 // A caller's own reference for the customer an upload was made for (#892), for
 // example a partner's pseudonymous customer ID. Auto Drive does not interpret
@@ -21,4 +22,22 @@ export const parseCustomerReference = (
   return typeof header === 'string' && CUSTOMER_REFERENCE.test(header)
     ? ok(header)
     : err(new BadRequestError(INVALID_CUSTOMER_REFERENCE))
+}
+
+/**
+ * The customer reference to record an upload or interaction under. A partner
+ * end user's is always the one they were enrolled with, whatever the request
+ * sent, so their usage is reported per person and counted against their
+ * quota. Anyone else's is the one they sent.
+ */
+export const stampCustomerReference = (
+  user: UserWithOrganization,
+  requested: string | null,
+): string | null => {
+  if (!isPartnerEndUser(user)) return requested
+  // Only an auth service older than partner end users could leave it out.
+  if (!user.customerReference) {
+    throw new ForbiddenError('Partner end user has no customer reference')
+  }
+  return user.customerReference
 }

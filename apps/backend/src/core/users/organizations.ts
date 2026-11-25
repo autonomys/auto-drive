@@ -726,6 +726,7 @@ const getOverview = async (
       maxPurchasedBytes: terms.maxBytes.toString(),
       creditExpiryDays: terms.expiryDays,
     },
+    maxEndUserQuotaBytes: account.maxEndUserQuotaBytes.toString(),
   })
 }
 

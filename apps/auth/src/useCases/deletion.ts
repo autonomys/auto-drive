@@ -1,9 +1,18 @@
 import { createHash } from 'crypto'
-import { User, DeletionRequestStatus, DeletionRequest, DeletionRequestWithUser } from '@auto-drive/models'
+import {
+  User,
+  DeletionRequestStatus,
+  DeletionRequest,
+  DeletionRequestWithUser,
+  EndUserChange,
+  OrganizationRole,
+} from '@auto-drive/models'
 import { deletionRequestsRepository, DeletionRequestRow, DeletionRequestWithUserRow } from '../repositories/deletionRequests.js'
 import { usersRepository } from '../repositories/users.js'
 import { apiKeysRepository } from '../repositories/apikeys.js'
 import { organizationMembersRepository } from '../repositories/organizationMembers.js'
+import { organizationMembershipChangesRepository } from '../repositories/organizationMembershipChanges.js'
+import { withTransaction } from '../drivers/pg.js'
 import { UsersUseCases } from './users.js'
 import { createLogger } from '../drivers/logger.js'
 
@@ -136,11 +145,36 @@ const anonymiseUser = async (requestId: string): Promise<void> => {
     request.oauth_user_id,
   )
 
-  // Remove from organizations
-  await organizationMembersRepository.removeUserMemberships(
-    request.oauth_provider,
-    request.oauth_user_id,
-  )
+  // Remove from organizations. A partner end user's membership stays, closed,
+  // so their customer reference is never given to anyone else and the partner
+  // can enrol them again.
+  await withTransaction(async (db) => {
+    const closed = await organizationMembersRepository.closeEndUserMembership(
+      request.oauth_provider,
+      request.oauth_user_id,
+      db,
+    )
+    if (!closed) {
+      await organizationMembersRepository.removeUserMemberships(
+        request.oauth_provider,
+        request.oauth_user_id,
+        db,
+      )
+      return
+    }
+    await organizationMembershipChangesRepository.recordChange(
+      {
+        oauthProvider: request.oauth_provider,
+        oauthUserId: request.oauth_user_id,
+        fromOrganizationId: closed.organization_id,
+        toOrganizationId: null,
+        role: OrganizationRole.PartnerEndUser,
+        actor: request.user_public_id,
+        endUserChange: EndUserChange.AccountClosed,
+      },
+      db,
+    )
+  })
 
   // Anonymise user PII fields
   await usersRepository.updateUsername(
