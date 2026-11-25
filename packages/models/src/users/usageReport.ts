@@ -153,7 +153,8 @@ export type UsageFreeCredit = {
  * - `monthly_change`: an admin changed the monthly amount. The month's
  *   credits left end and the new amount less what the month has used takes
  *   their place, so `bytes` is the difference: positive when raised,
- *   negative when lowered.
+ *   negative when lowered. 0 when the month had no credits issued yet: the
+ *   month's first issue, at the new amount, is then listed as `monthly`.
  * - `expiry`: credits that ended unused.
  */
 export type UsageFreeCreditChange = {
@@ -183,7 +184,8 @@ export type CreditBalance = {
   /**
    * Free credits only, else 0: what changes to the monthly amount added
    * (positive) or took away (negative). Credits they ended are counted here,
-   * not as expired, and credits they issued here, not as granted.
+   * not as expired, and credits they issued in place of those here, not as
+   * granted. A month's first issue is granted, whatever issued it.
    */
   adjusted: string;
   consumed: string;

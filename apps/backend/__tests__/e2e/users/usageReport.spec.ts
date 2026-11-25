@@ -655,7 +655,8 @@ describe('Usage reports', () => {
       ? grantFree(accountId, {
           bytes: issues,
           at,
-          expiresAt: day(60),
+          // The month's end, after the timeline.
+          expiresAt: new Date(NOW.getTime() + 30 * DAY),
           period,
         })
       : null
@@ -683,11 +684,29 @@ describe('Usage reports', () => {
     })
     // Day 59: a one-time grant of 40 that expires unused on day 61.
     await grantFree(id, { bytes: 40, at: day(59), expiresAt: day(61) })
+    // Day 62: raised from 50 to 80 before the next month's credits were
+    // issued. The change issues the month's first batch, which is a plain
+    // monthly issue: the change itself adjusted nothing.
+    await changeMonthly(id, {
+      at: day(62),
+      before: 50,
+      after: 80,
+      issues: 80,
+      period: '2026-02-01',
+    })
 
     const forAdmin = await report(admin, id, day(50), NOW)
     const forMember = await report(member(), id, day(50), NOW)
 
     const changes = [
+      { at: day(62), type: 'monthly', bytes: '80', period: '2026-02-01' },
+      {
+        at: day(62),
+        type: 'monthly_change',
+        bytes: '0',
+        monthlyBefore: '50',
+        monthlyAfter: '80',
+      },
       { at: day(61), type: 'expiry', bytes: '-40', period: null },
       { at: day(59), type: 'grant', bytes: '40', period: null },
       {
@@ -709,11 +728,11 @@ describe('Usage reports', () => {
       { at: day(52), type: 'grant', bytes: '600', period: null },
     ].map(({ at, ...change }) => ({ ...change, at: at.toISOString() }))
     expect(forAdmin.freeCreditChanges).toMatchObject(changes)
-    expect(forAdmin.freeCreditChanges[2]).toMatchObject({
+    expect(forAdmin.freeCreditChanges[4]).toMatchObject({
       by: 'admin-pub',
       reason: 'Resized',
     })
-    expect(forAdmin.freeCreditChanges[1]).toMatchObject({
+    expect(forAdmin.freeCreditChanges[3]).toMatchObject({
       by: 'admin-pub',
       reason: 'Pilot',
     })
@@ -727,12 +746,12 @@ describe('Usage reports', () => {
     // granted or expired.
     expect(forAdmin.freeCreditBalance).toEqual({
       opening: '0',
-      granted: '740',
+      granted: '820',
       adjusted: '0',
       consumed: '600',
       expired: '40',
       refunded: '0',
-      closing: '100',
+      closing: '180',
     })
     const sum = forAdmin.freeCreditChanges.reduce(
       (total, change) => total + BigInt(change.bytes),
@@ -748,6 +767,9 @@ describe('Usage reports', () => {
     expect(
       (await report(admin, id, day(58), day(59))).freeCreditBalance,
     ).toMatchObject({ granted: '0', adjusted: '-200', expired: '0' })
+    expect(
+      (await report(admin, id, day(62), day(63))).freeCreditBalance,
+    ).toMatchObject({ granted: '80', adjusted: '0', expired: '0' })
   })
 
   it('carries free credit bytes into the export and the admin list', async () => {

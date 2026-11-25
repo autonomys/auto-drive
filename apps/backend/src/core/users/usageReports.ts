@@ -328,9 +328,6 @@ const toFreeCreditChanges = (
     })
   }
 
-  // As getBalance tells them apart: issued in a change's transaction.
-  const changeTimes = new Set(termsChanges.map((t) => t.created_at.getTime()))
-
   const changes: UsageFreeCreditChange[] = []
   for (const row of batches) {
     const period = row.grant_period
@@ -340,9 +337,7 @@ const toFreeCreditChanges = (
       change.period = period
     }
     if (inRange(row.purchased_at)) {
-      const issuedByChange =
-        period !== null && changeTimes.has(row.purchased_at.getTime())
-      if (issuedByChange) {
+      if (row.by_change && period !== null) {
         const change = amountChangeAt(row.purchased_at)
         change.delta += BigInt(row.upload_bytes_original)
         change.period = period

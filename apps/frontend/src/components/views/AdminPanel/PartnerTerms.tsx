@@ -166,7 +166,10 @@ const TermsModal = ({
     (maxBytes === null || maxBytes > 0) &&
     (expiryDays.trim() === '' || (Number.isInteger(days) && days > 0)) &&
     (!monthly || monthlyFreeBytes !== null) &&
+    // An amount that rounds to 0 bytes is not a grant: refuse it rather
+    // than save without granting.
     grantBytes !== undefined &&
+    grantBytes !== 0 &&
     (!granting ||
       (Number.isInteger(grantExpiryDays) &&
         grantExpiryDays >= 1 &&
@@ -268,7 +271,7 @@ const TermsModal = ({
                 </p>
               )}
               <ByteAmountInput
-                label='One-time free credits to grant now (optional)'
+                label='One-time free credits to grant now (optional, empty for none)'
                 amount={grantAmount.amount}
                 unit={grantAmount.unit}
                 placeholder='None'

@@ -151,6 +151,24 @@ const getPurchases = async (
 //
 // Purchased and free credits are balanced apart (`free`), so neither figure
 // mixes the two.
+/**
+ * SQL for whether the monthly free batch `pc` was issued by a change to the
+ * monthly amount, in its transaction, in place of an earlier batch of the
+ * month. A month's first batch is a plain issue even when a change issued it
+ * (the month had none yet), so a change only adjusts credits that existed.
+ */
+const replacedByChange = (pc: string) => `(${pc}.grant_period IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM account_terms_changes t
+    WHERE t.account_id = ${pc}.account_id
+      AND t.field = 'monthly_free_upload_bytes'
+      AND t.created_at = ${pc}.purchased_at)
+  AND EXISTS (
+    SELECT 1 FROM purchased_credits earlier
+    WHERE earlier.account_id = ${pc}.account_id
+      AND earlier.grant_period = ${pc}.grant_period
+      AND earlier.purchased_at < ${pc}.purchased_at))`
+
 const getBalance = async (
   accountId: string,
   from: Date,
@@ -174,14 +192,9 @@ const getBalance = async (
      ), batches AS (
        SELECT pc.purchased_at,
               pc.upload_bytes_original AS original,
-              -- Monthly free credits issued by a change to the monthly
-              -- amount, in its transaction, and those it ended: adjusted,
-              -- not granted or expired.
-              (pc.grant_period IS NOT NULL AND EXISTS (
-                SELECT 1 FROM account_terms_changes t
-                WHERE t.account_id = pc.account_id
-                  AND t.field = 'monthly_free_upload_bytes'
-                  AND t.created_at = pc.purchased_at)) AS by_change,
+              -- Replacements issued by a change to the monthly amount, and
+              -- the batches it ended: adjusted, not granted or expired.
+              ${replacedByChange('pc')} AS by_change,
               pc.superseded_at IS NOT NULL AS superseded,
               CASE
                 WHEN pc.refunded_at IS NULL THEN pc.upload_bytes_remaining
@@ -373,6 +386,8 @@ const getFreeCredits = async (
 
 export type FreeCreditChangeBatchRow = {
   batch_id: string
+  // As in getBalance: a replacement issued by a change to the monthly amount.
+  by_change: boolean
   purchased_at: Date
   superseded_at: Date | null
   expires_at: Date
@@ -409,17 +424,18 @@ const getFreeCreditChanges = async (
   const db = await getDatabase()
   const [batches, termsChanges] = await Promise.all([
     db.query<FreeCreditChangeBatchRow>(
-      `SELECT id AS batch_id, purchased_at, superseded_at, expires_at,
-              to_char(grant_period, 'YYYY-MM-DD') AS grant_period,
-              upload_bytes_original, upload_bytes_remaining,
-              granted_by, grant_reason
-       FROM purchased_credits
-       WHERE account_id = $1
-         AND intent_id IS NULL
-         AND ((purchased_at >= $2 AND purchased_at < $3)
-           OR (superseded_at >= $2 AND superseded_at < $3)
-           OR (superseded_at IS NULL AND upload_bytes_remaining > 0
-               AND expires_at >= $2 AND expires_at < $3))`,
+      `SELECT pc.id AS batch_id, ${replacedByChange('pc')} AS by_change,
+              pc.purchased_at, pc.superseded_at, pc.expires_at,
+              to_char(pc.grant_period, 'YYYY-MM-DD') AS grant_period,
+              pc.upload_bytes_original, pc.upload_bytes_remaining,
+              pc.granted_by, pc.grant_reason
+       FROM purchased_credits pc
+       WHERE pc.account_id = $1
+         AND pc.intent_id IS NULL
+         AND ((pc.purchased_at >= $2 AND pc.purchased_at < $3)
+           OR (pc.superseded_at >= $2 AND pc.superseded_at < $3)
+           OR (pc.superseded_at IS NULL AND pc.upload_bytes_remaining > 0
+               AND pc.expires_at >= $2 AND pc.expires_at < $3))`,
       [accountId, from, to],
     ),
     db.query<MonthlyTermsChangeRow>(
