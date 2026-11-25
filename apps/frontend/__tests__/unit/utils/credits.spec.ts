@@ -1,4 +1,4 @@
-import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases, purchasedUploadBytesLeft } from '../../../src/utils/credits'
+import { isMibOverCap, isPackageOverCap, daysUntilExpiry, sumExpiringUploadBytes, getBatchStatus, describeBatchKind, describeFreeCreditChange, isBatchRefundable, mibToBytes, normaliseMib, summarizePurchases, purchasedUploadBytesLeft } from '../../../src/utils/credits'
 import { PaymentMethod } from '@auto-drive/models'
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ describe('getBatchStatus', () => {
 describe('describeBatchKind', () => {
   it('labels purchases and one-time free credits', () => {
     expect(describeBatchKind({ kind: 'purchase', grantPeriod: null })).toBe('Purchased credits')
-    expect(describeBatchKind({ kind: 'free_one_time', grantPeriod: null })).toBe('Free credits')
+    expect(describeBatchKind({ kind: 'free_one_time', grantPeriod: null })).toBe('One-time free credits')
   })
 
   it('names the UTC month of monthly free credits', () => {
@@ -264,6 +264,50 @@ describe('describeBatchKind', () => {
     expect(describeBatchKind({ kind: 'free_monthly', grantPeriod: '2027-01-01' })).toBe(
       'Monthly free credits, January 2027',
     )
+  })
+})
+
+describe('describeFreeCreditChange', () => {
+  const format = (bytes: number) => `${bytes} B`
+  const change = (
+    overrides: Partial<Parameters<typeof describeFreeCreditChange>[0]>,
+  ) =>
+    describeFreeCreditChange(
+      {
+        type: 'monthly_change',
+        period: '2026-11-01',
+        monthlyBefore: null,
+        monthlyAfter: null,
+        ...overrides,
+      },
+      format,
+    )
+
+  it('names grants, monthly issues and expiries', () => {
+    expect(change({ type: 'grant', period: null })).toBe('One-time free credits granted')
+    expect(change({ type: 'monthly' })).toBe('Monthly free credits, November 2026')
+    expect(change({ type: 'expiry' })).toBe(
+      'Monthly free credits, November 2026: expired unused',
+    )
+    expect(change({ type: 'expiry', period: null })).toBe(
+      'One-time free credits: expired unused',
+    )
+  })
+
+  it('says how the monthly amount changed', () => {
+    expect(change({ monthlyBefore: '10', monthlyAfter: '20' })).toBe(
+      'Monthly amount raised from 10 B to 20 B',
+    )
+    expect(change({ monthlyBefore: '20', monthlyAfter: '5' })).toBe(
+      'Monthly amount lowered from 20 B to 5 B',
+    )
+    expect(change({ monthlyBefore: '0', monthlyAfter: '5' })).toBe(
+      'Monthly amount set to 5 B',
+    )
+    expect(change({ monthlyBefore: '5', monthlyAfter: '0' })).toBe(
+      'Monthly free credits stopped (were 5 B)',
+    )
+    expect(change({})).toBe('Monthly amount changed')
   })
 })
 

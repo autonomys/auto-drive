@@ -78,7 +78,7 @@ export const accounts = {
                     type: 'integer',
                     minimum: 0,
                     description:
-                      'Free upload bytes issued to a partner account each UTC calendar month, used before purchased credits and expiring at the end of the month. 0 for none. A change applies at once, as a change to the upload limit of a regular account does: the free credits of the month become the new amount less what has been used this month. Partner accounts only.',
+                      'Free upload bytes issued to a partner account each UTC calendar month, used before purchased credits and expiring at the end of the month. 0 for none. A change applies at once, as a change to the upload limit of a regular account does: the free credits of the month become the new amount less what has been used this month. Partner accounts on the monthly model only: the one-off model needs 0, and switching to it with 0 ends the free credits of the month.',
                   },
                   reason: { type: 'string', maxLength: 500 },
                 },

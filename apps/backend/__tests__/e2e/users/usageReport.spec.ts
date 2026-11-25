@@ -378,7 +378,8 @@ describe('Usage reports', () => {
 
   const balanceHolds = (balance: CreditBalance) =>
     BigInt(balance.opening) +
-      BigInt(balance.granted) -
+      BigInt(balance.granted) +
+      BigInt(balance.adjusted) -
       BigInt(balance.consumed) -
       BigInt(balance.expired) -
       BigInt(balance.refunded) ===
@@ -392,6 +393,7 @@ describe('Usage reports', () => {
     expect(balance).toEqual({
       opening: '900',
       granted: '3300',
+      adjusted: '0',
       consumed: '1100',
       expired: '1200',
       refunded: '400',
@@ -439,6 +441,7 @@ describe('Usage reports', () => {
     expect(balance).toEqual({
       opening: '0',
       granted: '1000',
+      adjusted: '0',
       consumed: '100',
       expired: '900',
       refunded: '0',
@@ -569,6 +572,7 @@ describe('Usage reports', () => {
     expect(balance).toEqual({
       opening: '900',
       granted: '3300',
+      adjusted: '0',
       consumed: '1400',
       expired: '1200',
       refunded: '400',
@@ -577,6 +581,7 @@ describe('Usage reports', () => {
     expect(freeCreditBalance).toEqual({
       opening: '0',
       granted: '700',
+      adjusted: '0',
       consumed: '600',
       expired: '0',
       refunded: '0',
@@ -609,6 +614,205 @@ describe('Usage reports', () => {
         }
       }
     }
+  })
+
+  // Changes to the monthly amount, written as updateAccount writes them: the
+  // terms change, the end of the month's batch and its replacement, all at
+  // `at`.
+  const changeMonthly = async (
+    accountId: string,
+    {
+      at,
+      before,
+      after,
+      ends,
+      issues,
+      period = '2026-01-01',
+    }: {
+      at: Date
+      before: number
+      after: number
+      ends?: string
+      issues?: number
+      period?: string
+    },
+  ) => {
+    const db = await getDatabase()
+    await db.query(
+      `INSERT INTO account_terms_changes (account_id, field, old_value,
+         new_value, changed_by, reason, created_at)
+       VALUES ($1, 'monthly_free_upload_bytes', $2, $3, 'admin-pub', 'Resized', $4)`,
+      [accountId, before, after, at],
+    )
+    if (ends) {
+      await db.query(
+        `UPDATE purchased_credits SET superseded_at = $2, expires_at = $2
+         WHERE id = $1`,
+        [ends, at],
+      )
+    }
+    return issues
+      ? grantFree(accountId, {
+          bytes: issues,
+          at,
+          // The month's end, after the timeline.
+          expiresAt: new Date(NOW.getTime() + 30 * DAY),
+          period,
+        })
+      : null
+  }
+
+  it('lists free credit changes newest first, with monthly amount changes as adjustments', async () => {
+    const { account, member, free } = await seedFree()
+    const id = account.id
+    // Day 56: raised from 100 to 300. The month's batch was used up, so it
+    // ends with nothing left and 300 less the 100 used replaces it: +200.
+    const replacement = await changeMonthly(id, {
+      at: day(56),
+      before: 100,
+      after: 300,
+      ends: free.monthly,
+      issues: 200,
+    })
+    // Day 58: lowered from 300 to 50, below the 100 used, so the 200 left end
+    // and nothing replaces them: −200.
+    await changeMonthly(id, {
+      at: day(58),
+      before: 300,
+      after: 50,
+      ends: replacement!,
+    })
+    // Day 59: a one-time grant of 40 that expires unused on day 61.
+    await grantFree(id, { bytes: 40, at: day(59), expiresAt: day(61) })
+    // Day 62: raised from 50 to 80 before the next month's credits were
+    // issued. The change issues the month's first batch, which is a plain
+    // monthly issue: the change itself adjusted nothing.
+    await changeMonthly(id, {
+      at: day(62),
+      before: 50,
+      after: 80,
+      issues: 80,
+      period: '2026-02-01',
+    })
+
+    const forAdmin = await report(admin, id, day(50), NOW)
+    const forMember = await report(member(), id, day(50), NOW)
+
+    const changes = [
+      { at: day(62), type: 'monthly', bytes: '80', period: '2026-02-01' },
+      {
+        at: day(62),
+        type: 'monthly_change',
+        bytes: '0',
+        monthlyBefore: '50',
+        monthlyAfter: '80',
+      },
+      { at: day(61), type: 'expiry', bytes: '-40', period: null },
+      { at: day(59), type: 'grant', bytes: '40', period: null },
+      {
+        at: day(58),
+        type: 'monthly_change',
+        bytes: '-200',
+        monthlyBefore: '300',
+        monthlyAfter: '50',
+      },
+      {
+        at: day(56),
+        type: 'monthly_change',
+        bytes: '200',
+        monthlyBefore: '100',
+        monthlyAfter: '300',
+        expiresAt: '2026-02-01T00:00:00.000Z',
+      },
+      { at: day(53), type: 'monthly', bytes: '100', period: '2026-01-01' },
+      { at: day(52), type: 'grant', bytes: '600', period: null },
+    ].map(({ at, ...change }) => ({ ...change, at: at.toISOString() }))
+    expect(forAdmin.freeCreditChanges).toMatchObject(changes)
+    expect(forAdmin.freeCreditChanges[4]).toMatchObject({
+      by: 'admin-pub',
+      reason: 'Resized',
+    })
+    expect(forAdmin.freeCreditChanges[3]).toMatchObject({
+      by: 'admin-pub',
+      reason: 'Pilot',
+    })
+    expect(forMember.freeCreditChanges).toMatchObject(changes)
+    for (const change of forMember.freeCreditChanges) {
+      expect(change).not.toHaveProperty('by')
+      expect(change).not.toHaveProperty('reason')
+    }
+
+    // The balance agrees: what changes to the amount did is adjusted, not
+    // granted or expired.
+    expect(forAdmin.freeCreditBalance).toEqual({
+      opening: '0',
+      granted: '820',
+      adjusted: '0',
+      consumed: '600',
+      expired: '40',
+      refunded: '0',
+      closing: '180',
+    })
+    const sum = forAdmin.freeCreditChanges.reduce(
+      (total, change) => total + BigInt(change.bytes),
+      BigInt(0),
+    )
+    const balance = forAdmin.freeCreditBalance!
+    expect(sum - BigInt(balance.consumed)).toBe(
+      BigInt(balance.closing) - BigInt(balance.opening),
+    )
+    expect(
+      (await report(admin, id, day(56), day(57))).freeCreditBalance,
+    ).toMatchObject({ granted: '0', adjusted: '200', expired: '0' })
+    expect(
+      (await report(admin, id, day(58), day(59))).freeCreditBalance,
+    ).toMatchObject({ granted: '0', adjusted: '-200', expired: '0' })
+    expect(
+      (await report(admin, id, day(62), day(63))).freeCreditBalance,
+    ).toMatchObject({ granted: '80', adjusted: '0', expired: '0' })
+  })
+
+  it('adjusts a change that replaced a batch issued after the change began', async () => {
+    const { account } = await seedFree()
+    const id = account.id
+    // A change's time is its transaction's start. An upload issued the
+    // month's batch just after it, before it locked the account, so the
+    // change ended that batch and replaced it: raised from 100 to 200.
+    const issued = await grantFree(id, {
+      bytes: 100,
+      at: new Date(day(62).getTime() + 1),
+      expiresAt: new Date(NOW.getTime() + 30 * DAY),
+      period: '2026-02-01',
+    })
+    await changeMonthly(id, {
+      at: day(62),
+      before: 100,
+      after: 200,
+      ends: issued,
+      issues: 200,
+      period: '2026-02-01',
+    })
+
+    const { freeCreditBalance, freeCreditChanges } = await report(
+      admin,
+      id,
+      day(62),
+      day(63),
+    )
+    expect(freeCreditBalance).toMatchObject({
+      granted: '100',
+      adjusted: '100',
+      expired: '0',
+    })
+    expect(freeCreditChanges).toMatchObject([
+      { type: 'monthly', bytes: '100', period: '2026-02-01' },
+      {
+        type: 'monthly_change',
+        bytes: '100',
+        monthlyBefore: '100',
+        monthlyAfter: '200',
+      },
+    ])
   })
 
   it('carries free credit bytes into the export and the admin list', async () => {
