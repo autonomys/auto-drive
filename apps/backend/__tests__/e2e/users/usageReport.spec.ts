@@ -772,6 +772,49 @@ describe('Usage reports', () => {
     ).toMatchObject({ granted: '80', adjusted: '0', expired: '0' })
   })
 
+  it('adjusts a change that replaced a batch issued after the change began', async () => {
+    const { account } = await seedFree()
+    const id = account.id
+    // A change's time is its transaction's start. An upload issued the
+    // month's batch just after it, before it locked the account, so the
+    // change ended that batch and replaced it: raised from 100 to 200.
+    const issued = await grantFree(id, {
+      bytes: 100,
+      at: new Date(day(62).getTime() + 1),
+      expiresAt: new Date(NOW.getTime() + 30 * DAY),
+      period: '2026-02-01',
+    })
+    await changeMonthly(id, {
+      at: day(62),
+      before: 100,
+      after: 200,
+      ends: issued,
+      issues: 200,
+      period: '2026-02-01',
+    })
+
+    const { freeCreditBalance, freeCreditChanges } = await report(
+      admin,
+      id,
+      day(62),
+      day(63),
+    )
+    expect(freeCreditBalance).toMatchObject({
+      granted: '100',
+      adjusted: '100',
+      expired: '0',
+    })
+    expect(freeCreditChanges).toMatchObject([
+      { type: 'monthly', bytes: '100', period: '2026-02-01' },
+      {
+        type: 'monthly_change',
+        bytes: '100',
+        monthlyBefore: '100',
+        monthlyAfter: '200',
+      },
+    ])
+  })
+
   it('carries free credit bytes into the export and the admin list', async () => {
     const { account } = await seedFree()
     const range = { from: day(50), to: NOW }

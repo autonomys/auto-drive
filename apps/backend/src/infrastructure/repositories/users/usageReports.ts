@@ -153,9 +153,14 @@ const getPurchases = async (
 // mixes the two.
 /**
  * SQL for whether the monthly free batch `pc` was issued by a change to the
- * monthly amount, in its transaction, in place of an earlier batch of the
- * month. A month's first batch is a plain issue even when a change issued it
- * (the month had none yet), so a change only adjusts credits that existed.
+ * monthly amount, in its transaction, in place of a batch of the month that a
+ * change ended by then. A month's first batch is a plain issue even when a
+ * change issued it (the month had none yet), so a change only adjusts credits
+ * that existed.
+ *
+ * Keyed on what was ended, not on issue order: the change's time is its
+ * transaction's start, so a batch issued after the change began but before
+ * it locked the account is stamped after the batch that replaces it.
  */
 const replacedByChange = (pc: string) => `(${pc}.grant_period IS NOT NULL
   AND EXISTS (
@@ -164,10 +169,11 @@ const replacedByChange = (pc: string) => `(${pc}.grant_period IS NOT NULL
       AND t.field = 'monthly_free_upload_bytes'
       AND t.created_at = ${pc}.purchased_at)
   AND EXISTS (
-    SELECT 1 FROM purchased_credits earlier
-    WHERE earlier.account_id = ${pc}.account_id
-      AND earlier.grant_period = ${pc}.grant_period
-      AND earlier.purchased_at < ${pc}.purchased_at))`
+    SELECT 1 FROM purchased_credits ended
+    WHERE ended.account_id = ${pc}.account_id
+      AND ended.grant_period = ${pc}.grant_period
+      AND ended.id <> ${pc}.id
+      AND ended.superseded_at <= ${pc}.purchased_at))`
 
 const getBalance = async (
   accountId: string,
@@ -318,13 +324,23 @@ const getAccountSummaries = async (
            SELECT id FROM accounts WHERE is_partner))
        GROUP BY i.account_id
      ), grants AS (
+       -- Free credits net of changes to the monthly amount, as the account's
+       -- report has them (granted + adjusted): a change ends the month's
+       -- batch, taking what it had left, and issues its replacement.
        SELECT account_id,
               COALESCE(SUM(upload_bytes_original) FILTER (
-                WHERE intent_id IS NOT NULL), 0) AS granted_bytes,
+                WHERE intent_id IS NOT NULL
+                  AND purchased_at >= $1 AND purchased_at < $2), 0)
+                AS granted_bytes,
               COALESCE(SUM(upload_bytes_original) FILTER (
-                WHERE intent_id IS NULL), 0) AS free_credits_granted_bytes
+                WHERE intent_id IS NULL
+                  AND purchased_at >= $1 AND purchased_at < $2), 0)
+              - COALESCE(SUM(upload_bytes_remaining) FILTER (
+                WHERE superseded_at >= $1 AND superseded_at < $2), 0)
+                AS free_credits_granted_bytes
        FROM purchased_credits
-       WHERE purchased_at >= $1 AND purchased_at < $2
+       WHERE (purchased_at >= $1 AND purchased_at < $2)
+          OR (superseded_at >= $1 AND superseded_at < $2)
        GROUP BY account_id
      )
      SELECT a.id AS account_id, a.organization_id, a.is_partner,

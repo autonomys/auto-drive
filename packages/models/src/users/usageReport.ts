@@ -223,6 +223,10 @@ export type AccountUsageSummary = {
   downloadBytes: string;
   /** Bytes of credits purchased in the range. */
   grantedBytes: string;
-  /** Bytes of free credits granted in the range. */
+  /**
+   * Bytes of free credits granted in the range, net of changes to the monthly
+   * amount: the account report's granted + adjusted. Negative when a change
+   * took away more than the range granted.
+   */
   freeCreditsGrantedBytes: string;
 };

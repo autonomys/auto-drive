@@ -215,7 +215,8 @@ const Balance = ({
       {free && (
         <Stat
           label='Adjusted'
-          value={signed(balance.adjusted)}
+          // Missing from a report cached from an older backend.
+          value={signed(balance.adjusted ?? '0')}
           hint='Changes to the monthly amount'
         />
       )}
@@ -540,12 +541,15 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
   };
 
   const unattributed = report ? BigInt(report.uploads.unattributedBytes) : null;
+  // The query cache is persisted, so a report fetched from an older backend
+  // can come back without the fields added since.
+  const freeCreditChanges = report?.freeCreditChanges ?? [];
   // Free credits are shown only for an account that had any in the range.
   const hasFreeCredits =
     !!report &&
     (BigInt(report.uploads.freeCreditBytes) > BigInt(0) ||
       report.freeCredits.length > 0 ||
-      report.freeCreditChanges.length > 0 ||
+      freeCreditChanges.length > 0 ||
       Object.values(report.freeCreditBalance ?? {}).some(
         (value) => BigInt(value) > BigInt(0),
       ));
@@ -645,9 +649,9 @@ export const UsageReportView = ({ accountId }: { accountId: string }) => {
             </Section>
           )}
 
-          {report.freeCreditChanges.length > 0 && (
+          {freeCreditChanges.length > 0 && (
             <Section title='Free credit history'>
-              <FreeCreditHistory changes={report.freeCreditChanges} />
+              <FreeCreditHistory changes={freeCreditChanges} />
             </Section>
           )}
 
