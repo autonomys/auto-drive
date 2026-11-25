@@ -23,19 +23,20 @@ const readCredentials = (
   return { accessToken, provider }
 }
 
-// The scope each request's route declares. Keyed by the request, so a client
+// The scopes each request's route declares. Keyed by the request, so a client
 // cannot set it, and collected with it.
-const declaredScopes = new WeakMap<Request, ApiKeyScope>()
+const declaredScopes = new WeakMap<Request, ApiKeyScope[]>()
 
 /**
- * Declares the scope an API key needs for the routes behind it. Keys limited to
- * scopes reach only routes that declare one of theirs; routes that declare none
- * refuse them. Sessions and keys with full access are not affected.
+ * Declares the scopes an API key may use for the routes behind it: any one of
+ * them is enough. Keys limited to scopes reach only routes that declare one of
+ * theirs; routes that declare none refuse them. Sessions and keys with full
+ * access are not affected.
  */
 export const requireApiKeyScope =
-  (scope: ApiKeyScope) =>
+  (...scopes: [ApiKeyScope, ...ApiKeyScope[]]) =>
   (req: Request, _res: Response, next: NextFunction) => {
-    declaredScopes.set(req, scope)
+    declaredScopes.set(req, scopes)
     next()
   }
 
@@ -48,9 +49,9 @@ const apiKeyScopeRefusal = (
   if (!scopes) return null
 
   const required = declaredScopes.get(req)
-  if (required && scopes.includes(required)) return null
+  if (required?.some((scope) => scopes.includes(scope))) return null
   return required
-    ? `This API key needs the ${required} scope (it has: ${scopes.join(', ')})`
+    ? `This API key needs the ${required.join(' or ')} scope (it has: ${scopes.join(', ')})`
     : `Not available to API keys limited to scopes (this key has: ${scopes.join(', ')})`
 }
 

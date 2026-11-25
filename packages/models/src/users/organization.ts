@@ -93,6 +93,21 @@ export type OrganizationMembershipChange = {
   // Public ID of who made the change: an Auto Drive admin, or for end users
   // an organisation admin or the organisation's API key (its service user).
   actor: string;
+  // The organisation API key that made an end user's change, which `actor`
+  // can't tell apart from the organisation's other keys. Null otherwise.
+  actorApiKeyId: string | null;
+  createdAt: string;
+};
+
+/**
+ * An https origin of a partner's app. Wallet sign-ins for it are accepted only
+ * from the partner organisation's end users, who may sign in for nothing else.
+ */
+export type PartnerOrigin = {
+  origin: string;
+  organizationId: string;
+  // Public ID of the Auto Drive admin who registered it.
+  createdBy: string;
   createdAt: string;
 };
 

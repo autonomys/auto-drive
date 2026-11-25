@@ -2,6 +2,7 @@ import {
   MaybeUser,
   MaybeUserWithOrganization,
   OAuthUser,
+  OrganizationRole,
   PaginatedResult,
   User,
   userFromOAuth,
@@ -89,8 +90,13 @@ const getUserWithOrganization = async (
     return { ...resolvedUser, organizationId: null }
   }
 
-  const { organization, membership } =
+  const { organization, archivedAt, membership } =
     await OrganizationsUseCases.getMembershipByUser(resolvedUser)
+  // When a partner organisation is archived, its end users keep the
+  // read-only access of removed end users.
+  const endUserRemovedAt =
+    membership.end_user_removed_at ??
+    (membership.role === OrganizationRole.PartnerEndUser ? archivedAt : null)
 
   return {
     ...resolvedUser,
@@ -98,7 +104,7 @@ const getUserWithOrganization = async (
     organizationRole: organizationRole(membership),
     customerReference: membership.customer_reference,
     uploadQuotaBytes: uploadQuotaBytes(membership),
-    endUserRemovedAt: membership.end_user_removed_at?.toISOString() ?? null,
+    endUserRemovedAt: endUserRemovedAt?.toISOString() ?? null,
   }
 }
 

@@ -50,15 +50,40 @@ const endUserSchema = {
   },
 }
 
-const endUsersAccess =
-  'For an API key of the organization itself (a key with scopes needs `end_users`) and for its organization admins, signed in.'
+const endUsersAccess = (scopes: string) =>
+  `For an API key of the organization itself (a key with scopes needs ${scopes}) and for its organization admins, signed in.`
+
+// A refused enrollment never says whether an address has an Auto Drive user.
+const enrollmentConflict =
+  'An entry conflicts with an existing user or end user: an address with another Auto Drive user or enrolled with another customer reference, a customer reference another end user has (removed or not), or another quota for an end user who is not removed. The message names neither the entry nor the reason. Also: more end users that are not removed than the organization may have, or an archived organization.'
+
+const partnerOriginSchema = {
+  type: 'object',
+  properties: {
+    origin: { type: 'string', example: 'https://app.example.com' },
+    organizationId: { type: 'string' },
+    createdBy: {
+      type: 'string',
+      description: 'Public ID of the Auto Drive admin who added it',
+    },
+    createdAt: { type: 'string', format: 'date-time' },
+  },
+}
+
+const originParameter = {
+  name: 'origin',
+  in: 'path',
+  required: true,
+  description: 'The origin, URL-encoded',
+  schema: { type: 'string' },
+}
 
 export const organizations = {
   paths: {
     '/organizations/{organizationId}/end-users': {
       post: {
         summary: 'Organizations - Enroll end users',
-        description: `${endUsersAccess} End users are a partner's customers, each identified by a wallet address. They own the files they upload, which are charged to the organization's account, and are not members of the organization. All or none of the end users in a request are enrolled. An end user already enrolled with the same customer reference is returned as it is, whatever quota the request gives, so a request can be retried. A removed end user is enrolled again, with the customer reference and quota of the request.`,
+        description: `${endUsersAccess('`end_user_enrollment`')} End users are a partner's customers, each identified by a wallet address. They own the files they upload, which are charged to the organization's account, and are not members of the organization. All or none of the end users in a request are enrolled. A customer reference is permanent once given to an address. An end user already enrolled with the same customer reference and quota is returned as it is, so a request can be retried. A removed end user is enrolled again with the quota of the request, under the same customer reference only.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [organizationIdParameter],
@@ -86,7 +111,7 @@ export const organizations = {
                           type: 'string',
                           pattern: '^[A-Za-z0-9._:-]{1,128}$',
                           description:
-                            'Your own reference for the customer, unique among the end users of the organization, removed ones included. Use a pseudonymous ID, never personal data.',
+                            'Your own reference for the customer, unique among the end users of the organization, removed ones included, and fixed once given. Use a pseudonymous ID, never personal data.',
                         },
                         uploadQuotaBytes: {
                           type: 'integer',
@@ -124,18 +149,15 @@ export const organizations = {
           '401': { description: 'Unauthorized' },
           '403': {
             description:
-              'Not an organization admin or the organization API key, or a key without the end_users scope',
+              'Not an organization admin or the organization API key, or a key without the end_user_enrollment scope',
           },
           '404': { description: 'Not a partner organization' },
-          '409': {
-            description:
-              'An address enrolled with another customer reference, a customer reference another end user has (removed or not), an address with another Auto Drive user, more end users that are not removed than the organization may have, or an archived organization',
-          },
+          '409': { description: enrollmentConflict },
         },
       },
       get: {
         summary: 'Organizations - List end users',
-        description: `${endUsersAccess} Auto Drive admins may list them too. Removed end users are included, with \`removedAt\` set. Ordered by first enrollment.`,
+        description: `${endUsersAccess('`end_user_enrollment` or `end_user_removal`')} Auto Drive admins may list them too. Removed end users are included, with \`removedAt\` set, so a mass removal can be reversed by enrolling them again. Ordered by first enrollment.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [
@@ -173,7 +195,7 @@ export const organizations = {
           '401': { description: 'Unauthorized' },
           '403': {
             description:
-              'Not an organization admin, the organization API key or an Auto Drive admin, or a key without the end_users scope',
+              'Not an organization admin, the organization API key or an Auto Drive admin, or a key with neither end user scope',
           },
           '404': { description: 'Not a partner organization' },
         },
@@ -182,7 +204,7 @@ export const organizations = {
     '/organizations/{organizationId}/end-users/{address}': {
       delete: {
         summary: 'Organizations - Remove an end user',
-        description: `${endUsersAccess} Auto Drive admins may remove them too. The end user stays in the organization with read-only access to their files and no longer counts towards its end users. Enrolling them again undoes it. Removing an end user already removed succeeds, so a request can be retried.`,
+        description: `${endUsersAccess('`end_user_removal`')} Auto Drive admins may remove them too. The end user stays in the organization with read-only access to their files and no longer counts towards its end users. Enrolling them again undoes it. Removing an end user already removed succeeds, so a request can be retried.`,
         tags: ['Auto Drive API'],
         servers: autoDriveServers,
         parameters: [
@@ -200,12 +222,94 @@ export const organizations = {
           '401': { description: 'Unauthorized' },
           '403': {
             description:
-              'Not an organization admin, the organization API key or an Auto Drive admin, or a key without the end_users scope',
+              'Not an organization admin, the organization API key or an Auto Drive admin, or a key without the end_user_removal scope',
           },
           '404': {
             description:
               'Not a partner organization, or not an end user of the organization',
           },
+        },
+      },
+    },
+    '/organizations/{organizationId}/partner-origins': {
+      get: {
+        summary: 'Organizations - List partner origins',
+        description:
+          'For Auto Drive admins. The https origins of the partner app. A wallet sign-in for one is accepted only from end users of the organization, who can sign in for nothing else.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter],
+        responses: {
+          '200': {
+            description: 'The origins, oldest first',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: partnerOriginSchema },
+              },
+            },
+          },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Not an Auto Drive admin' },
+          '404': { description: 'Not a partner organization' },
+        },
+      },
+      post: {
+        summary: 'Organizations - Add a partner origin',
+        description:
+          'For Auto Drive admins. The origin is only an identifier in the signed message and never needs to resolve, so it stays the same if the partner changes its domain.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['origin'],
+                properties: {
+                  origin: {
+                    type: 'string',
+                    example: 'https://app.example.com',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'The origin',
+            content: { 'application/json': { schema: partnerOriginSchema } },
+          },
+          '400': { description: 'Not an https origin' },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Not an Auto Drive admin' },
+          '404': { description: 'Not a partner organization' },
+          '409': {
+            description:
+              'Already registered, for this or another organization, or an archived organization',
+          },
+        },
+      },
+    },
+    '/organizations/{organizationId}/partner-origins/{origin}': {
+      delete: {
+        summary: 'Organizations - Remove a partner origin',
+        description:
+          'For Auto Drive admins. Refused while the organization has end users, removed ones included, because they sign in only through its origins.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter, originParameter],
+        responses: {
+          '204': { description: 'Removed' },
+          '400': { description: 'Not an https origin' },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Not an Auto Drive admin' },
+          '404': {
+            description:
+              'Not a partner organization, or not an origin of the organization',
+          },
+          '409': { description: 'The organization has end users' },
         },
       },
     },
@@ -307,9 +411,9 @@ export const organizations = {
     schemas: {
       ApiKeyScope: {
         type: 'string',
-        enum: ['files', 'end_users', 'usage'],
+        enum: ['files', 'end_user_enrollment', 'end_user_removal', 'usage'],
         description:
-          '`files`: /uploads, /objects, /downloads and /s3. `usage`: the usage report routes. `end_users`: the end user routes of the organization.',
+          '`files`: /uploads, /objects, /downloads and /s3. `usage`: the usage report routes. `end_user_enrollment`: enrolling and listing the end users of the organization. `end_user_removal`: listing and removing them.',
       },
     },
   },

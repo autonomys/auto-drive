@@ -167,9 +167,19 @@ describe('End users', () => {
     ['a member, signed in', member, [403, 403, 403]],
     ['the organization key', () => orgKey(null), [201, 200, 204]],
     [
-      'the organization key with end_users',
-      () => orgKey([ApiKeyScope.EndUsers]),
+      'the organization key with both end user scopes',
+      () => orgKey([ApiKeyScope.EndUserEnrollment, ApiKeyScope.EndUserRemoval]),
       [201, 200, 204],
+    ],
+    [
+      'the organization key with end_user_enrollment',
+      () => orgKey([ApiKeyScope.EndUserEnrollment]),
+      [201, 200, 403],
+    ],
+    [
+      'the organization key with end_user_removal',
+      () => orgKey([ApiKeyScope.EndUserRemoval]),
+      [403, 200, 204],
     ],
     [
       'the organization key with files only',
@@ -256,6 +266,7 @@ describe('End users', () => {
       requested,
       config.params.partnerMaxEndUsers,
       'org-admin',
+      null,
     )
     expect(await response.json()).toEqual({
       endUsers: requested.map((r) => ({
@@ -280,6 +291,7 @@ describe('End users', () => {
         [expect.objectContaining({ address })],
         2,
         expect.any(String),
+        'org-key',
       )
     } finally {
       config.params.partnerMaxEndUsers = max
@@ -317,10 +329,9 @@ describe('End users', () => {
   })
 
   it('passes on what auth refuses', async () => {
-    const { input, address } = newAddress()
+    const { input } = newAddress()
     const conflicts = [
-      `${address} is already an Auto Drive user`,
-      'Customer reference customer-1 is already used by another end user',
+      'An entry conflicts with an existing user or end user',
       'An organization can have at most 2 end users: it has 2, and this would add 1',
     ]
     for (const message of conflicts) {
@@ -356,11 +367,21 @@ describe('End users', () => {
     expect((await remove(address)).status).toBe(204)
 
     expect(removeInAuth.mock.calls).toEqual([
-      [organizationId, address, admin.publicId],
-      [organizationId, address, admin.publicId],
+      [organizationId, address, admin.publicId, null],
+      [organizationId, address, admin.publicId, null],
     ])
+    // A key's removal records which key it was.
+    caller = orgKey([ApiKeyScope.EndUserRemoval])
+    expect((await remove(address)).status).toBe(204)
+    expect(removeInAuth).toHaveBeenLastCalledWith(
+      organizationId,
+      address,
+      caller.publicId,
+      'org-key',
+    )
+    caller = admin
     expect((await remove('not-an-address')).status).toBe(400)
-    expect(removeInAuth).toHaveBeenCalledTimes(2)
+    expect(removeInAuth).toHaveBeenCalledTimes(3)
   })
 
   it('lists end users from auth a page at a time', async () => {

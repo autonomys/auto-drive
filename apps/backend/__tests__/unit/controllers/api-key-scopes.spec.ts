@@ -147,7 +147,12 @@ describe('API key scopes', () => {
     ['a key from before scopes', keyWith(undefined), all],
     ['a files key', keyWith([ApiKeyScope.Files]), files],
     ['a usage key', keyWith([ApiKeyScope.Usage]), usage],
-    ['an end users key', keyWith([ApiKeyScope.EndUsers]), []],
+    [
+      'an end user enrollment key',
+      keyWith([ApiKeyScope.EndUserEnrollment]),
+      [],
+    ],
+    ['an end user removal key', keyWith([ApiKeyScope.EndUserRemoval]), []],
     [
       'a files and usage key',
       keyWith([ApiKeyScope.Files, ApiKeyScope.Usage]),
@@ -166,10 +171,10 @@ describe('API key scopes', () => {
   })
 
   it('says why a key is refused', async () => {
-    user = keyWith([ApiKeyScope.EndUsers])
+    user = keyWith([ApiKeyScope.EndUserEnrollment])
     const [objects] = await routes.objects()
     expect(await objects.json()).toEqual({
-      error: 'This API key needs the files scope (it has: end_users)',
+      error: 'This API key needs the files scope (it has: end_user_enrollment)',
     })
     const [s3] = await routes.s3()
     expect(await s3.text()).toContain('<Code>AccessDenied</Code>')
@@ -194,6 +199,27 @@ describe('API key scopes', () => {
 
     requireApiKeyScope(ApiKeyScope.Files)(req, {} as Response, () => {})
     expect(await tryAuthenticate(req)).toBe(user)
+  })
+
+  it('lets a route accept any one of several scopes', async () => {
+    const declared = () => {
+      const req = { headers } as unknown as Request
+      requireApiKeyScope(
+        ApiKeyScope.EndUserEnrollment,
+        ApiKeyScope.EndUserRemoval,
+      )(req, {} as Response, () => {})
+      return req
+    }
+
+    for (const scope of [
+      ApiKeyScope.EndUserEnrollment,
+      ApiKeyScope.EndUserRemoval,
+    ]) {
+      user = keyWith([scope])
+      expect(await tryAuthenticate(declared())).toBe(user)
+    }
+    user = keyWith([ApiKeyScope.Files])
+    expect(await tryAuthenticate(declared())).toBeNull()
   })
 
   it('creates organization keys with the scopes asked for', async () => {

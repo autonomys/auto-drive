@@ -6,8 +6,16 @@
 export enum ApiKeyScope {
   /** Upload, download, list and manage files: /uploads, /objects, /downloads, /s3. */
   Files = 'files',
-  /** Enrol and manage the organisation's end users. */
-  EndUsers = 'end_users',
+  /**
+   * Enrol the organisation's end users and list them; also, with #985,
+   * change one person's quota.
+   */
+  EndUserEnrollment = 'end_user_enrollment',
+  /**
+   * List and remove the organisation's end users. Kept off the key a
+   * partner's backend uses day to day, so a leak of that key removes nobody.
+   */
+  EndUserRemoval = 'end_user_removal',
   /** Read the account's usage report. */
   Usage = 'usage',
 }

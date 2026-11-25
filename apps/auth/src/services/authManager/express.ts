@@ -9,6 +9,7 @@ import {
 import { OrganizationsUseCases, UsersUseCases } from '../../useCases/index.js'
 import { AuthManager } from './index.js'
 import { CustomJWTAuth } from './providers/custom.js'
+import { Web3SignInRefused } from './providers/web3.js'
 import { config } from '../../config.js'
 import { createLogger } from '../../drivers/logger.js'
 
@@ -99,17 +100,21 @@ export const handleAuthIgnoreOnboarding = async (
     return null
   }
 
+  let reason: string | undefined
   const oauthUser = await AuthManager.getUserFromAccessToken(
     provider,
     accessToken,
   ).catch((e) => {
     logger.error('Failed to get user from access token', e)
+    // Only for a wallet sign-in whose signature verified.
+    if (e instanceof Web3SignInRefused) reason = e.reason
     return null
   })
 
   if (!oauthUser) {
     res.status(401).json({
       error: 'Failed to authenticate user',
+      ...(reason && { reason }),
     })
     return null
   }

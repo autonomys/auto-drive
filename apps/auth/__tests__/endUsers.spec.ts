@@ -34,6 +34,12 @@ const MAX_END_USERS = 100
 
 const newAddress = () => Wallet.createRandom().address
 
+// Every refusal over an address or reference looks the same.
+const conflict = () =>
+  new OrganizationConflictError(
+    'An entry conflicts with an existing user or end user',
+  )
+
 const onboard = async (): Promise<User> => {
   const user = await UsersUseCases.onboardUser(createUnonboardedUser())
   if (!user) throw new Error('Failed to onboard user')
@@ -146,14 +152,13 @@ describe('End users', () => {
     ])
   })
 
-  it('returns active end users with the same reference unchanged', async () => {
+  it('returns active end users with the same reference and quota unchanged', async () => {
     const [first, second] = [newAddress(), newAddress()]
     const [enrolled] = await enroll([endUser(first, 'customer-1')])
 
     const again = await enroll([
       endUser(second, 'customer-2'),
-      // Unchanged, though asked with another quota.
-      endUser(first.toLowerCase(), 'customer-1', 5),
+      endUser(first.toLowerCase(), 'customer-1'),
     ])
 
     expect(again).toEqual([
@@ -166,10 +171,22 @@ describe('End users', () => {
     expect(await changes()).toHaveLength(2)
     // Another reference for the same person is refused.
     await expect(enroll([endUser(first, 'customer-9')])).rejects.toThrow(
-      new OrganizationConflictError(
-        `${first} is already enrolled with another customer reference`,
-      ),
+      conflict(),
     )
+  })
+
+  it('refuses another quota for an active end user', async () => {
+    const address = newAddress()
+    const [enrolled] = await enroll([endUser(address, 'customer-1', 1024)])
+
+    for (const quota of [2048, null]) {
+      await expect(
+        enroll([endUser(address, 'customer-1', quota)]),
+      ).rejects.toThrow(conflict())
+    }
+    await expect(
+      enroll([endUser(address, 'customer-1', 1024)]),
+    ).resolves.toEqual([enrolled])
   })
 
   it('refuses an address that already has any other user', async () => {
@@ -221,11 +238,19 @@ describe('End users', () => {
       removedElsewhere,
       member,
     ]) {
-      await expect(enroll([endUser(address, 'customer-1')])).rejects.toThrow(
-        new OrganizationConflictError(
-          `${address} is already an Auto Drive user`,
-        ),
+      await expect(enroll([endUser(address, 'c-1')])).rejects.toThrow(
+        conflict(),
       )
+    }
+
+    // A batch whose last entry is sure to conflict enrolls nobody, and must
+    // not tell whether an earlier entry had a user either.
+    const own = newAddress()
+    await enroll([endUser(own, 'own', 1024)])
+    for (const probed of [selfSignedUp, newAddress()]) {
+      await expect(
+        enroll([endUser(probed, 'probe'), endUser(own, 'own', 2048)]),
+      ).rejects.toThrow(conflict())
     }
   })
 
@@ -239,14 +264,12 @@ describe('End users', () => {
 
     for (const reference of ['customer-1', 'customer-2']) {
       await expect(enroll([endUser(other, reference)])).rejects.toThrow(
-        new OrganizationConflictError(
-          `Customer reference ${reference} is already used by another end user`,
-        ),
+        conflict(),
       )
     }
     // Nor can a removed end user come back with another's reference.
     await expect(enroll([endUser(removed, 'customer-1')])).rejects.toThrow(
-      OrganizationConflictError,
+      conflict(),
     )
     // References are unique within an organisation only.
     const otherPartner = (
@@ -425,22 +448,27 @@ describe('End users', () => {
     })
   })
 
-  it('enrolls a removed end user again with the reference and quota given', async () => {
+  it('enrolls a removed end user again under the same reference only', async () => {
     const address = newAddress()
     const [enrolled] = await enroll([endUser(address, 'customer-1', 1024)])
     await remove(address)
 
-    const [again] = await enroll([endUser(address, 'customer-2', 2048)])
+    // A reference is permanent once given: another one would let the person
+    // start again with a full quota, and free theirs for someone else.
+    await expect(enroll([endUser(address, 'customer-2')])).rejects.toThrow(
+      conflict(),
+    )
+    const [again] = await enroll([endUser(address, 'customer-1', 2048)])
 
     expect(again).toEqual({
       ...enrolled,
-      customerReference: 'customer-2',
       uploadQuotaBytes: 2048,
       removedAt: null,
     })
     expect(await membershipOf(address)).toMatchObject({
       organization_id: partnerId,
       role: OrganizationRole.PartnerEndUser,
+      customer_reference: 'customer-1',
       end_user_removed_at: null,
     })
     const [reenrolment] = await changes()
@@ -451,10 +479,35 @@ describe('End users', () => {
       role: OrganizationRole.PartnerEndUser,
     })
     expect(await changes()).toHaveLength(3)
-    // Its old reference is free again: nobody else held it.
-    await expect(
-      enroll([endUser(newAddress(), 'customer-1')]),
-    ).resolves.toHaveLength(1)
+    // Its reference is still its own.
+    await expect(enroll([endUser(newAddress(), 'customer-1')])).rejects.toThrow(
+      conflict(),
+    )
+  })
+
+  it('records the API key behind each change', async () => {
+    const address = newAddress()
+    await OrganizationsUseCases.enrollEndUsers({
+      organizationId: partnerId,
+      endUsers: [endUser(address, 'customer-1')],
+      maxEndUsers: MAX_END_USERS,
+      actor: ACTOR,
+      actorApiKeyId: 'enrolling-key',
+    })
+    await OrganizationsUseCases.removeEndUser({
+      organizationId: partnerId,
+      address,
+      actor: ACTOR,
+      actorApiKeyId: 'removing-key',
+    })
+    // Signed in: no key.
+    await enroll([endUser(address, 'customer-1')])
+
+    expect(await changes()).toEqual([
+      expect.objectContaining({ actor: ACTOR, actorApiKeyId: null }),
+      expect.objectContaining({ actor: ACTOR, actorApiKeyId: 'removing-key' }),
+      expect.objectContaining({ actor: ACTOR, actorApiKeyId: 'enrolling-key' }),
+    ])
   })
 
   it('lists end users a page at a time, removed ones included', async () => {
@@ -594,11 +647,13 @@ describe('End users', () => {
       { ...valid, endUsers: [{ address: '0x1234', customerReference: 'c' }] },
       { ...valid, maxEndUsers: undefined },
       { ...valid, maxEndUsers: -1 },
+      { ...valid, actorApiKeyId: 1 },
+      { ...valid, actorApiKeyId: '' },
     ]) {
       expect([body, (await call('POST', '', body)).status]).toEqual([body, 400])
     }
 
-    const enrolled = await call('POST', '', valid)
+    const enrolled = await call('POST', '', { ...valid, actorApiKeyId: 'key' })
     expect(enrolled.status).toBe(200)
     expect(await enrolled.json()).toEqual([
       {

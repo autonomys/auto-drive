@@ -1,5 +1,9 @@
 import { Router, Request, Response } from 'express'
-import { EndUserEnrollment, OrganizationsUseCases } from '../useCases/index.js'
+import {
+  EndUserEnrollment,
+  OrganizationsUseCases,
+  PartnerOriginsUseCases,
+} from '../useCases/index.js'
 import { createLogger } from '../drivers/logger.js'
 import {
   handleAdminAuth,
@@ -192,6 +196,22 @@ organizationController.delete(
   },
 )
 
+// The organisation API key behind an end-user change, if one made it.
+const getActorApiKeyId = (
+  req: Request,
+  res: Response,
+): string | null | false => {
+  const actorApiKeyId = req.body?.actorApiKeyId ?? null
+  if (
+    actorApiKeyId !== null &&
+    (typeof actorApiKeyId !== 'string' || !actorApiKeyId)
+  ) {
+    res.status(400).json({ error: 'actorApiKeyId must be a string or null' })
+    return false
+  }
+  return actorApiKeyId
+}
+
 // A partner's end users. The backend decides who may manage them and checks
 // what the partner gives for them; these routes check its shape.
 const isEnrollment = (value: unknown): value is EndUserEnrollment => {
@@ -215,6 +235,10 @@ organizationController.post(
     }
     const actor = getActor(req, res)
     if (!actor) {
+      return
+    }
+    const actorApiKeyId = getActorApiKeyId(req, res)
+    if (actorApiKeyId === false) {
       return
     }
 
@@ -249,6 +273,7 @@ organizationController.post(
           })),
           maxEndUsers,
           actor,
+          actorApiKeyId,
         }),
       )
     } catch (error) {
@@ -305,16 +330,90 @@ organizationController.delete(
     if (!actor) {
       return
     }
+    const actorApiKeyId = getActorApiKeyId(req, res)
+    if (actorApiKeyId === false) {
+      return
+    }
 
     try {
       await OrganizationsUseCases.removeEndUser({
         organizationId: req.params.organizationId,
         address: req.params.address,
         actor,
+        actorApiKeyId,
       })
       res.status(204).end()
     } catch (error) {
       handleError(error, res, 'Failed to remove end user')
+    }
+  },
+)
+
+// The origins of a partner's app that its end users sign in for. The backend
+// lets Auto Drive admins manage them.
+organizationController.get(
+  '/:organizationId/partner-origins',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    try {
+      res.json(
+        await PartnerOriginsUseCases.listOrigins(req.params.organizationId),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to list partner origins')
+    }
+  },
+)
+
+organizationController.post(
+  '/:organizationId/partner-origins',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+    const { origin } = req.body
+    if (typeof origin !== 'string') {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    try {
+      res.status(201).json(
+        await PartnerOriginsUseCases.addOrigin({
+          organizationId: req.params.organizationId,
+          origin,
+          actor,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to add partner origin')
+    }
+  },
+)
+
+// The origin is URL-encoded in the path.
+organizationController.delete(
+  '/:organizationId/partner-origins/:origin',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    try {
+      await PartnerOriginsUseCases.removeOrigin({
+        organizationId: req.params.organizationId,
+        origin: req.params.origin,
+      })
+      res.status(204).end()
+    } catch (error) {
+      handleError(error, res, 'Failed to remove partner origin')
     }
   },
 )

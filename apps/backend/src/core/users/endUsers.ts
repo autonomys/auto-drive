@@ -34,8 +34,9 @@ const normaliseAddress = (address: string): string | null =>
 
 /**
  * A partner organisation's end users are managed by its own organisation API
- * key (one limited to scopes needs end_users, which the routes require) and by
- * its organisation admins, signed in. Auto Drive admins, signed in, may list
+ * key (one limited to scopes needs end_user_enrollment to enrol and
+ * end_user_removal to remove, which the routes require) and by its
+ * organisation admins, signed in. Auto Drive admins, signed in, may list
  * and remove them but not enrol them. Every other caller is refused, personal
  * API keys and other organisations' keys included.
  */
@@ -80,8 +81,9 @@ const authorize = async (
 /**
  * Enrols end users. The auth service owns them: it enrols all of them or none
  * in one transaction, returns an end user already enrolled with the same
- * customer reference unchanged and enrols a removed one again, so a request
- * that failed or timed out can be retried. It also checks the cap.
+ * customer reference and quota unchanged and enrols a removed one again under
+ * the same reference, so a request that failed or timed out can be retried.
+ * It also checks the cap, and records the API key behind each change.
  */
 const enrollEndUsers = async (
   executor: UserWithOrganization,
@@ -121,6 +123,7 @@ const enrollEndUsers = async (
     requested,
     config.params.partnerMaxEndUsers,
     executor.publicId,
+    executor.apiKeyId ?? null,
   )
   if (enrolled.isErr()) return err(enrolled.error)
 
@@ -153,6 +156,7 @@ const removeEndUser = async (
     organizationId,
     normalised,
     executor.publicId,
+    executor.apiKeyId ?? null,
   )
   if (removed.isErr()) return err(removed.error)
 

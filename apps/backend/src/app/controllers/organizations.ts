@@ -7,6 +7,7 @@ import {
 } from '../../infrastructure/services/auth/express.js'
 import { OrganizationsUseCases } from '../../core/users/organizations.js'
 import { EndUsersUseCases } from '../../core/users/endUsers.js'
+import { PartnerOriginsUseCases } from '../../core/users/partnerOrigins.js'
 import { CUSTOMER_REFERENCE } from '../../core/uploads/customerReference.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
@@ -15,8 +16,9 @@ import { handleError } from '../../errors/index.js'
 // Partner organizations, their members, their API keys and their end users.
 // Every route checks its caller in its use case: Auto Drive admins manage
 // organizations, organization admins manage their members (by invitation) and
-// API keys, members read their organization, and organization admins and the
-// organization's API keys manage its end users.
+// API keys, members read their organization, organization admins and the
+// organization's API keys manage its end users, and Auto Drive admins manage
+// the origins its end users sign in for.
 export const organizationsController = Router()
 
 const roleSchema = z.enum(MEMBER_ROLES)
@@ -518,7 +520,7 @@ const enrollEndUsersBody = z.object({
 
 organizationsController.post(
   '/:organizationId/end-users',
-  requireApiKeyScope(ApiKeyScope.EndUsers),
+  requireApiKeyScope(ApiKeyScope.EndUserEnrollment),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -560,7 +562,7 @@ const listEndUsersQuery = z.object({
 
 organizationsController.get(
   '/:organizationId/end-users',
-  requireApiKeyScope(ApiKeyScope.EndUsers),
+  requireApiKeyScope(ApiKeyScope.EndUserEnrollment, ApiKeyScope.EndUserRemoval),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -594,7 +596,7 @@ organizationsController.get(
 
 organizationsController.delete(
   '/:organizationId/end-users/:address',
-  requireApiKeyScope(ApiKeyScope.EndUsers),
+  requireApiKeyScope(ApiKeyScope.EndUserRemoval),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -608,6 +610,89 @@ organizationsController.delete(
         req.params.address,
       ),
       'Failed to remove end user',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
+  }),
+)
+
+// The origins of a partner's app that its end users sign in for. Auto Drive
+// admins only.
+organizationsController.get(
+  '/:organizationId/partner-origins',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.listPartnerOrigins(
+        user,
+        req.params.organizationId,
+      ),
+      'Failed to list partner origins',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/:organizationId/partner-origins',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const origin = z.string().safeParse(req.body?.origin)
+    if (!origin.success) {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.addPartnerOrigin(
+        user,
+        req.params.organizationId,
+        origin.data,
+      ),
+      'Failed to add partner origin',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json(result.value)
+  }),
+)
+
+// The origin is URL-encoded in the path.
+organizationsController.delete(
+  '/:organizationId/partner-origins/:origin',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.removePartnerOrigin(
+        user,
+        req.params.organizationId,
+        req.params.origin,
+      ),
+      'Failed to remove partner origin',
     )
     if (result.isErr()) {
       handleError(result.error, res)

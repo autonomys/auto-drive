@@ -12,6 +12,7 @@ import {
   OrganizationSummary,
   OrganizationWithMembers,
   PartnerEndUser,
+  PartnerOrigin,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { err, ok, Result } from 'neverthrow'
@@ -431,15 +432,21 @@ export type PartnerEndUserEnrollment = {
 
 // Enrolls them in one transaction, at most maxEndUsers end users that are not
 // removed in all, and returns them in request order.
+// `actor` is who made the change; `actorApiKeyId` the organisation API key
+// they made it with, if any.
 const enrollOrganizationEndUsers = (
   organizationId: string,
   endUsers: PartnerEndUserEnrollment[],
   maxEndUsers: number,
   actor: string,
+  actorApiKeyId: string | null,
 ) =>
   organizationRequest<PartnerEndUser[]>(
     `/${encodeURIComponent(organizationId)}/end-users`,
-    { method: 'POST', body: { endUsers, maxEndUsers, actor } },
+    {
+      method: 'POST',
+      body: { endUsers, maxEndUsers, actor, actorApiKeyId },
+    },
   )
 
 const listOrganizationEndUsers = (
@@ -455,10 +462,34 @@ const removeOrganizationEndUser = (
   organizationId: string,
   address: string,
   actor: string,
+  actorApiKeyId: string | null,
 ) =>
   organizationRequest<void>(
     `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(address)}`,
-    { method: 'DELETE', body: { actor } },
+    { method: 'DELETE', body: { actor, actorApiKeyId } },
+  )
+
+const listPartnerOrigins = (organizationId: string) =>
+  organizationRequest<PartnerOrigin[]>(
+    `/${encodeURIComponent(organizationId)}/partner-origins`,
+  )
+
+const addPartnerOrigin = (
+  organizationId: string,
+  origin: string,
+  actor: string,
+) =>
+  organizationRequest<PartnerOrigin>(
+    `/${encodeURIComponent(organizationId)}/partner-origins`,
+    { method: 'POST', body: { origin, actor } },
+  )
+
+// Refused while the organisation has end users, who sign in only through its
+// origins.
+const removePartnerOrigin = (organizationId: string, origin: string) =>
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/partner-origins/${encodeURIComponent(origin)}`,
+    { method: 'DELETE' },
   )
 
 const getOrganizationApiKeys = (organizationId: string) =>
@@ -496,6 +527,9 @@ export const AuthManager = {
   enrollOrganizationEndUsers,
   listOrganizationEndUsers,
   removeOrganizationEndUser,
+  listPartnerOrigins,
+  addPartnerOrigin,
+  removePartnerOrigin,
   getUserFromAccessToken,
   getUserFromPublicId,
   getUsersFromPublicIds,

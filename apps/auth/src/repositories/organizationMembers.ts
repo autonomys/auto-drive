@@ -172,6 +172,20 @@ const countActiveEndUsers = async (
   return Number(result.rows[0].count)
 }
 
+// Whether the organisation has any end users, removed ones included.
+const hasEndUsers = async (
+  organizationId: string,
+  db: pg.Client,
+): Promise<boolean> => {
+  const result = await db.query(
+    `SELECT 1 FROM users.users_organizations
+     WHERE organization_id = $1 AND role = $2
+     LIMIT 1`,
+    [organizationId, OrganizationRole.PartnerEndUser],
+  )
+  return result.rows.length > 0
+}
+
 const addEndUser = async (
   organizationId: string,
   endUser: {
@@ -200,29 +214,27 @@ const addEndUser = async (
   return result.rows[0]
 }
 
-// Enrols a removed end user again, with what the partner now gives for them.
+// Enrols a removed end user again with the quota the partner now gives. Their
+// customer reference never changes.
 const reenrollEndUser = async (
   organizationId: string,
   endUser: {
     oauthProvider: string
     oauthUserId: string
-    customerReference: string
     uploadQuotaBytes: number | null
   },
   db: pg.Client,
 ): Promise<DBOrganizationMember> => {
   const result = await db.query<DBOrganizationMember>(
     `UPDATE users.users_organizations
-     SET end_user_removed_at = NULL, customer_reference = $4,
-       upload_quota_bytes = $5
+     SET end_user_removed_at = NULL, upload_quota_bytes = $4
      WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3
-       AND role = $6
+       AND role = $5
      RETURNING *`,
     [
       organizationId,
       endUser.oauthProvider,
       endUser.oauthUserId,
-      endUser.customerReference,
       endUser.uploadQuotaBytes,
       OrganizationRole.PartnerEndUser,
     ],
@@ -301,6 +313,7 @@ export const organizationMembersRepository = {
   removeUserMemberships,
   getEndUsersByCustomerReferences,
   countActiveEndUsers,
+  hasEndUsers,
   addEndUser,
   reenrollEndUser,
   getMembershipForUpdate,

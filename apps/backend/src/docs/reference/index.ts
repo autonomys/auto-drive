@@ -41,7 +41,8 @@ An organization API key can be limited to scopes when it is created (\`POST /org
 | --- | --- |
 | \`files\` | \`/uploads\`, \`/objects\`, \`/downloads\` and \`/s3\`: everything the Auto Drive SDK needs to upload, download and list files |
 | \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
-| \`end_users\` | \`POST\`, \`GET\` and \`DELETE\` under \`/organizations/{organizationId}/end-users\`: enroll, list and remove the organization's end users |
+| \`end_user_enrollment\` | \`POST\` and \`GET /organizations/{organizationId}/end-users\`: enroll and list the organization's end users |
+| \`end_user_removal\` | \`GET /organizations/{organizationId}/end-users\` and \`DELETE /organizations/{organizationId}/end-users/{address}\`: list and remove them. Keep it off the key your backend uses day to day, so a leak of that key can't remove anyone. |
 
 ## Partner end users
 

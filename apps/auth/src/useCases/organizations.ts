@@ -36,12 +36,16 @@ import {
   OrganizationValidationError,
 } from '../errors/organizations.js'
 import { ApiKeyNotFoundError } from '../errors/apikeys.js'
+import { createLogger } from '../drivers/logger.js'
 
-// The user's organisation and their membership of it.
+const logger = createLogger('useCases:organizations')
+
+// The user's organisation, when it was archived, and their membership of it.
 const getMembershipByUser = async (
   user: User,
 ): Promise<{
   organization: Organization
+  archivedAt: Date | null
   membership: DBOrganizationMember
 }> => {
   const membership =
@@ -66,6 +70,7 @@ const getMembershipByUser = async (
 
   return {
     organization: { id: organization.id, name: organization.name },
+    archivedAt: organization.archived_at,
     membership,
   }
 }
@@ -530,26 +535,52 @@ const isUniqueViolation = (error: unknown) =>
   (error as { code?: string } | null)?.code === '23505'
 
 /**
+ * Every refusal over an address or a customer reference. It names neither the
+ * entry nor the reason, so enrolment can't be used to learn whether an address
+ * has an Auto Drive account: with the entry named, a batch whose second entry
+ * is sure to conflict would tell, without enrolling anyone, whether the first
+ * one did. The entry and reason are logged.
+ */
+const enrollmentConflict = (
+  organizationId: string,
+  index: number,
+  reason: string,
+) => {
+  logger.info('End user enrollment refused', { organizationId, index, reason })
+  return new OrganizationConflictError(
+    'An entry conflicts with an existing user or end user',
+  )
+}
+
+/**
  * Enrols a partner's customers as end users of its organisation, all of them
  * or none in one transaction. A new address gets a user who signs in with that
  * wallet, onboarded, with role partner_end_user and what the partner gave for
- * them. An end user of this organisation with the same customer reference is
- * returned unchanged, so a retry is safe, and a removed one is enrolled again
- * with the reference and quota of the request. Refused: any other user of the
- * address, a reference another end user of the organisation has (removed or
- * not), and more than `maxEndUsers` end users that are not removed. Returns
- * the end users in request order.
+ * them. A customer reference is permanent once given to an address, so it is
+ * never reused for another person:
+ * - an active end user with the same reference and quota is returned
+ *   unchanged, so a retry is safe;
+ * - a removed one is enrolled again with the request's quota, under the same
+ *   reference only.
+ * Refused, with one message: any other user of the address, another reference
+ * for an end user, a reference another end user of the organisation has
+ * (removed or not), and another quota for an active end user (quotas change
+ * through their own route). Also refused: more than `maxEndUsers` end users
+ * that are not removed. Returns the end users in request order.
  */
 const enrollEndUsers = async ({
   organizationId,
   endUsers,
   maxEndUsers,
   actor,
+  actorApiKeyId = null,
 }: {
   organizationId: string
   endUsers: EndUserEnrollment[]
   maxEndUsers: number
   actor: string
+  // The organisation API key making the request, if one is.
+  actorApiKeyId?: string | null
 }): Promise<PartnerEndUser[]> => {
   const requested = endUsers.map((endUser) => ({
     ...endUser,
@@ -613,16 +644,16 @@ const enrollEndUsers = async ({
       )
 
       // Everything is checked before anything is written.
-      const plan = requested.map((request) => {
+      const plan = requested.map((request, index) => {
+        const conflict = (reason: string) =>
+          enrollmentConflict(organizationId, index, reason)
         const holder = referenceHolders.get(request.customerReference)
         if (
           holder &&
           (holder.oauth_provider !== WALLET_PROVIDER ||
             holder.oauth_user_id !== request.address)
         ) {
-          throw new OrganizationConflictError(
-            `Customer reference ${request.customerReference} is already used by another end user`,
-          )
+          throw conflict('customer reference held by another end user')
         }
         if (!users.has(request.address)) {
           return { request, action: 'create' as const }
@@ -632,17 +663,16 @@ const enrollEndUsers = async ({
           membership?.organization_id !== organizationId ||
           membership.role !== OrganizationRole.PartnerEndUser
         ) {
-          throw new OrganizationConflictError(
-            `${request.address} is already an Auto Drive user`,
-          )
+          throw conflict('address belongs to another user')
+        }
+        if (membership.customer_reference !== request.customerReference) {
+          throw conflict('end user has another customer reference')
         }
         if (membership.end_user_removed_at) {
           return { request, action: 'reenroll' as const }
         }
-        if (membership.customer_reference !== request.customerReference) {
-          throw new OrganizationConflictError(
-            `${request.address} is already enrolled with another customer reference`,
-          )
+        if (uploadQuotaBytes(membership) !== request.uploadQuotaBytes) {
+          throw conflict('active end user has another quota')
         }
         return { request, action: 'none' as const, membership }
       })
@@ -705,6 +735,7 @@ const enrollEndUsers = async ({
             toOrganizationId: organizationId,
             role: OrganizationRole.PartnerEndUser,
             actor,
+            actorApiKeyId,
           },
           db,
         )
@@ -713,11 +744,10 @@ const enrollEndUsers = async ({
       return enrolled
     })
   } catch (error) {
-    // A concurrent sign-up or enrolment in another organisation took an
-    // address first. A retry gives the reason.
+    // A concurrent sign-up or enrolment took an address or reference first.
     if (isUniqueViolation(error)) {
       throw new OrganizationConflictError(
-        'An address was taken by a concurrent request',
+        'An address or customer reference was taken by a concurrent request',
       )
     }
     throw error
@@ -734,10 +764,13 @@ const removeEndUser = async ({
   organizationId,
   address,
   actor,
+  actorApiKeyId = null,
 }: {
   organizationId: string
   address: string
   actor: string
+  // The organisation API key making the request, if one is.
+  actorApiKeyId?: string | null
 }): Promise<void> => {
   const oauthUserId = parseAddress(address)
 
@@ -773,6 +806,7 @@ const removeEndUser = async ({
         toOrganizationId: null,
         role: OrganizationRole.PartnerEndUser,
         actor,
+        actorApiKeyId,
       },
       db,
     )
@@ -819,6 +853,7 @@ const getMembershipChanges = async (
     toOrganizationId: row.to_organization_id,
     role: row.role,
     actor: row.actor,
+    actorApiKeyId: row.actor_api_key_id,
     createdAt: row.created_at.toISOString(),
   }))
 }
