@@ -14,6 +14,11 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleDownloadResponseHeaders } from '@autonomys/file-server'
 import {
+  applyUserContentHeaders,
+  isServiceWorkerScriptRequest,
+  sendServiceWorkerKillSwitch,
+} from '../../shared/utils/userContent.js'
+import {
   handleInternalError,
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
@@ -405,6 +410,10 @@ objectController.post(
 objectController.get(
   '/:id/public',
   asyncSafeHandler(async (req, res) => {
+    if (isServiceWorkerScriptRequest(req)) {
+      sendServiceWorkerKillSwitch(res)
+      return
+    }
     const { id } = req.params
     const blockingTags = req.query.blockObjectsWithTags
       ?.toString()
@@ -456,6 +465,7 @@ objectController.get(
     handleDownloadResponseHeaders(req, res, metadata, {
       byteRange: resultingByteRange,
     })
+    applyUserContentHeaders(req, res)
 
     pipeline(stream, res, (err) => {
       if (err) {

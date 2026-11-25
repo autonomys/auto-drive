@@ -23,6 +23,11 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { TimeoutError } from '../../shared/utils/timeout.js'
+import {
+  applyUserContentHeaders,
+  isServiceWorkerScriptRequest,
+  sendServiceWorkerKillSwitch,
+} from '../../shared/utils/userContent.js'
 
 const logger = createLogger('http:controllers:download')
 
@@ -92,6 +97,10 @@ downloadController.post(
 downloadController.get(
   '/:cid',
   asyncSafeHandler(async (req, res) => {
+    if (isServiceWorkerScriptRequest(req)) {
+      sendServiceWorkerKillSwitch(res)
+      return
+    }
     try {
       const { cid } = req.params
       const { blockObjectsWithTags } = req.query
@@ -170,6 +179,7 @@ downloadController.get(
           byteRange: resultingByteRange,
         },
       )
+      applyUserContentHeaders(req, res)
 
       // When ignoreEncoding=true is passed, the SDK is telling us it will handle
       // decompression itself. We should NOT decompress server-side in this case.
