@@ -623,8 +623,7 @@ const ensureMonthlyFreeCredits = async (
  * changes. Run in the transaction that changes it, before
  * ensureMonthlyFreeCredits, so the month's free credits become the new amount
  * less what has been used this month. The ended batch keeps its remaining
- * bytes, so usage reports count them as taken away by the change (adjusted,
- * not expired) at this time.
+ * bytes, so usage reports count them as taken away at this time.
  */
 const supersedeMonthlyFreeCredits = async (
   client: pg.PoolClient,
