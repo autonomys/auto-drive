@@ -623,7 +623,7 @@ const ensureMonthlyFreeCredits = async (
  * changes. Run in the transaction that changes it, before
  * ensureMonthlyFreeCredits, so the month's free credits become the new amount
  * less what has been used this month. The ended batch keeps its remaining
- * bytes, so usage reports count them as expired at this time.
+ * bytes, so usage reports count them as taken away at this time.
  */
 const supersedeMonthlyFreeCredits = async (
   client: pg.PoolClient,
@@ -665,6 +665,57 @@ const createFreeCredit = async (params: {
     ],
   )
   return mapFreeCredit(result.rows[0])
+}
+
+/**
+ * The account's free credits by kind: what is left of each (active batches
+ * only, as getRemainingCredits counts them), and its one-time grants in all.
+ */
+const getFreeCreditSummary = async (
+  accountId: string,
+): Promise<{
+  monthlyRemaining: bigint
+  oneTimeRemaining: bigint
+  oneTimeNextExpiry: Date | null
+  oneTimeGranted: bigint
+  oneTimeGrantCount: number
+}> => {
+  const db = await getDatabase()
+  const result = await db.query<{
+    monthly_remaining: string
+    one_time_remaining: string
+    one_time_next_expiry: Date | null
+    one_time_granted: string
+    one_time_grant_count: string
+  }>(
+    `WITH free AS (
+       SELECT *,
+              expired = FALSE AND expires_at > NOW()
+                AND upload_bytes_remaining > 0 AS active
+       FROM purchased_credits
+       WHERE account_id = $1 AND intent_id IS NULL
+     )
+     SELECT
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE active AND grant_period IS NOT NULL), 0) AS monthly_remaining,
+       COALESCE(SUM(upload_bytes_remaining) FILTER (
+         WHERE active AND grant_period IS NULL), 0) AS one_time_remaining,
+       MIN(expires_at) FILTER (
+         WHERE active AND grant_period IS NULL) AS one_time_next_expiry,
+       COALESCE(SUM(upload_bytes_original) FILTER (
+         WHERE grant_period IS NULL), 0) AS one_time_granted,
+       COUNT(*) FILTER (WHERE grant_period IS NULL) AS one_time_grant_count
+     FROM free`,
+    [accountId],
+  )
+  const row = result.rows[0]
+  return {
+    monthlyRemaining: BigInt(row.monthly_remaining),
+    oneTimeRemaining: BigInt(row.one_time_remaining),
+    oneTimeNextExpiry: row.one_time_next_expiry ?? null,
+    oneTimeGranted: BigInt(row.one_time_granted),
+    oneTimeGrantCount: Number(row.one_time_grant_count),
+  }
 }
 
 /** The account's free batches, both kinds, newest first. */
@@ -1104,6 +1155,7 @@ export const purchasedCreditsRepository = {
   createPurchasedCreditWithCapCheck,
   ensureMonthlyFreeCredits,
   supersedeMonthlyFreeCredits,
+  getFreeCreditSummary,
   createFreeCredit,
   getFreeCreditsByAccountId,
   markExpiredCredits,

@@ -111,6 +111,19 @@ const updateAccount = async (
     )
   }
 
+  // A partner on the one-off model has one-time free credits only, granted
+  // with grantFreeCredits.
+  if (
+    model === AccountModel.OneOff &&
+    (terms.monthlyFreeUploadBytes ?? account.monthlyFreeUploadBytes) > 0
+  ) {
+    return err(
+      new BadRequestError(
+        'Monthly free upload credits need the monthly model: set them to 0, or grant one-time free credits instead',
+      ),
+    )
+  }
+
   logger.debug('Updating account', {
     accountId,
     model,

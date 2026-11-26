@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useNetwork } from 'contexts/network';
 import { shortenString } from 'utils/misc';
 import { handleEnterOrSpace } from 'utils/eventHandler';
-import { formatBytes } from '../../../utils/number';
+import { formatStorageSize } from '../../../utils/number';
 
 type UserTableRowProps = {
   accountWithUser: AccountInfoWithUser;
@@ -87,22 +87,24 @@ export const UserTableRow = ({ accountWithUser }: UserTableRowProps) => {
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {formatBytes(Number(accountWithUser.uploadLimit))}
+          {formatStorageSize(Number(accountWithUser.uploadLimit))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {formatBytes(Number(accountWithUser.pendingUploadCredits || 0))}
+          {formatStorageSize(Number(accountWithUser.pendingUploadCredits || 0))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {formatBytes(Number(accountWithUser.downloadLimit))}
+          {formatStorageSize(Number(accountWithUser.downloadLimit))}
         </div>
       </TableBodyCell>
       <TableBodyCell>
         <div className='text-foreground-hover text-sm'>
-          {formatBytes(Number(accountWithUser.pendingDownloadCredits || 0))}
+          {formatStorageSize(
+            Number(accountWithUser.pendingDownloadCredits || 0),
+          )}
         </div>
       </TableBodyCell>
       <TableBodyCell>

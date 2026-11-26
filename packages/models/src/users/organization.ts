@@ -173,9 +173,18 @@ export type OrganizationOverview = {
     purchasedBytesRemaining: string;
     // Soonest expiry of the purchased credits left, or null when none.
     purchasedNextExpiry: string | null;
+    // Monthly and one-time free credits left.
     freeCreditBytesRemaining: string;
     // Issued at the start of each UTC month; 0 = none.
     monthlyFreeUploadBytes: string;
+    // What is left of this month's free credits.
+    monthlyFreeBytesRemaining: string;
+    // One-time free credits: what is left, what was granted in all and in how
+    // many grants, and the soonest expiry of those left (null when none).
+    oneTimeFreeBytesRemaining: string;
+    oneTimeFreeBytesGranted: string;
+    oneTimeFreeGrantCount: number;
+    oneTimeFreeNextExpiry: string | null;
     // Most purchased credits the account may hold at once.
     maxPurchasedBytes: string;
     // Days purchased credits last.

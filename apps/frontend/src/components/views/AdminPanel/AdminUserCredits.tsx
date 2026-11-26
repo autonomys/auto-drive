@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNetwork } from '../../../contexts/network';
-import { formatBytes } from '../../../utils/number';
+import { formatStorageSize } from '../../../utils/number';
 import { formatDate } from '../../../utils/time';
 import {
   ArrowLeft,
@@ -225,7 +225,7 @@ export const AdminUserCredits = ({
           <div className='rounded-lg border border-border bg-card p-4'>
             <p className='text-xs text-muted-foreground'>Total purchased</p>
             <p className='mt-1 text-2xl font-semibold'>
-              {formatBytes(
+              {formatStorageSize(
                 batches.reduce(
                   (s, b) => s + Number(BigInt(b.uploadBytesOriginal)),
                   0,
@@ -237,7 +237,7 @@ export const AdminUserCredits = ({
           <div className='rounded-lg border border-border bg-card p-4'>
             <p className='text-xs text-muted-foreground'>Remaining</p>
             <p className='mt-1 text-2xl font-semibold'>
-              {formatBytes(
+              {formatStorageSize(
                 batches.reduce(
                   (s, b) => s + Number(BigInt(b.uploadBytesRemaining)),
                   0,
@@ -431,17 +431,17 @@ export const AdminUserCredits = ({
 
                     {/* Original */}
                     <td className='px-4 py-3 text-xs'>
-                      {formatBytes(original, 1)}
+                      {formatStorageSize(original, 1)}
                     </td>
 
                     {/* Consumed */}
                     <td className='px-4 py-3 text-xs'>
-                      {formatBytes(consumed, 1)}
+                      {formatStorageSize(consumed, 1)}
                     </td>
 
                     {/* Remaining */}
                     <td className='px-4 py-3 text-xs'>
-                      {formatBytes(remaining, 1)}
+                      {formatStorageSize(remaining, 1)}
                     </td>
 
                     <td className='px-4 py-3 font-mono text-xs'>

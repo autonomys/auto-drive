@@ -13,7 +13,7 @@ import {
 } from '@/components/organisms/FileTable/state';
 import { OrganizationApiKeys } from '@/components/organisms/OrganizationApiKeys';
 import { UsageReportView } from '@/components/views/UsageReport';
-import { formatBytes } from '@/utils/number';
+import { formatStorageSize } from '@/utils/number';
 import { OrganizationPage } from './OrganizationPage';
 import { OrganizationCredits } from './OrganizationCredits';
 import { OrganizationMembers } from './OrganizationMembers';
@@ -116,19 +116,34 @@ export const OrganizationUsageView = () => (
         <p className='text-sm'>
           Left now:{' '}
           <strong>
-            {formatBytes(Number(overview.credits.purchasedBytesRemaining), 2)}
+            {formatStorageSize(
+              Number(overview.credits.purchasedBytesRemaining),
+              2,
+            )}
           </strong>{' '}
           purchased
-          {Number(overview.credits.freeCreditBytesRemaining) > 0 && (
+          {Number(overview.credits.monthlyFreeUploadBytes) > 0 && (
             <>
               {' · '}
               <strong>
-                {formatBytes(
-                  Number(overview.credits.freeCreditBytesRemaining),
+                {formatStorageSize(
+                  Number(overview.credits.monthlyFreeBytesRemaining),
                   2,
                 )}
               </strong>{' '}
-              free credits
+              monthly free
+            </>
+          )}
+          {overview.credits.oneTimeFreeGrantCount > 0 && (
+            <>
+              {' · '}
+              <strong>
+                {formatStorageSize(
+                  Number(overview.credits.oneTimeFreeBytesRemaining),
+                  2,
+                )}
+              </strong>{' '}
+              one-time free
             </>
           )}
         </p>

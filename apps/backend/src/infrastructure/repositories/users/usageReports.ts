@@ -151,6 +151,30 @@ const getPurchases = async (
 //
 // Purchased and free credits are balanced apart (`free`), so neither figure
 // mixes the two.
+/**
+ * SQL for whether the monthly free batch `pc` was issued by a change to the
+ * monthly amount, in its transaction, in place of a batch of the month that a
+ * change ended by then. A month's first batch is a plain issue even when a
+ * change issued it (the month had none yet), so a change only adjusts credits
+ * that existed.
+ *
+ * Keyed on what was ended, not on issue order: the change's time is its
+ * transaction's start, so a batch issued after the change began but before
+ * it locked the account is stamped after the batch that replaces it.
+ */
+const replacedByChange = (pc: string) => `(${pc}.grant_period IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM account_terms_changes t
+    WHERE t.account_id = ${pc}.account_id
+      AND t.field = 'monthly_free_upload_bytes'
+      AND t.created_at = ${pc}.purchased_at)
+  AND EXISTS (
+    SELECT 1 FROM purchased_credits ended
+    WHERE ended.account_id = ${pc}.account_id
+      AND ended.grant_period = ${pc}.grant_period
+      AND ended.id <> ${pc}.id
+      AND ended.superseded_at <= ${pc}.purchased_at))`
+
 const getBalance = async (
   accountId: string,
   from: Date,
@@ -174,6 +198,10 @@ const getBalance = async (
      ), batches AS (
        SELECT pc.purchased_at,
               pc.upload_bytes_original AS original,
+              -- Replacements issued by a change to the monthly amount, and
+              -- the batches it ended: adjusted, not granted or expired.
+              ${replacedByChange('pc')} AS by_change,
+              pc.superseded_at IS NOT NULL AS superseded,
               CASE
                 WHEN pc.refunded_at IS NULL THEN pc.upload_bytes_remaining
                 ELSE COALESCE(pc.refunded_upload_bytes,
@@ -191,11 +219,17 @@ const getBalance = async (
        COALESCE(SUM(leftover + since_from) FILTER (
          WHERE purchased_at < $2 AND ended_at >= $2), 0)::text AS opening,
        COALESCE(SUM(original) FILTER (
-         WHERE purchased_at >= $2 AND purchased_at < $3), 0)::text AS granted,
+         WHERE NOT by_change AND purchased_at >= $2 AND purchased_at < $3),
+         0)::text AS granted,
+       (COALESCE(SUM(original) FILTER (
+          WHERE by_change AND purchased_at >= $2 AND purchased_at < $3), 0)
+        - COALESCE(SUM(leftover) FILTER (
+          WHERE superseded AND ended_at >= $2 AND ended_at < $3), 0))::text
+         AS adjusted,
        COALESCE(SUM(since_from - since_to), 0)::text AS consumed,
        COALESCE(SUM(leftover) FILTER (
-         WHERE NOT refunded AND ended_at >= $2 AND ended_at < $3), 0)::text
-         AS expired,
+         WHERE NOT refunded AND NOT superseded
+           AND ended_at >= $2 AND ended_at < $3), 0)::text AS expired,
        COALESCE(SUM(leftover) FILTER (
          WHERE refunded AND ended_at >= $2 AND ended_at < $3), 0)::text
          AS refunded,
@@ -290,13 +324,23 @@ const getAccountSummaries = async (
            SELECT id FROM accounts WHERE is_partner))
        GROUP BY i.account_id
      ), grants AS (
+       -- Free credits net of changes to the monthly amount, as the account's
+       -- report has them (granted + adjusted): a change ends the month's
+       -- batch, taking what it had left, and issues its replacement.
        SELECT account_id,
               COALESCE(SUM(upload_bytes_original) FILTER (
-                WHERE intent_id IS NOT NULL), 0) AS granted_bytes,
+                WHERE intent_id IS NOT NULL
+                  AND purchased_at >= $1 AND purchased_at < $2), 0)
+                AS granted_bytes,
               COALESCE(SUM(upload_bytes_original) FILTER (
-                WHERE intent_id IS NULL), 0) AS free_credits_granted_bytes
+                WHERE intent_id IS NULL
+                  AND purchased_at >= $1 AND purchased_at < $2), 0)
+              - COALESCE(SUM(upload_bytes_remaining) FILTER (
+                WHERE superseded_at >= $1 AND superseded_at < $2), 0)
+                AS free_credits_granted_bytes
        FROM purchased_credits
-       WHERE purchased_at >= $1 AND purchased_at < $2
+       WHERE (purchased_at >= $1 AND purchased_at < $2)
+          OR (superseded_at >= $1 AND superseded_at < $2)
        GROUP BY account_id
      )
      SELECT a.id AS account_id, a.organization_id, a.is_partner,
@@ -356,10 +400,78 @@ const getFreeCredits = async (
   return result.rows
 }
 
+export type FreeCreditChangeBatchRow = {
+  batch_id: string
+  // As in getBalance: a replacement issued by a change to the monthly amount.
+  by_change: boolean
+  purchased_at: Date
+  superseded_at: Date | null
+  expires_at: Date
+  grant_period: string | null
+  upload_bytes_original: string
+  upload_bytes_remaining: string
+  granted_by: string | null
+  grant_reason: string | null
+}
+
+export type MonthlyTermsChangeRow = {
+  created_at: Date
+  old_value: string | null
+  new_value: string | null
+  changed_by: string
+  reason: string | null
+}
+
+/**
+ * What the free credit changes in the range are made of: the free batches
+ * granted, ended by a change to the monthly amount, or expired unused in it,
+ * and the changes to the monthly amount. A change writes its terms change,
+ * ends the month's batch and issues the new one in one transaction, so all
+ * three have the same time.
+ */
+const getFreeCreditChanges = async (
+  accountId: string,
+  from: Date,
+  to: Date,
+): Promise<{
+  batches: FreeCreditChangeBatchRow[]
+  termsChanges: MonthlyTermsChangeRow[]
+}> => {
+  const db = await getDatabase()
+  const [batches, termsChanges] = await Promise.all([
+    db.query<FreeCreditChangeBatchRow>(
+      `SELECT pc.id AS batch_id, ${replacedByChange('pc')} AS by_change,
+              pc.purchased_at, pc.superseded_at, pc.expires_at,
+              to_char(pc.grant_period, 'YYYY-MM-DD') AS grant_period,
+              pc.upload_bytes_original, pc.upload_bytes_remaining,
+              pc.granted_by, pc.grant_reason
+       FROM purchased_credits pc
+       WHERE pc.account_id = $1
+         AND pc.intent_id IS NULL
+         AND ((pc.purchased_at >= $2 AND pc.purchased_at < $3)
+           OR (pc.superseded_at >= $2 AND pc.superseded_at < $3)
+           OR (pc.superseded_at IS NULL AND pc.upload_bytes_remaining > 0
+               AND pc.expires_at >= $2 AND pc.expires_at < $3))`,
+      [accountId, from, to],
+    ),
+    db.query<MonthlyTermsChangeRow>(
+      `SELECT created_at, old_value, new_value, changed_by, reason
+       FROM account_terms_changes
+       WHERE account_id = $1
+         AND field = 'monthly_free_upload_bytes'
+         AND created_at >= $2
+         AND created_at < $3`,
+      [accountId, from, to],
+    ),
+  ])
+  return { batches: batches.rows, termsChanges: termsChanges.rows }
+}
+
 export const usageReportsRepository = {
   getInteractionGroups,
   getPurchases,
   getFreeCredits,
+  getFreeCreditChanges,
   getBalance,
   getInteractionsPage,
   getAccountSummaries,

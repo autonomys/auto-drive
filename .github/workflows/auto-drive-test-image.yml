@@ -120,9 +120,12 @@ jobs:
           go-version-file: rclone-src/go.mod
           cache-dependency-path: rclone-src/go.sum
 
-      - name: Run rclone suite and smoke scripts
+      - name: Run rclone suites and smoke scripts
         env:
           OUTPUT_DIR: client-test-output
+          # The suites beyond backend test server behaviour that does not vary
+          # by architecture, and the amd64 job runs them for the same commit.
+          RCLONE_TESTS: ${{ matrix.arch == 'arm64' && 'backend' || '' }}
         run: docker/auto-drive-test/client-tests.sh rclone-src
 
       - name: Record timings
