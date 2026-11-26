@@ -20,6 +20,7 @@ import {
 } from '@/components/molecules/Table/TableBody';
 import { Button } from '@auto-drive/ui';
 import { usePathname, useRouter } from 'next/navigation';
+import { describeScopes } from 'utils/apiKeyScopes';
 
 const formatDate = (d: Date | string | null): string => {
   if (!d) return '—';
@@ -48,6 +49,7 @@ export const ApiKeysTable = ({
   createKey,
   deleteKey,
   onChanged,
+  withScopes = false,
 }: {
   apiKeys: ApiKeyWithoutSecret[] | undefined;
   /** From `?newKey=`: open the create dialog on load with this name. */
@@ -56,6 +58,8 @@ export const ApiKeysTable = ({
   deleteKey?: (apiKeyId: string) => Promise<void>;
   /** Reloads the keys after one is created or deleted. */
   onChanged: () => void;
+  /** Shows each key's scopes and offers them on create: organization keys. */
+  withScopes?: boolean;
 }) => {
   const [isCreationOpen, setIsCreationOpen] = useState(!!newKeyName);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export const ApiKeysTable = ({
   const closeDeleteModal = useCallback(() => setDeleteId(null), []);
 
   const nonDeletedApiKeys = apiKeys?.filter((apiKey) => !apiKey.deletedAt);
-  const columnCount = deleteKey ? 5 : 4;
+  const columnCount = 4 + (withScopes ? 1 : 0) + (deleteKey ? 1 : 0);
 
   const onCreationSuccess = useCallback(() => {
     closeCreationModal();
@@ -92,6 +96,7 @@ export const ApiKeysTable = ({
             onSuccess={onCreationSuccess}
             createKey={createKey}
             initialName={newKeyName}
+            withScopes={withScopes}
           />
           <div className='flex'>
             <Button
@@ -119,6 +124,7 @@ export const ApiKeysTable = ({
               <TableHeadRow>
                 <TableHeadCell>Name</TableHeadCell>
                 <TableHeadCell>Key</TableHeadCell>
+                {withScopes && <TableHeadCell>Access</TableHeadCell>}
                 <TableHeadCell>Created</TableHeadCell>
                 <TableHeadCell>Expires</TableHeadCell>
                 {deleteKey && <TableHeadCell>Actions</TableHeadCell>}
@@ -142,6 +148,11 @@ export const ApiKeysTable = ({
                           {apiKey.maskedSecret}
                         </span>
                       </TableBodyCell>
+                      {withScopes && (
+                        <TableBodyCell>
+                          {describeScopes(apiKey.scopes)}
+                        </TableBodyCell>
+                      )}
                       <TableBodyCell>
                         {formatDate(apiKey.createdAt)}
                       </TableBodyCell>

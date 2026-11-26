@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ButtonHTMLAttributes } from 'react';
-import type { ApiKey, OrganizationApiKeys } from '@auto-drive/models';
+import {
+  ApiKeyScope,
+  type ApiKey,
+  type OrganizationApiKeys,
+} from '@auto-drive/models';
 import { OrganizationApiKeys as OrganizationApiKeysView } from '../../../src/components/organisms/OrganizationApiKeys';
+import { ApiKeysTable } from '../../../src/components/organisms/ApiKeysTable';
 
 const getOrganizationApiKeys =
   jest.fn<(organizationId: string) => Promise<OrganizationApiKeys>>();
@@ -50,9 +55,13 @@ const key = {
   createdAt: new Date('2026-11-01'),
 } as OrganizationApiKeys['apiKeys'][number];
 
-const renderKeys = async (canCreate: boolean, canRevoke: boolean) => {
+const renderKeys = async (
+  canCreate: boolean,
+  canRevoke: boolean,
+  apiKeys = [key],
+) => {
   getOrganizationApiKeys.mockResolvedValue({
-    apiKeys: [key],
+    apiKeys,
     canCreate,
     canRevoke,
   });
@@ -94,6 +103,51 @@ describe('organization API keys', () => {
     });
   });
 
+  it('lets an organization admin create a key limited to end-user enrollment and usage', async () => {
+    createOrganizationApiKey.mockResolvedValue({
+      ...key,
+      id: 'new-key',
+      secret: 'the-secret',
+      scopes: [ApiKeyScope.EndUserEnrollment, ApiKeyScope.Usage],
+    });
+    await renderKeys(true, true);
+
+    fireEvent.click(screen.getByText('Create API Key'));
+    fireEvent.change(await screen.findByLabelText('Access'), {
+      target: { value: 'scoped' },
+    });
+    const generate = screen.getByText('Generate') as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+
+    fireEvent.click(screen.getByLabelText(/End-user enrollment/));
+    fireEvent.click(screen.getByLabelText(/^Usage/));
+    expect(generate.disabled).toBe(false);
+    fireEvent.click(generate);
+
+    expect(await screen.findByText('the-secret')).toBeTruthy();
+    expect(createOrganizationApiKey).toHaveBeenCalledWith(organizationId, {
+      name: null,
+      expiresAt: null,
+      scopes: [ApiKeyScope.EndUserEnrollment, ApiKeyScope.Usage],
+    });
+  });
+
+  it('shows the scopes of every key, and full access for keys without', async () => {
+    await renderKeys(false, false, [
+      { ...key, scopes: null },
+      {
+        ...key,
+        id: 'backend-key',
+        name: 'Backend',
+        scopes: [ApiKeyScope.EndUserEnrollment, ApiKeyScope.Usage],
+      },
+    ]);
+
+    expect(screen.getByText('Access')).toBeTruthy();
+    expect(screen.getByText('Full access')).toBeTruthy();
+    expect(screen.getByText('End-user enrollment, Usage')).toBeTruthy();
+  });
+
   it('lets an organization admin delete a key', async () => {
     revokeOrganizationApiKey.mockResolvedValue(undefined);
     await renderKeys(true, true);
@@ -125,5 +179,27 @@ describe('organization API keys', () => {
 
     expect(screen.queryByText('Create API Key')).toBeNull();
     expect(screen.getByText('Delete')).toBeTruthy();
+  });
+});
+
+describe('personal API keys', () => {
+  it('offers no scopes, which auth refuses on a personal key', async () => {
+    const createKey = jest.fn<(input: unknown) => Promise<ApiKey>>();
+    createKey.mockResolvedValue({ ...key, secret: 'the-secret' } as ApiKey);
+    render(
+      <ApiKeysTable
+        apiKeys={[key]}
+        createKey={createKey}
+        onChanged={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Access')).toBeNull();
+    fireEvent.click(screen.getByText('Create API Key'));
+    expect(screen.queryByLabelText('Access')).toBeNull();
+    fireEvent.click(await screen.findByText('Generate'));
+
+    expect(await screen.findByText('the-secret')).toBeTruthy();
+    expect(createKey).toHaveBeenCalledWith({ name: null, expiresAt: null });
   });
 });
