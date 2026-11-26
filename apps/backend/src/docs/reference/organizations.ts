@@ -72,9 +72,9 @@ const partnerOriginSchema = {
 
 const originParameter = {
   name: 'origin',
-  in: 'path',
+  in: 'query',
   required: true,
-  description: 'The origin, URL-encoded',
+  description: 'The origin',
   schema: { type: 'string' },
 }
 
@@ -291,8 +291,6 @@ export const organizations = {
           },
         },
       },
-    },
-    '/organizations/{organizationId}/partner-origins/{origin}': {
       delete: {
         summary: 'Organizations - Remove a partner origin',
         description:
@@ -302,7 +300,7 @@ export const organizations = {
         parameters: [organizationIdParameter, originParameter],
         responses: {
           '204': { description: 'Removed' },
-          '400': { description: 'Not an https origin' },
+          '400': { description: 'No origin, or not an https origin' },
           '401': { description: 'Unauthorized' },
           '403': { description: 'Not an Auto Drive admin' },
           '404': {

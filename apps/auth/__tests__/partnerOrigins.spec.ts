@@ -197,8 +197,10 @@ describe('Partner origins', () => {
     expect(listed.status).toBe(200)
     expect(await listed.json()).toEqual([expect.objectContaining({ origin })])
 
-    const path = `/${encodeURIComponent(origin)}`
+    const path = `?${new URLSearchParams({ origin })}`
     expect((await call('DELETE', path, undefined, 'no')).status).toBe(401)
+    expect((await call('DELETE', '')).status).toBe(400)
+    expect((await call('DELETE', `${path}&origin=${origin}`)).status).toBe(400)
     expect((await call('DELETE', path)).status).toBe(204)
     expect((await call('DELETE', path)).status).toBe(404)
   })

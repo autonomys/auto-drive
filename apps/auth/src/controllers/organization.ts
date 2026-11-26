@@ -5,6 +5,7 @@ import {
   PartnerOriginsUseCases,
 } from '../useCases/index.js'
 import { createLogger } from '../drivers/logger.js'
+import { TransactionConflictError } from '../drivers/pg.js'
 import {
   handleAdminAuth,
   handleServiceAuth,
@@ -20,6 +21,12 @@ export const organizationController = Router()
 const handleError = (error: unknown, res: Response, message: string) => {
   if (error instanceof OrganizationError || error instanceof ApiKeyError) {
     res.status(error.httpStatus).json({ error: error.message })
+    return
+  }
+  // Nothing was changed, so the caller can send the same request again.
+  if (error instanceof TransactionConflictError) {
+    logger.warn(error)
+    res.status(503).json({ error: error.message })
     return
   }
   logger.error(error)
@@ -398,18 +405,24 @@ organizationController.post(
   },
 )
 
-// The origin is URL-encoded in the path.
+// The origin is a query parameter: proxies in front of the backend decode
+// "%2F" in a path, which would split it.
 organizationController.delete(
-  '/:organizationId/partner-origins/:origin',
+  '/:organizationId/partner-origins',
   async (req: Request, res: Response) => {
     if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const { origin } = req.query
+    if (typeof origin !== 'string') {
+      res.status(400).json({ error: 'origin must be a string' })
       return
     }
 
     try {
       await PartnerOriginsUseCases.removeOrigin({
         organizationId: req.params.organizationId,
-        origin: req.params.origin,
+        origin,
       })
       res.status(204).end()
     } catch (error) {

@@ -46,15 +46,19 @@ const recordChange = async (
   )
 }
 
+// The organisation's member changes, newest first. Partner end users'
+// enrolments and removals stay in the table but are left out: the end user
+// list shows them, and a partner's thousands would bury the rest.
 const getChangesByOrganization = async (
   organizationId: string,
 ): Promise<DBOrganizationMembershipChange[]> => {
   const db = await getDatabase()
   const result = await db.query<DBOrganizationMembershipChange>(
     `SELECT * FROM users.organization_membership_changes
-     WHERE from_organization_id = $1 OR to_organization_id = $1
+     WHERE (from_organization_id = $1 OR to_organization_id = $1)
+       AND (role IS NULL OR role <> $2)
      ORDER BY created_at DESC, id`,
-    [organizationId],
+    [organizationId, OrganizationRole.PartnerEndUser],
   )
   return result.rows
 }

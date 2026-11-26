@@ -20,9 +20,5 @@ export const describeMembershipChange = (
   if (change.toOrganizationId === organizationId) {
     return `Joined as ${role}`;
   }
-  // A partner end user's removal: they stay in the organization, read-only.
-  if (!change.toOrganizationId) {
-    return 'Removed';
-  }
   return 'Removed, returned to their personal organization';
 };

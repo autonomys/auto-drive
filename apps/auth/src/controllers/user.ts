@@ -7,7 +7,7 @@ import {
   handleServiceAuth,
   refreshAccessToken,
 } from '../services/authManager/express.js'
-import { UsersUseCases } from '../useCases/index.js'
+import { OrganizationsUseCases, UsersUseCases } from '../useCases/index.js'
 import { DeletionUseCases } from '../useCases/deletion.js'
 import { ApiKeysUseCases } from '../useCases/apikeys.js'
 import { ApiKeyError } from '../errors/apikeys.js'
@@ -15,7 +15,10 @@ import { OrganizationError } from '../errors/organizations.js'
 import { parseCreateApiKeyBody } from './apiKeyBody.js'
 import { DeletionRequestStatus, UserRole } from '@auto-drive/models'
 import { CustomJWTAuth } from '../services/authManager/providers/custom.js'
-import { Web3Auth } from '../services/authManager/providers/web3.js'
+import {
+  WALLET_PROVIDER,
+  Web3Auth,
+} from '../services/authManager/providers/web3.js'
 import { createLogger } from '../drivers/logger.js'
 
 const logger = createLogger('controllers:user')
@@ -23,8 +26,9 @@ const logger = createLogger('controllers:user')
 const userController = Router()
 
 // Partner end users may use only their own user, signing in and closing their
-// account. Every other route refuses them. They get no refresh token, and
-// /@me/refreshToken refuses one issued earlier.
+// account. Every other route refuses them. They get no refresh token,
+// /@me/refreshToken refuses one issued earlier, and /@me/accessToken takes
+// only a wallet signature from them.
 userController.get('/@me', allowPartnerEndUsers())
 userController.post('/@me/accessToken', allowPartnerEndUsers())
 userController.all('/@me/deletion', allowPartnerEndUsers())
@@ -55,6 +59,19 @@ userController.post('/@me/accessToken', async (req: Request, res: Response) => {
   // used as they are.
   if (user.apiKeyId) {
     res.status(403).json({ error: 'Not available to API keys' })
+    return
+  }
+  // A partner end user's session lasts an hour from a wallet signature.
+  // Exchanging the session's own token would extend it without one, even
+  // after the partner removed them.
+  if (
+    req.headers['x-auth-provider'] !== WALLET_PROVIDER &&
+    user.onboarded &&
+    (await OrganizationsUseCases.isPartnerEndUser(user))
+  ) {
+    res
+      .status(403)
+      .json({ error: 'Partner end users sign in with a wallet signature' })
     return
   }
 

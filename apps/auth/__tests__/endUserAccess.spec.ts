@@ -22,6 +22,7 @@ import { dbMigration } from './utils/dbMigrate.js'
 import { createUnonboardedUser } from './utils/mocks.js'
 
 const WALLET = 'web3-wallet'
+const EXCHANGE = 'POST /users/@me/accessToken'
 
 type Layer = {
   route?: { path: string; methods: Record<string, boolean> }
@@ -70,7 +71,7 @@ const SERVICE = [
   'DELETE /organizations/:organizationId/end-users/:address',
   'GET /organizations/:organizationId/partner-origins',
   'POST /organizations/:organizationId/partner-origins',
-  'DELETE /organizations/:organizationId/partner-origins/:origin',
+  'DELETE /organizations/:organizationId/partner-origins',
   'GET /organizations/:organizationId/apiKeys',
   'POST /organizations/:organizationId/apiKeys',
   'DELETE /organizations/:organizationId/apiKeys/:apiKeyId',
@@ -136,13 +137,18 @@ describe('Partner end user access', () => {
       actor: 'test',
     })
 
-  const send = (route: string) => {
+  // A session token, except for the exchange, which takes a wallet signature
+  // from an end user.
+  const providerFor = (route: string) =>
+    route === EXCHANGE ? WALLET : 'custom-jwt'
+
+  const send = (route: string, provider = providerFor(route)) => {
     const [method, path] = route.split(' ')
     return fetch(`${baseUrl}${path.replace(/:\w+/g, 'x')}`, {
       method,
       headers: {
         authorization: 'Bearer token',
-        'x-auth-provider': 'custom-jwt',
+        'x-auth-provider': provider,
         'content-type': 'application/json',
       },
       body: method === 'GET' ? undefined : '{}',
@@ -311,7 +317,7 @@ describe('Partner end user access', () => {
 
     for (const removed of [false, true]) {
       if (removed) await removeEndUser()
-      const response = await send('POST /users/@me/accessToken')
+      const response = await send(EXCHANGE)
 
       expect(response.status).toBe(200)
       expect(response.headers.get('set-cookie')).toBeNull()
@@ -325,6 +331,18 @@ describe('Partner end user access', () => {
       ).resolves.toMatchObject({ id: endUser.oauthUserId })
     }
     expect(register).not.toHaveBeenCalled()
+  })
+
+  it('refuses, removed or not, to exchange their session token for another', async () => {
+    for (const removed of [false, true]) {
+      if (removed) await removeEndUser()
+      const response = await send(EXCHANGE, 'custom-jwt')
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({
+        error: 'Partner end users sign in with a wallet signature',
+      })
+    }
   })
 
   it('refuses to refresh a session of theirs from before', async () => {
@@ -353,7 +371,7 @@ describe('Partner end user access', () => {
     const member = await UsersUseCases.onboardUser(createUnonboardedUser())
     signedIn = member!
 
-    const signIn = await send('POST /users/@me/accessToken')
+    const signIn = await send(EXCHANGE, 'custom-jwt')
     const cookie = signIn.headers.get('set-cookie')?.split(';')[0]
     expect(cookie).toMatch(/^refreshToken=/)
     const response = await fetch(`${baseUrl}/users/@me/refreshToken`, {

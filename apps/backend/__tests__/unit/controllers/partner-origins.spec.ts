@@ -121,7 +121,7 @@ describe('Partner origins', () => {
       body: JSON.stringify(body),
     })
   const remove = (origin: string, organization?: string) =>
-    fetch(url(`/${encodeURIComponent(origin)}`, organization), {
+    fetch(url(`?${new URLSearchParams({ origin })}`, organization), {
       method: 'DELETE',
       headers,
     })
@@ -158,6 +158,16 @@ describe('Partner origins', () => {
 
     expect((await remove(ORIGIN)).status).toBe(204)
     expect(removeInAuth).toHaveBeenCalledWith(organizationId, ORIGIN)
+    // As nginx passes it on when the client did not encode it.
+    const unencoded = await fetch(url(`?origin=${ORIGIN}`), {
+      method: 'DELETE',
+      headers,
+    })
+    expect(unencoded.status).toBe(204)
+    expect(removeInAuth).toHaveBeenLastCalledWith(organizationId, ORIGIN)
+    const missing = await fetch(url(), { method: 'DELETE', headers })
+    expect(missing.status).toBe(400)
+    expect(removeInAuth).toHaveBeenCalledTimes(2)
 
     expect((await add({})).status).toBe(400)
     expect((await add({ origin: 1 })).status).toBe(400)

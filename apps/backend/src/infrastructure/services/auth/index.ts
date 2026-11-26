@@ -20,6 +20,7 @@ import {
   BadRequestError,
   ConflictError,
   NotFoundError,
+  ServiceUnavailableError,
 } from '../../../errors/index.js'
 
 /**
@@ -332,11 +333,13 @@ export type OrganizationRequestError =
   | BadRequestError
   | NotFoundError
   | ConflictError
+  | ServiceUnavailableError
 
 /**
  * A call to the auth service's organization endpoints. Those answer 400, 404
- * and 409 with a message meant for the admin, which is passed on; any other
- * failure is the auth service's and throws.
+ * and 409 with a message meant for the admin, and 503 when a change kept
+ * conflicting with concurrent ones and can be sent again; these are passed on.
+ * Any other failure is the auth service's and throws.
  */
 const organizationRequest = async <T>(
   path: string,
@@ -367,6 +370,8 @@ const organizationRequest = async <T>(
       return err(new NotFoundError(errorMessage))
     case 409:
       return err(new ConflictError(errorMessage))
+    case 503:
+      return err(new ServiceUnavailableError(errorMessage))
     default:
       throw new Error(
         `Auth organization request failed (${response.status}): ${errorMessage}`,
@@ -488,7 +493,7 @@ const addPartnerOrigin = (
 // origins.
 const removePartnerOrigin = (organizationId: string, origin: string) =>
   organizationRequest<void>(
-    `/${encodeURIComponent(organizationId)}/partner-origins/${encodeURIComponent(origin)}`,
+    `/${encodeURIComponent(organizationId)}/partner-origins?${new URLSearchParams({ origin })}`,
     { method: 'DELETE' },
   )
 

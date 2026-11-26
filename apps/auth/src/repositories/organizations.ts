@@ -26,8 +26,9 @@ const getOrganizationById = async (
   return result.rows[0] || null
 }
 
-// Locks the organisation until the transaction ends, so changes to its end
-// users are made one at a time.
+// Read FOR UPDATE, so changes to the organisation's end users don't overlap:
+// PostgreSQL makes a second one wait, and Aurora DSQL fails it at commit for
+// withTransaction to run again.
 const getOrganizationForUpdate = async (
   id: string,
   db: pg.Client,

@@ -208,7 +208,7 @@ The endpoints below accept only the backend's service secret (`API_SECRET`), nev
 
 #### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user or partner end users) and archive date (`{ ids }`, up to 100)
 
-#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
+#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization, newest first. Partner end users' enrolments and removals are recorded but left out; `GET …/end-users` lists them
 
 #### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`, `role` is `admin` or `member`). The user leaves their current organization, which is archived if no members remain. 409 for a partner end user, removed or not
 
@@ -239,7 +239,7 @@ A removed end user stays in the organization with role `partner_end_user` and `e
 End users are refused everywhere by default, so a route added later stays closed to them until it declares `allowPartnerEndUsers()`. Removed end users get the same as other end users, without uploads.
 
 - Auth: the routes that take a user's credential answer an end user's session with 403, except `GET /users/@me`, `POST /users/@me/accessToken` and `GET`, `POST` and `DELETE /users/@me/deletion`. Routes that take the service secret are unaffected.
-- Sessions: `POST /users/@me/accessToken` gives an end user a 1-hour access token only, with no refresh token: no cookie and no entry in `users.jwt_token_registry`. When it expires, the device signs a new EIP-4361 message. `POST /users/@me/refreshToken` answers a refresh token issued to an end user earlier with 403. Nothing revokes an end user's access token before it expires.
+- Sessions: `POST /users/@me/accessToken` gives an end user a 1-hour access token only, with no refresh token: no cookie and no entry in `users.jwt_token_registry`. It takes only a wallet signature from them (`x-auth-provider: web3-wallet`) and answers anything else, their own access token included, with 403. When it expires, the device signs a new EIP-4361 message. `POST /users/@me/refreshToken` answers a refresh token issued to an end user earlier with 403. Nothing revokes an end user's access token before it expires.
 - Hasura: their access tokens carry only the role `partner_end_user`, as `x-hasura-default-role` and the one `x-hasura-allowed-roles`. It has no permissions, so every query is refused. Without a token Hasura answers as `anonymous`, as for anyone.
 - Backend: `handleAuth` answers 403, and on a public route an end user's session counts as no credential, unless the route declares `allowPartnerEndUsers()`. It reads the role and removal time from `GET /users/@me` on each request, so deploy auth first: the backend can't tell an end user from an auth service that leaves the role out. The routes open to end users are uploads (`/uploads`, not to removed end users) and, removed or not, `GET /objects/roots` (always their own objects, whatever `scope` asks for), `GET /objects/roots/deleted`, `GET /objects/:cid` and `/summary`, `POST /objects/:cid/delete` and `/restore`, `GET /downloads/:cid` and the async downloads under `/downloads/async`. Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for, directly or through a root object that contains it. Otherwise it answers 403, and `GET /objects/:cid` and `/summary` answer as for an anonymous caller.
 - S3: takes only API keys, and end users can't create one.
@@ -278,7 +278,7 @@ The `CREATE UNIQUE INDEX ASYNC` statement returns a job ID: wait for the job to 
 
 #### `POST /organizations/:organizationId/partner-origins`: Adds a partner origin (`{ origin, actor }`), stored lower case without a trailing slash. 400 unless it is an https origin (no path), 404 for an unknown organization, 409 if any organization has it already, if it is in `WEB3_AUTH_ALLOWED_ORIGINS` (a partner origin takes precedence, so it would lock out the explorer's wallet users) or if the organization is archived
 
-#### `DELETE /organizations/:organizationId/partner-origins/:origin`: Removes a partner origin (URL-encoded). 404 if it is not an origin of this organization, 409 while the organization has end users, removed ones included
+#### `DELETE /organizations/:organizationId/partner-origins?origin=`: Removes the partner origin given as `origin`, a query parameter because proxies decode `%2F` in a path. 400 without one, 404 if it is not an origin of this organization, 409 while the organization has end users, removed ones included
 
 ### API key scopes
 

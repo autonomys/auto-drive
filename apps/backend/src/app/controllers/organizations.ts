@@ -677,12 +677,19 @@ organizationsController.post(
   }),
 )
 
-// The origin is URL-encoded in the path.
+// The origin is a query parameter: nginx decodes "%2F" in a path, which would
+// split it.
 organizationsController.delete(
-  '/:organizationId/partner-origins/:origin',
+  '/:organizationId/partner-origins',
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+
+    const origin = z.string().safeParse(req.query.origin)
+    if (!origin.success) {
+      res.status(400).json({ error: 'origin must be a string' })
       return
     }
 
@@ -690,7 +697,7 @@ organizationsController.delete(
       PartnerOriginsUseCases.removePartnerOrigin(
         user,
         req.params.organizationId,
-        req.params.origin,
+        origin.data,
       ),
       'Failed to remove partner origin',
     )

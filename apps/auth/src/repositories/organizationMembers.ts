@@ -242,8 +242,8 @@ const reenrollEndUser = async (
   return result.rows[0]
 }
 
-// The user's membership of the organisation, locked until the transaction
-// ends.
+// The user's membership of the organisation, read FOR UPDATE so a concurrent
+// change to it doesn't overlap (see getOrganizationForUpdate).
 const getMembershipForUpdate = async (
   organizationId: string,
   oauthProvider: string,

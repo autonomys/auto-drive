@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import express from 'express'
 import { Server } from 'http'
 import { AddressInfo } from 'net'
@@ -16,6 +17,7 @@ import {
 } from '../src/useCases/index.js'
 import {
   organizationMembersRepository,
+  organizationMembershipChangesRepository,
   usersRepository,
 } from '../src/repositories/index.js'
 import { organizationController } from '../src/controllers/organization.js'
@@ -78,6 +80,10 @@ describe('End users', () => {
     partnerId = (await OrganizationsUseCases.createOrganization('Partner')).id
   })
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   const enroll = (
     endUsers: EndUserEnrollment[],
     { organizationId = partnerId, maxEndUsers = MAX_END_USERS } = {},
@@ -101,7 +107,25 @@ describe('End users', () => {
       WALLET,
       address,
     )
-  const changes = () => OrganizationsUseCases.getMembershipChanges(partnerId)
+  // Every change recorded for the organisation, newest first. The membership
+  // history leaves end users' out.
+  const changes = async () => {
+    const db = await getDatabase()
+    const { rows } = await db.query(
+      `SELECT * FROM users.organization_membership_changes
+       WHERE from_organization_id = $1 OR to_organization_id = $1
+       ORDER BY created_at DESC, id`,
+      [partnerId],
+    )
+    return rows.map((row) => ({
+      publicId: deriveUserPublicId(row.oauth_provider, row.oauth_user_id),
+      fromOrganizationId: row.from_organization_id,
+      toOrganizationId: row.to_organization_id,
+      role: row.role,
+      actor: row.actor,
+      actorApiKeyId: row.actor_api_key_id,
+    }))
+  }
 
   it('creates an onboarded wallet user under the checksummed address', async () => {
     const address = newAddress()
@@ -485,6 +509,53 @@ describe('End users', () => {
     )
   })
 
+  it('enrolls again after a conflict, and answers 503 while it keeps conflicting', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0)
+    // What Aurora DSQL answers when another enrolment committed first. Here
+    // it comes after the user was created, which the next run must not see.
+    const conflict = () =>
+      Object.assign(new Error('change conflicts with another transaction'), {
+        code: '40001',
+      })
+    const recordChange = jest
+      .spyOn(organizationMembershipChangesRepository, 'recordChange')
+      .mockRejectedValueOnce(conflict())
+    const address = newAddress()
+
+    await expect(enroll([endUser(address, 'customer-1')])).resolves.toEqual([
+      expect.objectContaining({ address, customerReference: 'customer-1' }),
+    ])
+    expect(recordChange).toHaveBeenCalledTimes(2)
+    expect(await changes()).toHaveLength(1)
+
+    recordChange.mockRejectedValue(conflict())
+    const other = newAddress()
+    const response = await fetch(
+      `${baseUrl}/organizations/${partnerId}/end-users`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${config.apiSecret}`,
+        },
+        body: JSON.stringify({
+          endUsers: [{ address: other, customerReference: 'customer-2' }],
+          maxEndUsers: MAX_END_USERS,
+          actor: ACTOR,
+        }),
+      },
+    )
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Too many concurrent changes, try again',
+    })
+    expect(recordChange).toHaveBeenCalledTimes(2 + 5)
+    expect(
+      await usersRepository.getUserByOAuthInformation(WALLET, other),
+    ).toBeUndefined()
+  })
+
   it('records the API key behind each change', async () => {
     const address = newAddress()
     await OrganizationsUseCases.enrollEndUsers({
@@ -508,6 +579,32 @@ describe('End users', () => {
       expect.objectContaining({ actor: ACTOR, actorApiKeyId: 'removing-key' }),
       expect.objectContaining({ actor: ACTOR, actorApiKeyId: 'enrolling-key' }),
     ])
+  })
+
+  it('leaves end users out of the membership history', async () => {
+    const address = newAddress()
+    await enroll([endUser(address, 'customer-1')])
+    await remove(address)
+    await enroll([endUser(address, 'customer-1')])
+    const member = await onboard()
+    await OrganizationsUseCases.addMember({
+      organizationId: partnerId,
+      publicId: member.publicId,
+      role: OrganizationRole.Member,
+      actor: ACTOR,
+    })
+
+    expect(await OrganizationsUseCases.getMembershipChanges(partnerId)).toEqual(
+      [
+        expect.objectContaining({
+          publicId: member.publicId,
+          toOrganizationId: partnerId,
+          role: OrganizationRole.Member,
+        }),
+      ],
+    )
+    // Still recorded.
+    expect(await changes()).toHaveLength(4)
   })
 
   it('lists end users a page at a time, removed ones included', async () => {

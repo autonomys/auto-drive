@@ -122,7 +122,8 @@ const removeOrigin = async ({
 }): Promise<void> => {
   const normalized = parsePartnerOrigin(origin)
   await withTransaction(async (db) => {
-    // Locked like enrolment, so no end user is enrolled while it is removed.
+    // Read FOR UPDATE like enrolment, so no end user is enrolled while it is
+    // removed.
     const organization = await organizationsRepository.getOrganizationForUpdate(
       organizationId,
       db,

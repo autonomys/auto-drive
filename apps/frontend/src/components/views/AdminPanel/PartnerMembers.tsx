@@ -45,10 +45,6 @@ const describeChange = (
   if (change.toOrganizationId === organizationId) {
     return `Added as ${change.role ? ROLE_LABEL[change.role] : '—'}`;
   }
-  // A partner end user's removal: they stay in the organization, read-only.
-  if (!change.toOrganizationId) {
-    return 'Removed';
-  }
   return 'Removed, returned to their personal organization';
 };
 

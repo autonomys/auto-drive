@@ -599,7 +599,7 @@ const enrollEndUsers = async ({
 
   try {
     return await withTransaction(async (db) => {
-      // Locked, so the organisation's enrolments are made one at a time and
+      // Read FOR UPDATE, so the organisation's enrolments don't overlap and
       // the cap holds.
       const organization =
         await organizationsRepository.getOrganizationForUpdate(

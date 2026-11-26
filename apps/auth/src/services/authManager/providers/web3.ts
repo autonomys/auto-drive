@@ -17,7 +17,7 @@ const MAINNET_CHAIN_ID = 870
 // it moved to mainnet's chain ID age out. Remove 490000 about a week after the
 // explorer deploys (#983).
 const EXPLORER_CHAIN_IDS = [MAINNET_CHAIN_ID, 490000]
-const PROVIDER = 'web3-wallet'
+export const WALLET_PROVIDER = 'web3-wallet'
 
 export type Web3SignInRefusalReason =
   | 'nonce_expired'
@@ -147,7 +147,7 @@ export const getUserFromAccessToken = async (
   // they sign in for nothing else.
   const membership =
     await organizationMembersRepository.getOrganizationMembershipByUser(
-      PROVIDER,
+      WALLET_PROVIDER,
       siweMessage.address,
     )
   const endUserOf =
@@ -178,7 +178,7 @@ export const getUserFromAccessToken = async (
   }
 
   return {
-    provider: PROVIDER,
+    provider: WALLET_PROVIDER,
     id: siweMessage.address,
     username: siweMessage.address,
   }
