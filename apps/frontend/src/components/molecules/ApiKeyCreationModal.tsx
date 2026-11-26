@@ -16,12 +16,14 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiKey, CreateApiKeyInput } from '@auto-drive/models';
+import { ApiKey, ApiKeyScope, CreateApiKeyInput } from '@auto-drive/models';
 import toast from 'react-hot-toast';
 import { Button } from '@auto-drive/ui';
 import { handleEnterOrSpace } from 'utils/eventHandler';
+import { API_KEY_SCOPES } from 'utils/apiKeyScopes';
 
 type ExpiryPreset = '30d' | '60d' | '90d' | '1y' | 'custom' | 'never';
+type Access = 'full' | 'scoped';
 
 const presetToIso = (preset: ExpiryPreset, custom: string): string | null => {
   if (preset === 'custom') {
@@ -55,16 +57,21 @@ export const ApiKeyCreationModal = ({
   onSuccess,
   createKey,
   initialName = '',
+  withScopes = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   createKey: (input: CreateApiKeyInput) => Promise<ApiKey>;
   initialName?: string;
+  /** Offers scopes. Only organization keys can have them. */
+  withScopes?: boolean;
 }) => {
   const [name, setName] = useState(initialName);
   const [preset, setPreset] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState('');
+  const [access, setAccess] = useState<Access>('full');
+  const [scopes, setScopes] = useState<ApiKeyScope[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [apiKey, setApiKey] = useState<ApiKey | null>(null);
   const [hasBeenCopied, setHasBeenCopied] = useState(false);
@@ -77,6 +84,8 @@ export const ApiKeyCreationModal = ({
     setName(initialName);
     setPreset('never');
     setCustomDate('');
+    setAccess('full');
+    setScopes([]);
     setApiKey(null);
     setHasBeenCopied(false);
     setSubmitting(false);
@@ -87,8 +96,18 @@ export const ApiKeyCreationModal = ({
     reset();
   }, [isOpen, reset]);
 
-  const canSubmit = !submitting &&
-    (preset !== 'custom' || customDate.length > 0);
+  const canSubmit =
+    !submitting &&
+    (preset !== 'custom' || customDate.length > 0) &&
+    (access === 'full' || scopes.length > 0);
+
+  const toggleScope = useCallback((scope: ApiKeyScope, checked: boolean) => {
+    setScopes((current) =>
+      API_KEY_SCOPES.map((entry) => entry.scope).filter((s) =>
+        s === scope ? checked : current.includes(s),
+      ),
+    );
+  }, []);
 
   const createApiKey = useCallback(() => {
     if (!canSubmit) return;
@@ -107,6 +126,8 @@ export const ApiKeyCreationModal = ({
     createKey({
       name: trimmed.length === 0 ? null : trimmed,
       expiresAt,
+      // Left out for full access, which is also all a personal key can have.
+      ...(access === 'scoped' ? { scopes } : {}),
     })
       .then((key) => {
         if (epochRef.current === epoch) {
@@ -120,7 +141,7 @@ export const ApiKeyCreationModal = ({
           setSubmitting(false);
         }
       });
-  }, [canSubmit, name, preset, customDate, createKey]);
+  }, [canSubmit, name, preset, customDate, access, scopes, createKey]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -265,6 +286,54 @@ export const ApiKeyCreationModal = ({
                           onChange={(e) => setCustomDate(e.target.value)}
                           className='mb-2 w-full rounded border border-gray-300 bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none'
                         />
+                      )}
+
+                      {withScopes && (
+                        <>
+                          <label
+                            htmlFor='api-key-access'
+                            className='text-foreground-hover mb-1 mt-2 block text-left text-sm'
+                          >
+                            Access
+                          </label>
+                          <select
+                            id='api-key-access'
+                            value={access}
+                            onChange={(e) =>
+                              setAccess(e.target.value as Access)
+                            }
+                            className='mb-2 w-full rounded border border-gray-300 bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none'
+                          >
+                            <option value='full'>Full access</option>
+                            <option value='scoped'>Limited to scopes…</option>
+                          </select>
+                          {access === 'scoped' && (
+                            <fieldset className='mb-2 flex flex-col gap-2'>
+                              <legend className='sr-only'>Scopes</legend>
+                              {API_KEY_SCOPES.map((entry) => (
+                                <label
+                                  key={entry.scope}
+                                  className='flex items-start gap-2 text-left text-sm text-foreground'
+                                >
+                                  <input
+                                    type='checkbox'
+                                    className='mt-1'
+                                    checked={scopes.includes(entry.scope)}
+                                    onChange={(e) =>
+                                      toggleScope(entry.scope, e.target.checked)
+                                    }
+                                  />
+                                  <span>
+                                    {entry.label}
+                                    <span className='text-foreground-hover block text-xs'>
+                                      {entry.description}
+                                    </span>
+                                  </span>
+                                </label>
+                              ))}
+                            </fieldset>
+                          )}
+                        </>
                       )}
 
                       <p className='text-foreground-hover mt-4 text-center text-xs'>

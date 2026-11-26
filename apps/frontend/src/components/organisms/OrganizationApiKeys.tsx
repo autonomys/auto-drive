@@ -51,6 +51,7 @@ export const OrganizationApiKeys = ({
               : undefined
           }
           onChanged={() => queryClient.invalidateQueries({ queryKey })}
+          withScopes
         />
       )}
     </div>
