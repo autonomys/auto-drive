@@ -192,4 +192,7 @@ export type OrganizationOverview = {
   };
   // The most any one of the organisation's end users may upload in total.
   maxEndUserQuotaBytes: string;
+  // The most the account may upload in a rolling 24 hours; null until set.
+  dailyUploadLimitBytes: string | null;
+  dailyUploadLimitOff: boolean;
 };

@@ -45,7 +45,10 @@ import {
 } from './errors.js'
 import { stampCustomerReference } from './customerReference.js'
 import { AccountsUseCases } from '../users/accounts.js'
-import { checkEndUserQuota } from '../users/endUserQuota.js'
+import {
+  checkDailyUploadLimit,
+  checkEndUserQuota,
+} from '../users/endUserQuota.js'
 
 const logger = createLogger('useCases:uploads:uploads')
 
@@ -93,12 +96,14 @@ const assertFolderTreeNamesFit = (tree: FolderTree): void => {
   }
 }
 
-// An upload's size is known only once it completes, when the quota is
-// checked again, so a new one is refused only when nothing is left of it.
+// An upload's size is known only once it completes, when the quota and the
+// account's daily upload limit are checked again, so a partner end user's new
+// upload is refused only when nothing is left of either.
 const refuseEndUserWithoutQuota = async (user: UserWithOrganization) => {
   if (!isPartnerEndUser(user)) return
   const account = await AccountsUseCases.getOrCreateAccount(user)
   await checkEndUserQuota(user, account, null)
+  await checkDailyUploadLimit(user, account, null)
 }
 
 const initFileProcessing = async (upload: UploadEntry): Promise<void> => {

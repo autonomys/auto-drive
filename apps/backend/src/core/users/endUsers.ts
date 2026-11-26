@@ -212,20 +212,19 @@ const setEndUserQuota = async (
 }
 
 /**
- * Sets the most any one of the organisation's end users may upload in total.
- * Only its admins, signed in, may: no API key can, so a leaked one can't raise
- * what each identity it enrols may spend. Lowering it applies at once to
- * everyone already enrolled.
+ * The partner settings that bound what its end users and keys can spend are
+ * set by its admins only, signed in: no API key can, so a leaked one can't
+ * raise them. Returns the partner's account.
  */
-const setMaxEndUserQuota = async (
+const authorizeSpendSetting = async (
   executor: UserWithOrganization,
   organizationId: string,
-  maxEndUserQuotaBytes: number,
-): Promise<Result<{ maxEndUserQuotaBytes: number }, EndUsersError>> => {
+  setting: string,
+): Promise<Result<Account, EndUsersError>> => {
   const refused = () =>
     err(
       new ForbiddenError(
-        'Only organization admins, signed in, can set the per-person maximum',
+        `Only organization admins, signed in, can set the ${setting}`,
       ),
     )
   if (executor.apiKeyId || executor.organizationId !== organizationId) {
@@ -236,9 +235,27 @@ const setMaxEndUserQuota = async (
   const isAdmin = await isOrganizationAdmin(executor, organizationId)
   if (isAdmin.isErr()) return err(isAdmin.error)
   if (!isAdmin.value) return refused()
+  return ok(partnerAccount.value)
+}
+
+/**
+ * Sets the most any one of the organisation's end users may upload in total.
+ * Lowering it applies at once to everyone already enrolled.
+ */
+const setMaxEndUserQuota = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  maxEndUserQuotaBytes: number,
+): Promise<Result<{ maxEndUserQuotaBytes: number }, EndUsersError>> => {
+  const allowed = await authorizeSpendSetting(
+    executor,
+    organizationId,
+    'per-person maximum',
+  )
+  if (allowed.isErr()) return err(allowed.error)
 
   const account = await accountsRepository.setMaxEndUserQuota(
-    partnerAccount.value.id,
+    allowed.value.id,
     maxEndUserQuotaBytes,
     executor.publicId,
   )
@@ -248,6 +265,44 @@ const setMaxEndUserQuota = async (
     by: executor.publicId,
   })
   return ok({ maxEndUserQuotaBytes: account.maxEndUserQuotaBytes })
+}
+
+/**
+ * Sets the most the organisation's account may upload in a rolling 24 hours,
+ * or with null switches the limit off, which the route has the admin
+ * acknowledge. Until it is set or switched off, the end users can't upload.
+ */
+const setDailyUploadLimit = async (
+  executor: UserWithOrganization,
+  organizationId: string,
+  dailyUploadLimitBytes: number | null,
+): Promise<
+  Result<
+    { dailyUploadLimitBytes: number | null; dailyUploadLimitOff: boolean },
+    EndUsersError
+  >
+> => {
+  const allowed = await authorizeSpendSetting(
+    executor,
+    organizationId,
+    'daily upload limit',
+  )
+  if (allowed.isErr()) return err(allowed.error)
+
+  const account = await accountsRepository.setDailyUploadLimit(
+    allowed.value.id,
+    dailyUploadLimitBytes,
+    executor.publicId,
+  )
+  logger.info('Daily upload limit set', {
+    organizationId,
+    dailyUploadLimitBytes,
+    by: executor.publicId,
+  })
+  return ok({
+    dailyUploadLimitBytes: account.dailyUploadLimitBytes,
+    dailyUploadLimitOff: account.dailyUploadLimitOff,
+  })
 }
 
 /**
@@ -301,6 +356,7 @@ export const EndUsersUseCases = {
   enrollEndUsers,
   setEndUserQuota,
   setMaxEndUserQuota,
+  setDailyUploadLimit,
   removeEndUser,
   listEndUsers,
 }

@@ -43,8 +43,11 @@ describe('Partner end user quotas', () => {
   })
 
   // A partner organization with plenty of credits, its per-person maximum
-  // set, and a member.
-  const createPartner = async (maxEndUserQuotaBytes: number) => {
+  // and daily upload limit set (the limit left unset if null), and a member.
+  const createPartner = async (
+    maxEndUserQuotaBytes: number,
+    dailyUploadLimitBytes: number | null = 1_000_000,
+  ) => {
     const organizationId = uuidv4()
     jest
       .spyOn(AuthManager, 'createOrganization')
@@ -65,6 +68,13 @@ describe('Partner end user quotas', () => {
       maxEndUserQuotaBytes,
       'org-admin',
     )
+    if (dailyUploadLimitBytes !== null) {
+      await accountsRepository.setDailyUploadLimit(
+        account.id,
+        dailyUploadLimitBytes,
+        'org-admin',
+      )
+    }
     return { member, account }
   }
 
@@ -313,6 +323,127 @@ describe('Partner end user quotas', () => {
       'SELECT root_cid FROM metadata',
     )
     expect(saved.rows.map((r) => r.root_cid)).toEqual(charged)
+  })
+
+  describe('daily upload limit', () => {
+    const setDaily = (accountId: string, bytes: number | null) =>
+      accountsRepository.setDailyUploadLimit(accountId, bytes, 'org-admin')
+
+    it('refuses end users until it is set or switched off, and nobody else', async () => {
+      const { member, account } = await createPartner(1000, null)
+      const endUser = endUserOf(member, 'person-1')
+
+      await expect(upload(endUser, 1)).rejects.toThrow(
+        'haven\'t set its daily upload limit',
+      )
+      await expect(
+        UploadsUseCases.createFileUpload(endUser, 'a.txt', null, null),
+      ).rejects.toThrow(PaymentRequiredError)
+      await upload(member, 1, 'staff')
+
+      await setDaily(account.id, null)
+      await upload(endUser, 1)
+      expect(await uploaded(account.id)).toEqual({ 'person-1': 1, staff: 1 })
+    })
+
+    it('refuses any upload past it, counting the account\'s last 24 hours', async () => {
+      const { member, account } = await createPartner(1000, 1000)
+      const [first, second] = [
+        endUserOf(member, 'person-1'),
+        endUserOf(member, 'person-2'),
+      ]
+      await upload(first, 600)
+      await upload(member, 300, 'staff')
+
+      await expect(upload(second, 101)).rejects.toThrow(
+        'daily upload limit of 1000 bytes (900 bytes uploaded in the last 24 hours)',
+      )
+      await expect(upload(member, 101, 'staff')).rejects.toThrow(
+        PaymentRequiredError,
+      )
+      await upload(second, 100)
+      await expect(
+        UploadsUseCases.createFileUpload(second, 'a.txt', null, null),
+      ).rejects.toThrow(PaymentRequiredError)
+
+      // A day later, those uploads no longer count.
+      const db = await getDatabase()
+      await db.query(
+        `UPDATE interactions SET created_at = LOCALTIMESTAMP - interval '25 hours'
+         WHERE account_id = $1`,
+        [account.id],
+      )
+      await upload(second, 900)
+      expect(await uploaded(account.id)).toEqual({
+        'person-1': 600,
+        'person-2': 1000,
+        staff: 300,
+      })
+    })
+
+    it('lets only one of two concurrent uploads by different people past it', async () => {
+      const { member, account } = await createPartner(1000, 1000)
+
+      const results = await Promise.allSettled([
+        upload(endUserOf(member, 'person-1'), 600),
+        upload(endUserOf(member, 'person-2'), 600),
+      ])
+
+      expect(results.map((r) => r.status).sort()).toEqual([
+        'fulfilled',
+        'rejected',
+      ])
+      expect(Object.values(await uploaded(account.id))).toEqual([600])
+    })
+
+    it('records each change in the terms history, switching off with its acknowledgement', async () => {
+      const { account } = await createPartner(1000, null)
+
+      await setDaily(account.id, 5000)
+      await setDaily(account.id, 5000)
+      const off = await setDaily(account.id, null)
+
+      expect(off).toMatchObject({
+        dailyUploadLimitBytes: null,
+        dailyUploadLimitOff: true,
+      })
+      const changes = (await accountsRepository.getTermsChanges(account.id))
+        .filter(({ field }) => field.startsWith('daily_upload_limit'))
+        .map(({ field, oldValue, newValue, changedBy, reason }) => ({
+          field,
+          oldValue,
+          newValue,
+          changedBy,
+          reason,
+        }))
+      const acknowledged = 'Switched off, acknowledged by the organization admin'
+      expect(changes).toHaveLength(3)
+      expect(changes).toEqual(
+        expect.arrayContaining([
+          {
+            field: 'daily_upload_limit_bytes',
+            oldValue: null,
+            newValue: '5000',
+            changedBy: 'org-admin',
+            reason: null,
+          },
+          {
+            field: 'daily_upload_limit_bytes',
+            oldValue: '5000',
+            newValue: null,
+            changedBy: 'org-admin',
+            reason: acknowledged,
+          },
+          {
+            field: 'daily_upload_limit_off',
+            oldValue: 'false',
+            newValue: 'true',
+            changedBy: 'org-admin',
+            reason: acknowledged,
+          },
+        ]),
+      )
+    })
   })
 
   it('reports usage one row per person', async () => {

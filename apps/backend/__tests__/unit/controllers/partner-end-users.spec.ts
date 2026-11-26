@@ -533,6 +533,7 @@ describe('Partner end users', () => {
     it('lets them upload into an upload of their own', async () => {
       const account = await AccountsUseCases.getOrCreateAccount(endUser)
       await accountsRepository.setMaxEndUserQuota(account.id, 1000, 'admin')
+      await accountsRepository.setDailyUploadLimit(account.id, 1000, 'admin')
 
       const created = await send(`${frontend.url}/uploads/folder`, 'POST', {
         fileTree: { type: 'folder', name: 'mine', id: 'root', children: [] },

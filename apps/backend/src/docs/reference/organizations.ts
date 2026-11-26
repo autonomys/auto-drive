@@ -323,6 +323,67 @@ export const organizations = {
         },
       },
     },
+    '/organizations/{organizationId}/daily-upload-limit': {
+      put: {
+        summary: 'Organizations - Set the daily upload limit',
+        description:
+          'For the admins of the organization, signed in; every API key is refused. The most the organization\'s account may upload in a rolling 24 hours, counting every upload charged to it: end users\', members\' and API keys\'. An upload that would pass it answers 402. Until it is set or switched off, no end user can upload, and members and keys upload as before. Switching it off removes a protection against runaway spend, so it takes `dailyUploadLimitBytes: null` with `acknowledgeNoDailyLimit: true`. Every change is recorded in the terms history of the account.',
+        tags: ['Auto Drive API'],
+        servers: autoDriveServers,
+        parameters: [organizationIdParameter],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['dailyUploadLimitBytes'],
+                properties: {
+                  dailyUploadLimitBytes: {
+                    type: 'integer',
+                    minimum: 0,
+                    nullable: true,
+                    description: 'null switches the limit off.',
+                  },
+                  acknowledgeNoDailyLimit: {
+                    type: 'boolean',
+                    description:
+                      'Must be true when dailyUploadLimitBytes is null.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'The daily upload limit',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    dailyUploadLimitBytes: {
+                      type: 'integer',
+                      nullable: true,
+                    },
+                    dailyUploadLimitOff: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description:
+              'Not a non-negative integer, or null without the acknowledgement',
+          },
+          '401': { description: 'Unauthorized' },
+          '403': {
+            description: 'Not an organization admin, or an API key',
+          },
+          '404': { description: 'Not a partner organization' },
+        },
+      },
+    },
     '/organizations/{organizationId}/partner-origins': {
       get: {
         summary: 'Organizations - List partner origins',

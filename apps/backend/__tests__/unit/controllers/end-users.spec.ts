@@ -64,6 +64,9 @@ describe('End users', () => {
   let setMaxInRepository: jest.SpiedFunction<
     typeof accountsRepository.setMaxEndUserQuota
   >
+  let setDailyInRepository: jest.SpiedFunction<
+    typeof accountsRepository.setDailyUploadLimit
+  >
 
   beforeAll(async () => {
     const app = express()
@@ -163,6 +166,16 @@ describe('End users', () => {
       .mockImplementation(
         async (id, maxEndUserQuotaBytes) =>
           ({ id, maxEndUserQuotaBytes }) as Account,
+      )
+    setDailyInRepository = jest
+      .spyOn(accountsRepository, 'setDailyUploadLimit')
+      .mockImplementation(
+        async (id, dailyUploadLimitBytes) =>
+          ({
+            id,
+            dailyUploadLimitBytes,
+            dailyUploadLimitOff: dailyUploadLimitBytes === null,
+          }) as Account,
       )
   })
 
@@ -463,6 +476,12 @@ describe('End users', () => {
         headers,
         body: JSON.stringify(body),
       })
+    const setDaily = (body: unknown, organization = organizationId) =>
+      fetch(`${baseUrl}/organizations/${organization}/daily-upload-limit`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+      })
 
     it.each([
       ['an organization admin, signed in', orgAdmin, [200, 200]],
@@ -495,18 +514,21 @@ describe('End users', () => {
       ],
       ['an Auto Drive admin, signed in', autoDriveAdmin, [403, 403]],
     ])(
-      'answers a quota change and the maximum from %s',
-      async (_, as, statuses) => {
+      'answers a quota change, the maximum and the daily limit from %s',
+      async (_, as, [quotaStatus, settingStatus]) => {
         caller = as()
+        // The daily upload limit has the same callers as the maximum.
+        const statuses = [quotaStatus, settingStatus, settingStatus]
 
         const responses = [
           await setQuota(newAddress().input, { uploadQuotaBytes: 100 }),
           await setMax({ maxEndUserQuotaBytes: 5000 }),
+          await setDaily({ dailyUploadLimitBytes: 5000 }),
         ]
 
         expect(responses.map((r) => r.status)).toEqual(statuses)
         expect(
-          [setQuotaInAuth, setMaxInRepository].map(
+          [setQuotaInAuth, setMaxInRepository, setDailyInRepository].map(
             (mock) => mock.mock.calls.length,
           ),
         ).toEqual(statuses.map((status) => (status === 403 ? 0 : 1)))
@@ -605,6 +627,47 @@ describe('End users', () => {
       organizationId = `personal-${v4()}`
       caller = orgAdmin()
       expect((await setMax({ maxEndUserQuotaBytes: 1 })).status).toBe(404)
+    })
+
+    it('lets an organization admin set the daily upload limit, and switch it off only with the acknowledgement', async () => {
+      caller = orgAdmin()
+
+      const set = await setDaily({ dailyUploadLimitBytes: 0 })
+      expect(set.status).toBe(200)
+      expect(await set.json()).toEqual({
+        dailyUploadLimitBytes: 0,
+        dailyUploadLimitOff: false,
+      })
+
+      for (const body of [
+        {},
+        { dailyUploadLimitBytes: null },
+        { dailyUploadLimitBytes: null, acknowledgeNoDailyLimit: 'true' },
+        { dailyUploadLimitBytes: null, acknowledgeNoDailyLimit: false },
+        { dailyUploadLimitBytes: -1 },
+        { dailyUploadLimitBytes: 1.5 },
+        { dailyUploadLimitBytes: '1' },
+      ]) {
+        expect([body, (await setDaily(body)).status]).toEqual([body, 400])
+      }
+
+      const off = await setDaily({
+        dailyUploadLimitBytes: null,
+        acknowledgeNoDailyLimit: true,
+      })
+      expect(off.status).toBe(200)
+      expect(await off.json()).toEqual({
+        dailyUploadLimitBytes: null,
+        dailyUploadLimitOff: true,
+      })
+      expect(setDailyInRepository.mock.calls).toEqual([
+        [`account-${organizationId}`, 0, 'org-admin'],
+        [`account-${organizationId}`, null, 'org-admin'],
+      ])
+
+      organizationId = `personal-${v4()}`
+      caller = orgAdmin()
+      expect((await setDaily({ dailyUploadLimitBytes: 1 })).status).toBe(404)
     })
   })
 })

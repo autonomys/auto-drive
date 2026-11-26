@@ -58,6 +58,8 @@ Each acts only on what the end user owns: an upload they created, or an object t
 
 Every upload an end user makes is recorded under the customer reference they were enrolled with, whatever \`X-Customer-Reference\` says, so the usage report shows one row per person. Each end user has a total upload quota with no time frame: their own if you set one, otherwise the organization's per-person maximum, and never more than that maximum. Removing a file doesn't give quota back. An upload that would pass it answers 402 with the quota in the message: a new upload once nothing is left, and completing one that is too large. Your organization's admins set the maximum, signed in (\`PUT /organizations/{organizationId}/max-end-user-quota\`); it is 0 until they do, so no end user can upload before then.
 
+Your organization's admins also set a daily upload limit, signed in (\`PUT /organizations/{organizationId}/daily-upload-limit\`): the most your account may upload in a rolling 24 hours, counting every upload charged to it. An upload that would pass it answers 402. No end user can upload until it is set or switched off, and switching it off takes an explicit acknowledgement.
+
 ## Purchasing Storage Credits (Pay with AI3)
 
 Third-party applications can purchase storage credits programmatically using the Intents API. The flow is:

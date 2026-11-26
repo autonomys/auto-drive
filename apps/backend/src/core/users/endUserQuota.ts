@@ -10,11 +10,16 @@ import { PaymentRequiredError } from '../../errors/index.js'
 import { stampCustomerReference } from '../uploads/customerReference.js'
 import { config } from '../../config.js'
 
-type EndUserEvent = 'enrolled' | 'uploaded' | 'quota_refused'
+type EndUserEvent =
+  | 'enrolled'
+  | 'uploaded'
+  | 'quota_refused'
+  | 'daily_limit_refused'
 
 /**
  * Counts what partner end users do, for alerting (#995): enrolments (`count`
- * people), uploads (`bytes`) and the uploads their quota refused.
+ * people), uploads (`bytes`), the uploads their quota refused and the uploads
+ * the account's daily upload limit refused (anyone's, staff included).
  */
 export const sendEndUserMetric = (
   organizationId: string,
@@ -52,7 +57,7 @@ export const effectiveQuotaBytes = (
  * from an end user who has none left. The quota is a total: every byte they
  * ever uploaded counts, removed files included. Does nothing for anyone else.
  * Pass the transaction that charges the upload, which must hold
- * lockEndUserQuota, to check it race-free.
+ * accountsRepository.lockForUploads, to check it race-free.
  */
 export const checkEndUserQuota = async (
   user: UserWithOrganization,
@@ -78,16 +83,43 @@ export const checkEndUserQuota = async (
 }
 
 /**
- * Serialises a partner end user's uploads until the transaction ends, so two
- * at once can't both pass their quota.
+ * Refuses, with a 402, an upload of `bytes` that would take the account past
+ * its daily upload limit in the last 24 hours, or with `bytes` null (the size
+ * is not known yet) one to an account with none of it left. The limit counts
+ * every upload charged to the account. Until a partner's admins set it or
+ * switch it off, the account's end users can't upload at all, and everyone
+ * else uploads as before. Pass the transaction that charges the upload, which
+ * must hold accountsRepository.lockForUploads, to check it race-free.
  */
-export const lockEndUserQuota = async (
+export const checkDailyUploadLimit = async (
   user: UserWithOrganization,
   account: Account,
-  executor: Executor,
+  bytes: bigint | null,
+  executor?: Executor,
 ): Promise<void> => {
-  if (!isPartnerEndUser(user)) return
-  await executor.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-    `end-user-quota:${account.id}:${stampCustomerReference(user, null)}`,
-  ])
+  if (account.dailyUploadLimitOff) return
+  if (account.dailyUploadLimitBytes === null) {
+    if (!isPartnerEndUser(user)) return
+    sendEndUserMetric(account.organizationId, 'daily_limit_refused', {
+      count: 1,
+    })
+    throw new PaymentRequiredError(
+      'The organization\'s admins haven\'t set its daily upload limit yet',
+    )
+  }
+
+  const limit = BigInt(account.dailyUploadLimitBytes)
+  const used = await interactionsRepository.getUploadedBytesInLast24Hours(
+    account.id,
+    executor,
+  )
+  if (bytes === null ? used >= limit : used + bytes > limit) {
+    sendEndUserMetric(account.organizationId, 'daily_limit_refused', {
+      count: 1,
+    })
+    throw new PaymentRequiredError(
+      'This upload would exceed the account\'s daily upload limit of ' +
+        `${limit} bytes (${used} bytes uploaded in the last 24 hours)`,
+    )
+  }
 }

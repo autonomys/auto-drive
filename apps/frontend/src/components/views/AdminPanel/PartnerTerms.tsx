@@ -43,15 +43,22 @@ const FIELD_LABEL = new Map([
   ['download_limit', 'Download allowance'],
   ['model', 'Model'],
   ['is_partner', 'Partner'],
+  ['max_end_user_quota_bytes', 'Per-person maximum'],
+  ['daily_upload_limit_bytes', 'Daily upload limit'],
+  ['daily_upload_limit_off', 'Daily upload limit off'],
 ]);
 
 const formatValue = (field: string, value: string | null): string => {
-  if (value === null) return 'default';
+  if (value === null) {
+    return field === 'daily_upload_limit_bytes' ? 'not set' : 'default';
+  }
   if (field.endsWith('_bytes') || field.endsWith('_limit')) {
     return formatStorageSize(Number(value));
   }
   if (field === 'credit_expiry_days') return `${value} days`;
-  if (field === 'is_partner') return value === 'true' ? 'yes' : 'no';
+  if (field === 'is_partner' || field === 'daily_upload_limit_off') {
+    return value === 'true' ? 'yes' : 'no';
+  }
   return value;
 };
 

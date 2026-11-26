@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { getDatabase } from '../../drivers/pg.js'
+import { Executor, getDatabase } from '../../drivers/pg.js'
 import { purchasedCreditsRepository } from './purchasedCredits.js'
 import {
   AccountModel,
@@ -20,6 +20,8 @@ type DBAccount = {
   credit_expiry_days: number | null
   monthly_free_upload_bytes: string
   max_end_user_quota_bytes: string
+  daily_upload_limit_bytes: string | null
+  daily_upload_limit_off: boolean
 }
 
 type DBAccountTermsChange = {
@@ -61,6 +63,11 @@ const mapRows = (rows: DBAccount[]): Account[] => {
     creditExpiryDays: row.credit_expiry_days,
     monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
     maxEndUserQuotaBytes: Number(row.max_end_user_quota_bytes),
+    dailyUploadLimitBytes:
+      row.daily_upload_limit_bytes === null
+        ? null
+        : Number(row.daily_upload_limit_bytes),
+    dailyUploadLimitOff: row.daily_upload_limit_off,
   }))
 }
 
@@ -79,6 +86,11 @@ const mapRowsWithSize = (
     creditExpiryDays: row.credit_expiry_days,
     monthlyFreeUploadBytes: Number(row.monthly_free_upload_bytes),
     maxEndUserQuotaBytes: Number(row.max_end_user_quota_bytes),
+    dailyUploadLimitBytes:
+      row.daily_upload_limit_bytes === null
+        ? null
+        : Number(row.daily_upload_limit_bytes),
+    dailyUploadLimitOff: row.daily_upload_limit_off,
     totalSize: Number(row.total_size),
   }))
 }
@@ -101,6 +113,28 @@ const getById = async (id: string): Promise<Account | null> => {
     [id],
   )
   return mapRows(result.rows)[0] || null
+}
+
+/**
+ * Makes the account's uploads wait for one another until `client`'s
+ * transaction ends, and returns the account as it is once they do, so each
+ * upload is checked against the limits of that moment and the uploads before
+ * it. An advisory lock, as the account row's locks belong to changes to it.
+ */
+const lockForUploads = async (
+  id: string,
+  client: Executor,
+): Promise<Account> => {
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+    `account-uploads:${id}`,
+  ])
+  const result = await client.query<DBAccount>(
+    'SELECT * FROM accounts WHERE id = $1',
+    [id],
+  )
+  const account = mapRows(result.rows)[0]
+  if (!account) throw new Error(`Account ${id} not found`)
+  return account
 }
 
 const insertTermsChange = (
@@ -257,13 +291,20 @@ const updateAccount = async (
   }
 }
 
-// Sets the most any one of the account's partner end users may upload, and
-// records the change in the terms history in the same transaction.
-const setMaxEndUserQuota = async (
+type PartnerSetting =
+  | 'max_end_user_quota_bytes'
+  | 'daily_upload_limit_bytes'
+  | 'daily_upload_limit_off'
+
+// Sets partner settings that the partner's organisation admins control, and
+// records each one that changed in the terms history in the same transaction.
+const setPartnerSettings = async (
   id: string,
-  maxEndUserQuotaBytes: number,
+  settings: Partial<Record<PartnerSetting, number | boolean | null>>,
   changedBy: string,
+  reason?: string,
 ): Promise<Account> => {
+  const fields = Object.keys(settings) as PartnerSetting[]
   const db = await getDatabase()
   const client = await db.connect()
   try {
@@ -276,24 +317,27 @@ const setMaxEndUserQuota = async (
     ).rows[0]
     if (!before) throw new Error(`Account ${id} not found`)
 
+    // The field names are the PartnerSetting literals, never input.
     const after = (
       await client.query<DBAccount>(
-        'UPDATE accounts SET max_end_user_quota_bytes = $1 WHERE id = $2 RETURNING *',
-        [maxEndUserQuotaBytes, id],
+        `UPDATE accounts SET ${fields
+          .map((field, i) => `${field} = $${i + 2}`)
+          .join(', ')} WHERE id = $1 RETURNING *`,
+        [id, ...fields.map((field) => settings[field])],
       )
     ).rows[0]
-    if (
-      String(before.max_end_user_quota_bytes) !==
-      String(after.max_end_user_quota_bytes)
-    ) {
-      await insertTermsChange(
-        client,
-        id,
-        'max_end_user_quota_bytes',
-        before.max_end_user_quota_bytes,
-        after.max_end_user_quota_bytes,
-        changedBy,
-      )
+    for (const field of fields) {
+      if (String(before[field]) !== String(after[field])) {
+        await insertTermsChange(
+          client,
+          id,
+          field,
+          before[field],
+          after[field],
+          changedBy,
+          reason,
+        )
+      }
     }
 
     await client.query('COMMIT')
@@ -305,6 +349,41 @@ const setMaxEndUserQuota = async (
     client.release()
   }
 }
+
+// The most any one of the account's partner end users may upload.
+const setMaxEndUserQuota = (
+  id: string,
+  maxEndUserQuotaBytes: number,
+  changedBy: string,
+): Promise<Account> =>
+  setPartnerSettings(
+    id,
+    { max_end_user_quota_bytes: maxEndUserQuotaBytes },
+    changedBy,
+  )
+
+// The most the account may upload in a rolling 24 hours, or null to switch
+// the limit off, which the caller has had the admin acknowledge.
+const setDailyUploadLimit = (
+  id: string,
+  dailyUploadLimitBytes: number | null,
+  changedBy: string,
+): Promise<Account> =>
+  dailyUploadLimitBytes === null
+    ? setPartnerSettings(
+        id,
+        { daily_upload_limit_bytes: null, daily_upload_limit_off: true },
+        changedBy,
+        'Switched off, acknowledged by the organization admin',
+      )
+    : setPartnerSettings(
+        id,
+        {
+          daily_upload_limit_bytes: dailyUploadLimitBytes,
+          daily_upload_limit_off: false,
+        },
+        changedBy,
+      )
 
 const getTermsChanges = async (
   accountId: string,
@@ -373,7 +452,9 @@ export const accountsRepository = {
   createAccount,
   updateAccount,
   setMaxEndUserQuota,
+  setDailyUploadLimit,
   getAll,
   getById,
+  lockForUploads,
   getTopAccountsWithinPeriod,
 }

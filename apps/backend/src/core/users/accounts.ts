@@ -35,8 +35,8 @@ import {
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { stampCustomerReference } from '../uploads/customerReference.js'
 import {
+  checkDailyUploadLimit,
   checkEndUserQuota,
-  lockEndUserQuota,
   sendEndUserMetric,
 } from './endUserQuota.js'
 
@@ -407,10 +407,15 @@ const registerInteraction = async (
     // This month's free credits are issued on the same client first, so the
     // month's first upload can draw on them.
     if (type === InteractionType.Upload) {
-      // A partner end user's quota, checked again here with their uploads
-      // serialised, as the size is final only now.
-      await lockEndUserQuota(user, account, client)
-      await checkEndUserQuota(user, account, size, client)
+      // A partner account's uploads are charged one at a time, each against
+      // the account's limits as they are then: an end user's quota and the
+      // daily upload limit, checked again here as the size is final only now.
+      const current =
+        account.isPartner || isPartnerEndUser(user)
+          ? await accountsRepository.lockForUploads(account.id, client)
+          : account
+      await checkEndUserQuota(user, current, size, client)
+      await checkDailyUploadLimit(user, current, size, client)
       await ensureMonthlyFreeCredits(account, client)
     }
     const consumed =

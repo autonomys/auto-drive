@@ -17,6 +17,12 @@ export type Account = {
   // The most any one of a partner's end users may upload in total, set by its
   // organisation admins. 0 until they set it, so end users can't upload.
   maxEndUserQuotaBytes: number;
+  // The most the account may upload in a rolling 24 hours, set by a partner's
+  // organisation admins. Null until they set it: its end users can't upload
+  // until then, and everyone else uploads as before.
+  dailyUploadLimitBytes: number | null;
+  // The admins switched the daily upload limit off, which they acknowledged.
+  dailyUploadLimitOff: boolean;
 };
 
 export type AccountWithTotalSize = Account & {

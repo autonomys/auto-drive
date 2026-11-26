@@ -739,6 +739,8 @@ const getOverview = async (
       creditExpiryDays: terms.expiryDays,
     },
     maxEndUserQuotaBytes: account.maxEndUserQuotaBytes.toString(),
+    dailyUploadLimitBytes: account.dailyUploadLimitBytes?.toString() ?? null,
+    dailyUploadLimitOff: account.dailyUploadLimitOff,
   })
 }
 

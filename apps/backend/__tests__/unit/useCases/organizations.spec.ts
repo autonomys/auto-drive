@@ -46,6 +46,8 @@ const accountFor = (organizationId: string, isPartner: boolean): Account => ({
   creditExpiryDays: null,
   monthlyFreeUploadBytes: 0,
   maxEndUserQuotaBytes: 0,
+  dailyUploadLimitBytes: null,
+  dailyUploadLimitOff: false,
 })
 
 const remaining = (uploadBytesRemaining: bigint) =>
