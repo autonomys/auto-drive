@@ -11,6 +11,7 @@ import {
   UploadType,
   FolderTree,
   FolderTreeFolder,
+  InteractionType,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { filePartsRepository } from '../../infrastructure/repositories/uploads/fileParts.js'
@@ -18,6 +19,7 @@ import { UploadFileProcessingUseCase } from './uploadProcessing.js'
 import { fileProcessingInfoRepository } from '../../infrastructure/repositories/uploads/fileProcessingInfo.js'
 import { NodesUseCases } from '../objects/nodes.js'
 import { ObjectUseCases } from '../objects/object.js'
+import { AccountsUseCases } from '../users/accounts.js'
 import {
   cidToString,
   FileUploadOptions,
@@ -36,6 +38,7 @@ import {
   ConflictError,
   ForbiddenError,
   ObjectNotFoundError,
+  PaymentRequiredError,
 } from '../../errors/index.js'
 import { err, ok, Result } from 'neverthrow'
 import {
@@ -89,6 +92,143 @@ const assertFolderTreeNamesFit = (tree: FolderTree): void => {
   }
 }
 
+type AccountHolder = UserWithOrganization & { organizationId: string }
+
+const assertHasAccount: (
+  user: UserWithOrganization,
+) => asserts user is AccountHolder = (user) => {
+  if (!user.organizationId) {
+    throw new ForbiddenError('User not onboarded')
+  }
+}
+
+// Reading an account's upload credits walks its interaction history, which is
+// too slow to repeat for every part, so a reading is shared for a few seconds.
+const CREDITS_MAX_AGE_MS = 5_000
+const MAX_REMEMBERED_ACCOUNTS = 10_000
+const recentCredits = new Map<
+  string,
+  { reading: Promise<number>; startedAt: number }
+>()
+
+const readUploadCredits = (
+  user: AccountHolder,
+  maxAgeMs: number,
+): Promise<number> => {
+  const account = user.organizationId
+  const recent = recentCredits.get(account)
+  if (recent && Date.now() - recent.startedAt < maxAgeMs) {
+    return recent.reading
+  }
+
+  const reading = AccountsUseCases.getPendingCreditsByUserAndType(
+    user,
+    InteractionType.Upload,
+  )
+  if (recentCredits.size >= MAX_REMEMBERED_ACCOUNTS) {
+    recentCredits.clear()
+  }
+  recentCredits.set(account, { reading, startedAt: Date.now() })
+  reading.catch(() => {
+    if (recentCredits.get(account)?.reading === reading) {
+      recentCredits.delete(account)
+    }
+  })
+  return reading
+}
+
+// Twice, so that an upload cut off part-way can be sent again at once.
+const UNFINISHED_BYTES_PER_CREDIT = 2
+
+// A completion charges an upload and then marks it as migrating. Between the
+// two the upload is still counted as unfinished while its bytes are already
+// off the credits, which can refuse a part that fits. A refusal waits this
+// long for that to pass.
+const COMPLETION_SETTLE_MS = 50
+
+// The bytes each caller has in requests this process has accepted and not yet
+// written, in the order they arrived.
+const bytesInFlight = new Map<string, Set<{ bytes: number }>>()
+
+/**
+ * Admits `bytes` for storing unless they would take the caller's unfinished
+ * uploads, pending or being completed, past twice their remaining upload
+ * credits: bytes they could not complete an upload of. Resolves to a function
+ * the caller must run once the bytes are committed or given up, and not before.
+ *
+ * Bytes are counted from when they are admitted, so parts sent at the same
+ * time are held to the bound together, first come first served. That count is
+ * kept in this process, so the bound applies per API process.
+ *
+ * Just after its commit a part is counted both as stored and as in flight.
+ * That can only refuse a caller whose unfinished bytes already exceed their
+ * credits, since it at most doubles them.
+ *
+ * This only bounds what is held before completion. Completion still decides
+ * whether an upload is paid for.
+ */
+const reserveStorage = async (
+  user: UserWithOrganization,
+  bytes: number,
+): Promise<() => void> => {
+  assertHasAccount(user)
+  const arrivedAt = Date.now()
+
+  const caller = `${user.oauthProvider}:${user.oauthUserId}`
+  const reservations = bytesInFlight.get(caller) ?? new Set()
+  bytesInFlight.set(caller, reservations)
+  const own = { bytes }
+  reservations.add(own)
+  const release = () => {
+    reservations.delete(own)
+    if (reservations.size === 0 && bytesInFlight.get(caller) === reservations) {
+      bytesInFlight.delete(caller)
+    }
+  }
+
+  try {
+    const look = async (creditsMaxAgeMs: number) => {
+      const credits = await readUploadCredits(user, creditsMaxAgeMs)
+      // In flight first, stored second: a part released in between is already
+      // committed, so the read that follows sees it.
+      let inFlight = 0
+      for (const reservation of reservations) {
+        inFlight += reservation.bytes
+        if (reservation === own) break
+      }
+      const stored = await uploadsRepository.getUnfinishedBytes(
+        user.oauthProvider,
+        user.oauthUserId,
+        config.uploads.unfinishedWindowMs,
+      )
+      return {
+        fits: inFlight + stored.bytes <= UNFINISHED_BYTES_PER_CREDIT * credits,
+        completing: stored.completingBytes > 0,
+      }
+    }
+
+    // A refusal is decided on a second look, with credits read since this
+    // request arrived, so that credits bought a moment ago count.
+    const first = await look(CREDITS_MAX_AGE_MS)
+    let fits = first.fits
+    if (!fits) {
+      if (first.completing) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, COMPLETION_SETTLE_MS),
+        )
+      }
+      fits = (await look(Date.now() - arrivedAt)).fits
+    }
+    if (!fits) {
+      throw new PaymentRequiredError('Not enough upload credits')
+    }
+    return release
+  } catch (error) {
+    release()
+    throw error
+  }
+}
+
 const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
   await fileProcessingInfoRepository.addFileProcessingInfo({
     upload_id: upload.id,
@@ -114,6 +254,7 @@ const createFileUpload = async (
     name,
   )
   assertNameFits(name)
+  assertHasAccount(user)
   rootId = rootId ?? null
   relativeId = relativeId ?? null
 
@@ -146,22 +287,28 @@ export const createFolderUpload = async (
   customerReference: string | null = null,
 ): Promise<FolderUpload> => {
   assertFolderTreeNamesFit(folderTree)
+  const release = await reserveStorage(
+    user,
+    Buffer.byteLength(JSON.stringify(folderTree)),
+  )
 
   const uploadId = v4()
-  const result = await uploadsRepository.createUploadEntry(
-    uploadId,
-    UploadType.FOLDER,
-    UploadStatus.PENDING,
-    name,
-    folderTree,
-    null,
-    uploadId,
-    null,
-    user.oauthProvider,
-    user.oauthUserId,
-    uploadOptions,
-    customerReference,
-  )
+  const result = await uploadsRepository
+    .createUploadEntry(
+      uploadId,
+      UploadType.FOLDER,
+      UploadStatus.PENDING,
+      name,
+      folderTree,
+      null,
+      uploadId,
+      null,
+      user.oauthProvider,
+      user.oauthUserId,
+      uploadOptions,
+      customerReference,
+    )
+    .finally(release)
 
   return mapTableToModel(result) as FolderUpload
 }
@@ -274,6 +421,7 @@ const uploadChunk = async (
   // derivation, instead of after the derivation (or the 60 s lock timeout). The
   // check under the lock below is the one that counts.
   assertAcceptsParts(uploadId, upload.status)
+  const release = await reserveStorage(user, chunkData.length)
 
   // The guards and store run under the upload's row lock, so the status and
   // cursor they check cannot change until the part is stored, whichever process
@@ -339,10 +487,12 @@ const uploadChunk = async (
         return true
       },
     )
+    // Committed. The drain can take long and stores nothing new.
+    release()
     if (stored) {
       await drainLoop(uploadId)
     }
-  })
+  }).finally(release)
 }
 
 const completeUpload = async (

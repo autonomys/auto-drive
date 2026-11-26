@@ -324,6 +324,12 @@ export const config = {
     completionClaimStaleMs: Number(
       env('UPLOAD_COMPLETION_CLAIM_STALE_MS', '3600000'),
     ), // 1 hour
+    // How long the stored parts and folder trees of an unfinished upload count
+    // against the caller's upload credits (reserveStorage in core/uploads).
+    unfinishedWindowMs: positiveIntEnv(
+      'UPLOAD_UNFINISHED_WINDOW_MS',
+      24 * 60 * 60 * 1000,
+    ),
   },
   filesGateway: {
     url: env('FILES_GATEWAY_URL'),

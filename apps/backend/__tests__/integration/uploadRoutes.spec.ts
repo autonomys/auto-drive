@@ -1,7 +1,7 @@
 import { createServer } from 'net'
 import { randomBytes } from 'crypto'
 import { jest } from '@jest/globals'
-import { UploadStatus } from '@auto-drive/models'
+import { UploadStatus, UserWithOrganization } from '@auto-drive/models'
 import { config } from '../../src/config.js'
 import { AccountsUseCases } from '../../src/core/users/accounts.js'
 import { UploadsUseCases } from '../../src/core/uploads/uploads.js'
@@ -19,6 +19,19 @@ import { createMockUser, mockRabbitPublish } from '../utils/mocks.js'
 describe('Upload routes answer client errors with their own status', () => {
   const user = createMockUser()
   const userWithoutCredits = createMockUser()
+  const FEW_CREDITS = 4
+  const userWithFewCredits = createMockUser()
+  // What auth answers for an account that has not onboarded.
+  const userNotOnboarded = {
+    ...createMockUser(),
+    onboarded: false,
+    organizationId: null,
+  } as unknown as UserWithOrganization
+  const usersByToken: Record<string, UserWithOrganization> = {
+    'no-credits': userWithoutCredits,
+    'few-credits': userWithFewCredits,
+    'not-onboarded': userNotOnboarded,
+  }
   const portDefault = config.express.port
   const chunkLimitDefault = config.express.uploadChunkMaxBytes
   // Read when the API is imported below; small so the tests can exceed it.
@@ -50,11 +63,12 @@ describe('Upload routes answer client errors with their own status', () => {
     path: string,
     body: unknown,
     headers: Record<string, string> = {},
+    token?: string,
   ) =>
     fetch(`${base}${path}`, {
       method: 'POST',
       headers: {
-        ...authHeaders(),
+        ...authHeaders(token),
         'Content-Type': 'application/json',
         ...headers,
       },
@@ -89,6 +103,11 @@ describe('Upload routes answer client errors with their own status', () => {
   beforeAll(async () => {
     await dbMigration.up()
     await AccountsUseCases.initAccount(userWithoutCredits.organizationId!, 0, 0)
+    await AccountsUseCases.initAccount(
+      userWithFewCredits.organizationId!,
+      FEW_CREDITS,
+      0,
+    )
 
     const port = await freePort()
     config.express.port = port
@@ -124,8 +143,8 @@ describe('Upload routes answer client errors with their own status', () => {
     mockRabbitPublish()
     jest
       .spyOn(AuthManager, 'getUserFromAccessToken')
-      .mockImplementation(async (_provider, token) =>
-        token === 'no-credits' ? userWithoutCredits : user,
+      .mockImplementation(
+        async (_provider, token) => usersByToken[token] ?? user,
       )
   })
 
@@ -205,6 +224,65 @@ describe('Upload routes answer client errors with their own status', () => {
         error: 'Cannot replace already-processed part 0 with different content',
       })
     })
+  })
+
+  describe('uploads the caller could not complete', () => {
+    const partsStored = async (uploadId: string) => {
+      const db = await getDatabase()
+      const result = await db.query<{ count: string }>(
+        'SELECT count(*) FROM uploads.file_parts WHERE upload_id = $1',
+        [uploadId],
+      )
+      return Number(result.rows[0].count)
+    }
+
+    it('answers 402 for a part beyond twice the credits of the caller and stores nothing', async () => {
+      const upload = await createUpload(userWithoutCredits)
+
+      const response = await postChunk(
+        upload.id,
+        0,
+        Buffer.from('data'),
+        'no-credits',
+      )
+      expect({
+        status: response.status,
+        body: await response.json(),
+      }).toEqual({
+        status: 402,
+        body: { error: 'Not enough upload credits' },
+      })
+      expect(await partsStored(upload.id)).toBe(0)
+    })
+
+    it.each([
+      ['/uploads/file', { filename: 'file.bin' }],
+      [
+        '/uploads/folder',
+        {
+          fileTree: {
+            name: 'folder',
+            type: 'folder',
+            id: 'folder',
+            children: [],
+          },
+        },
+      ],
+    ])(
+      'answers 403 to POST %s from a caller who is not onboarded',
+      async (path, body) => {
+        const response = await postJson(
+          path,
+          { ...body, mimeType: null, uploadOptions: null },
+          {},
+          'not-onboarded',
+        )
+        expect({
+          status: response.status,
+          body: await response.json(),
+        }).toEqual({ status: 403, body: { error: 'User not onboarded' } })
+      },
+    )
   })
 
   describe('POST /uploads/file/:uploadId/chunk limits', () => {
@@ -307,14 +385,22 @@ describe('Upload routes answer client errors with their own status', () => {
       })
     })
 
+    // A part is stored while the caller's unfinished bytes stay within twice
+    // their credits; whether the upload is paid for is decided here.
     it('answers 402 when the account cannot pay for the upload', async () => {
-      const upload = await createUpload(userWithoutCredits)
+      const upload = await createUpload(userWithFewCredits)
       expect(
-        (await postChunk(upload.id, 0, Buffer.from('data'), 'no-credits'))
-          .status,
+        (
+          await postChunk(
+            upload.id,
+            0,
+            Buffer.alloc(FEW_CREDITS + 1),
+            'few-credits',
+          )
+        ).status,
       ).toBe(200)
 
-      const response = await postComplete(upload.id, 'no-credits')
+      const response = await postComplete(upload.id, 'few-credits')
       expect({
         status: response.status,
         body: await response.json(),

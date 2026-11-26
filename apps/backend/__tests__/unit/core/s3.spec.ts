@@ -844,7 +844,7 @@ describe('S3UseCases', () => {
       )
     })
 
-    it('surfaces an upload-chunk error', async () => {
+    it('surfaces an upload-chunk error and removes the upload it created', async () => {
       jest
         .spyOn(UploadsUseCases, 'createFileUpload')
         .mockResolvedValue({ id: 'upload123' } as any)
@@ -852,6 +852,9 @@ describe('S3UseCases', () => {
         .spyOn(UploadsUseCases, 'uploadChunk')
         .mockRejectedValue(new Error('Upload failed'))
       jest.spyOn(UploadsUseCases, 'completeUpload').mockResolvedValue('cid123')
+      const abortSpy = jest
+        .spyOn(UploadsUseCases, 'abortUpload')
+        .mockResolvedValue(ok(undefined))
       jest
         .spyOn(s3ObjectMappingsRepository, 'createMapping')
         .mockResolvedValue(mapping())
@@ -863,6 +866,28 @@ describe('S3UseCases', () => {
       } as any)
 
       expect(result.isErr()).toBe(true)
+      expect(abortSpy).toHaveBeenCalledWith(mockUser, 'upload123')
+    })
+
+    it('rethrows a completion error and removes the upload it created', async () => {
+      setupPut()
+      const refused = new Error('Not enough upload credits')
+      jest.spyOn(UploadsUseCases, 'completeUpload').mockRejectedValue(refused)
+      const abortSpy = jest
+        .spyOn(UploadsUseCases, 'abortUpload')
+        .mockResolvedValue(ok(undefined))
+      const mappingSpy = jest.spyOn(s3ObjectMappingsRepository, 'createMapping')
+
+      await expect(
+        S3UseCases.putObject(mockUser, {
+          Bucket: 'my-bucket',
+          Key: 'file.txt',
+          Body: Buffer.from('data'),
+        } as any),
+      ).rejects.toBe(refused)
+
+      expect(abortSpy).toHaveBeenCalledWith(mockUser, 'upload123')
+      expect(mappingSpy).not.toHaveBeenCalled()
     })
 
     it('creates the mapping under the caller with the body MD5 and mtime', async () => {
