@@ -264,6 +264,21 @@ describe('Partner organization members, managed by its admins', () => {
       ).toBeInstanceOf(ConflictError)
     })
 
+    it('refuses an end user of another partner as an unknown user', async () => {
+      const endUser = {
+        ...createMockUser(),
+        organizationId: uuidv4(),
+        organizationRole: OrganizationRole.PartnerEndUser,
+      }
+      jest
+        .spyOn(AuthManager, 'getUserFromPublicId')
+        .mockResolvedValue(endUser)
+
+      expect(
+        (await invite(organizationAdmin, endUser))._unsafeUnwrapErr(),
+      ).toBeInstanceOf(NotFoundError)
+    })
+
     it('renews an open invitation rather than sending another', async () => {
       const first = (await invite(organizationAdmin))._unsafeUnwrap()
       const second = (

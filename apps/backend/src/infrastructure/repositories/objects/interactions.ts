@@ -101,8 +101,43 @@ const getInteractionsByAccountIdAndTypeInTimeRange = async (
   return mapRows(interactions.rows)
 }
 
+// Every byte uploaded under the account with this customer reference, from
+// every source.
+const getUploadedBytesByCustomerReference = async (
+  accountId: string,
+  customerReference: string,
+  executor?: Executor,
+): Promise<bigint> => {
+  const db = executor ?? (await getDatabase())
+  const result = await db.query<{ bytes: string }>(
+    `SELECT COALESCE(SUM(size), 0)::text AS bytes FROM interactions
+     WHERE account_id = $1 AND customer_reference = $2 AND type = $3`,
+    [accountId, customerReference, InteractionType.Upload],
+  )
+  return BigInt(result.rows[0].bytes)
+}
+
+// Every byte uploaded under the account in the last 24 hours, from every
+// source. created_at is a timestamp without time zone set from the database's
+// clock, so it is compared with LOCALTIMESTAMP.
+const getUploadedBytesInLast24Hours = async (
+  accountId: string,
+  executor?: Executor,
+): Promise<bigint> => {
+  const db = executor ?? (await getDatabase())
+  const result = await db.query<{ bytes: string }>(
+    `SELECT COALESCE(SUM(size), 0)::text AS bytes FROM interactions
+     WHERE type = $1 AND account_id = $2
+       AND created_at > LOCALTIMESTAMP - interval '24 hours'`,
+    [InteractionType.Upload, accountId],
+  )
+  return BigInt(result.rows[0].bytes)
+}
+
 export const interactionsRepository = {
   createInteraction,
   createCreditConsumption,
   getInteractionsByAccountIdAndTypeInTimeRange,
+  getUploadedBytesByCustomerReference,
+  getUploadedBytesInLast24Hours,
 }

@@ -474,6 +474,19 @@ const removeOrganizationEndUser = (
     { method: 'DELETE', body: { actor, actorApiKeyId } },
   )
 
+// Sets an active end user's quota, null to follow the per-person maximum.
+const setOrganizationEndUserQuota = (
+  organizationId: string,
+  address: string,
+  uploadQuotaBytes: number | null,
+  actor: string,
+  actorApiKeyId: string | null,
+) =>
+  organizationRequest<PartnerEndUser>(
+    `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(address)}`,
+    { method: 'PATCH', body: { uploadQuotaBytes, actor, actorApiKeyId } },
+  )
+
 const listPartnerOrigins = (organizationId: string) =>
   organizationRequest<PartnerOrigin[]>(
     `/${encodeURIComponent(organizationId)}/partner-origins`,
@@ -532,6 +545,7 @@ export const AuthManager = {
   enrollOrganizationEndUsers,
   listOrganizationEndUsers,
   removeOrganizationEndUser,
+  setOrganizationEndUserQuota,
   listPartnerOrigins,
   addPartnerOrigin,
   removePartnerOrigin,

@@ -41,7 +41,7 @@ An organization API key can be limited to scopes when it is created (\`POST /org
 | --- | --- |
 | \`files\` | \`/uploads\`, \`/objects\`, \`/downloads\` and \`/s3\`: everything the Auto Drive SDK needs to upload, download and list files |
 | \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
-| \`end_user_enrollment\` | \`POST\` and \`GET /organizations/{organizationId}/end-users\`: enroll and list the organization's end users |
+| \`end_user_enrollment\` | \`POST\` and \`GET /organizations/{organizationId}/end-users\` and \`PATCH /organizations/{organizationId}/end-users/{address}\`: enroll and list the organization's end users and change their quotas |
 | \`end_user_removal\` | \`GET /organizations/{organizationId}/end-users\` and \`DELETE /organizations/{organizationId}/end-users/{address}\`: list and remove them. Keep it off the key your backend uses day to day, so a leak of that key can't remove anyone. |
 
 ## Partner end users
@@ -55,6 +55,10 @@ A partner end user's session can be used only on the routes below. Every other r
 | \`GET /downloads/{cid}\` and the async downloads under \`/downloads/async\` | Yes |
 
 Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for (their own, shared with them or in their trash), directly or through a root object that contains it. Anything else answers 403, except \`GET /objects/{cid}\` and its summary, which answer as for an anonymous caller.
+
+Every upload an end user makes is recorded under the customer reference they were enrolled with, whatever \`X-Customer-Reference\` says, so the usage report shows one row per person. Each end user has a total upload quota with no time frame: their own if you set one, otherwise the organization's per-person maximum, and never more than that maximum. Removing a file doesn't give quota back. An upload that would pass it answers 402 with the quota in the message: a new upload once nothing is left, and completing one that is too large. Your organization's admins set the maximum, signed in (\`PUT /organizations/{organizationId}/max-end-user-quota\`); it is 0 until they do, so no end user can upload before then.
+
+Your organization's admins also set a daily upload limit, signed in (\`PUT /organizations/{organizationId}/daily-upload-limit\`): the most your account may upload in a rolling 24 hours, counting every upload charged to it. An upload that would pass it answers 402. No end user can upload until it is set or switched off, and switching it off takes an explicit acknowledgement.
 
 ## Purchasing Storage Credits (Pay with AI3)
 

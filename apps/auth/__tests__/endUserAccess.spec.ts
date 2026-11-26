@@ -69,6 +69,7 @@ const SERVICE = [
   'POST /organizations/:organizationId/end-users',
   'GET /organizations/:organizationId/end-users',
   'DELETE /organizations/:organizationId/end-users/:address',
+  'PATCH /organizations/:organizationId/end-users/:address',
   'GET /organizations/:organizationId/partner-origins',
   'POST /organizations/:organizationId/partner-origins',
   'DELETE /organizations/:organizationId/partner-origins',

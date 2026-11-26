@@ -21,6 +21,7 @@ import {
   UserRole,
   UserWithOrganization,
   deriveUserPublicId,
+  isPartnerEndUser,
 } from '@auto-drive/models'
 import { accountsRepository } from '../../infrastructure/repositories/users/accounts.js'
 import { intentsRepository } from '../../infrastructure/repositories/users/intents.js'
@@ -438,6 +439,11 @@ const inviteMember = async (
   if (user.organizationId === organizationId) {
     return err(new ConflictError('User is already in this organization'))
   }
+  // Another partner's end user can't become a member either, and this
+  // organization isn't told they exist.
+  if (isPartnerEndUser(user)) {
+    return err(new NotFoundError(`User ${publicId} not found`))
+  }
   const pending =
     await organizationInvitationsRepository.countPendingByOrganization(
       organizationId,
@@ -732,6 +738,9 @@ const getOverview = async (
       maxPurchasedBytes: terms.maxBytes.toString(),
       creditExpiryDays: terms.expiryDays,
     },
+    maxEndUserQuotaBytes: account.maxEndUserQuotaBytes.toString(),
+    dailyUploadLimitBytes: account.dailyUploadLimitBytes?.toString() ?? null,
+    dailyUploadLimitOff: account.dailyUploadLimitOff,
   })
 }
 

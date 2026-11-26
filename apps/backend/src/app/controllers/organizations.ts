@@ -594,6 +594,143 @@ organizationsController.get(
   }),
 )
 
+organizationsController.patch(
+  '/:organizationId/end-users/:address',
+  requireApiKeyScope(ApiKeyScope.EndUserEnrollment),
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const body = z
+      .object({
+        uploadQuotaBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(Number.MAX_SAFE_INTEGER)
+          .nullable(),
+      })
+      .safeParse(req.body)
+    if (!body.success) {
+      res.status(400).json({
+        error: 'uploadQuotaBytes must be a positive integer or null',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.setEndUserQuota(
+        user,
+        req.params.organizationId,
+        req.params.address,
+        body.data.uploadQuotaBytes,
+      ),
+      'Failed to change end user quota',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// The most any one end user may upload in total. Organization admins only,
+// signed in: every API key is refused.
+organizationsController.put(
+  '/:organizationId/max-end-user-quota',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const bytes = z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER)
+      .safeParse(req.body?.maxEndUserQuotaBytes)
+    if (!bytes.success) {
+      res.status(400).json({
+        error: 'maxEndUserQuotaBytes must be a non-negative integer',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.setMaxEndUserQuota(
+        user,
+        req.params.organizationId,
+        bytes.data,
+      ),
+      'Failed to set the per-person maximum',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+// The most the account may upload in a rolling 24 hours. Organization admins
+// only, signed in: every API key is refused. Switching it off takes an
+// explicit acknowledgement.
+organizationsController.put(
+  '/:organizationId/daily-upload-limit',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const body = z
+      .union([
+        z.object({
+          dailyUploadLimitBytes: z
+            .number()
+            .int()
+            .min(0)
+            .max(Number.MAX_SAFE_INTEGER),
+        }),
+        z.object({
+          dailyUploadLimitBytes: z.null(),
+          acknowledgeNoDailyLimit: z.literal(true),
+        }),
+      ])
+      .safeParse(req.body)
+    if (!body.success) {
+      res.status(400).json({
+        error:
+          'dailyUploadLimitBytes must be a non-negative integer, or null ' +
+          'with acknowledgeNoDailyLimit: true to switch off a recommended ' +
+          'protection against runaway spend',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.setDailyUploadLimit(
+        user,
+        req.params.organizationId,
+        body.data.dailyUploadLimitBytes,
+      ),
+      'Failed to set the daily upload limit',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
 organizationsController.delete(
   '/:organizationId/end-users/:address',
   requireApiKeyScope(ApiKeyScope.EndUserRemoval),

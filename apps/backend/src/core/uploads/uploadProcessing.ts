@@ -380,6 +380,17 @@ const handleFileUploadFinalization = async (
     throw new PaymentRequiredError('Not enough upload credits')
   }
 
+  // Charged before the file is theirs: the checks above don't hold a lock, so
+  // concurrent uploads can all pass them, and an upload the charge refuses
+  // (credits or an end user's quota) must not have been given to them.
+  await AccountsUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    metadata.totalSize.valueOf(),
+    metadata.dataCid,
+    upload?.customer_reference ?? null,
+  )
+
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
 
   const isRootUpload = upload?.root_upload_id === uploadId
@@ -390,14 +401,6 @@ const handleFileUploadFinalization = async (
       metadata,
     )
   }
-
-  await AccountsUseCases.registerInteraction(
-    user,
-    InteractionType.Upload,
-    metadata.totalSize.valueOf(),
-    metadata.dataCid,
-    upload?.customer_reference ?? null,
-  )
 
   logger.info(
     'handleFileUploadFinalization completed (cid=%s, userId=%s)',

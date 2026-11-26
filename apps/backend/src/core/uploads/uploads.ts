@@ -12,6 +12,7 @@ import {
   FolderTree,
   FolderTreeFolder,
   UserWithOrganization,
+  isPartnerEndUser,
 } from '@auto-drive/models'
 import { filePartsRepository } from '../../infrastructure/repositories/uploads/fileParts.js'
 import { UploadFileProcessingUseCase } from './uploadProcessing.js'
@@ -42,6 +43,12 @@ import {
   UnrecoverableUploadError,
   UploadCompletionInProgressError,
 } from './errors.js'
+import { stampCustomerReference } from './customerReference.js'
+import { AccountsUseCases } from '../users/accounts.js'
+import {
+  checkDailyUploadLimit,
+  checkEndUserQuota,
+} from '../users/endUserQuota.js'
 
 const logger = createLogger('useCases:uploads:uploads')
 
@@ -89,6 +96,16 @@ const assertFolderTreeNamesFit = (tree: FolderTree): void => {
   }
 }
 
+// An upload's size is known only once it completes, when the quota and the
+// account's daily upload limit are checked again, so a partner end user's new
+// upload is refused only when nothing is left of either.
+const refuseEndUserWithoutQuota = async (user: UserWithOrganization) => {
+  if (!isPartnerEndUser(user)) return
+  const account = await AccountsUseCases.getOrCreateAccount(user)
+  await checkEndUserQuota(user, account, null)
+  await checkDailyUploadLimit(user, account, null)
+}
+
 const initFileProcessing = async (upload: UploadEntry): Promise<void> => {
   await fileProcessingInfoRepository.addFileProcessingInfo({
     upload_id: upload.id,
@@ -116,6 +133,8 @@ const createFileUpload = async (
   assertNameFits(name)
   rootId = rootId ?? null
   relativeId = relativeId ?? null
+  customerReference = stampCustomerReference(user, customerReference)
+  await refuseEndUserWithoutQuota(user)
 
   const id = v4()
   const upload = await uploadsRepository.createUploadEntry(
@@ -146,6 +165,8 @@ export const createFolderUpload = async (
   customerReference: string | null = null,
 ): Promise<FolderUpload> => {
   assertFolderTreeNamesFit(folderTree)
+  customerReference = stampCustomerReference(user, customerReference)
+  await refuseEndUserWithoutQuota(user)
 
   const uploadId = v4()
   const result = await uploadsRepository.createUploadEntry(
@@ -187,6 +208,7 @@ const createFileInFolder = async (
 
   // A folder upload has one customer reference, set when it is created, and
   // its files inherit it.
+  customerReference = stampCustomerReference(user, customerReference)
   if (
     customerReference !== null &&
     customerReference !== upload.customer_reference

@@ -1,4 +1,5 @@
 import {
+  EndUserChange,
   OrganizationMembershipChange,
   OrganizationRole,
 } from '@auto-drive/models';
@@ -14,6 +15,12 @@ export const describeMembershipChange = (
   organizationId: string,
 ): string => {
   const role = change.role ? ROLE_LABEL[change.role] : '—';
+  if (change.endUserChange === EndUserChange.QuotaChanged) {
+    return 'Upload quota changed';
+  }
+  if (change.endUserChange === EndUserChange.AccountClosed) {
+    return 'Closed their account';
+  }
   if (change.fromOrganizationId === change.toOrganizationId) {
     return `Role changed to ${role}`;
   }

@@ -237,6 +237,49 @@ describe('Deletion in personal and partner organizations', () => {
     })
   })
 
+  it('keeps the credits of a partner account when one of its end users closes their account', async () => {
+    const db = await getDatabase()
+    await db.query('UPDATE accounts SET is_partner = TRUE WHERE id = $1', [
+      accountId,
+    ])
+    const endUser = {
+      ...user,
+      oauthProvider: 'web3-wallet',
+      organizationRole: OrganizationRole.PartnerEndUser,
+      customerReference: 'person-1',
+    }
+    jest.spyOn(AuthManager, 'getUserFromPublicId').mockResolvedValue(endUser)
+    // Enrolled, not moved in from an organization of their own.
+    jest
+      .spyOn(AuthManager, 'getOrganizationMembershipChanges')
+      .mockResolvedValue(
+        ok([
+          {
+            id: uuidv4(),
+            publicId: user.publicId,
+            fromOrganizationId: null,
+            toOrganizationId: user.organizationId,
+            role: OrganizationRole.PartnerEndUser,
+            actor: uuidv4(),
+            actorApiKeyId: 'key',
+            endUserChange: null,
+            uploadQuotaBytes: null,
+            createdAt: new Date().toISOString(),
+          },
+        ]),
+      )
+
+    await DeletionUseCases.processAnonymisation(deletionRequestFor(endUser))
+
+    const { uploadBytesRemaining } =
+      await purchasedCreditsRepository.getRemainingCredits(accountId)
+    expect(uploadBytesRemaining).toBe(1000n)
+    expect((await lastCompletion())?.details).toMatchObject({
+      organizationCase: 'partner_organization',
+      creditsExpired: 0,
+    })
+  })
+
   it('expires the credits a partner member left on their personal account', async () => {
     const partnerMember = createMockUser()
     const partnerAccountId = (
@@ -276,6 +319,8 @@ describe('Deletion in personal and partner organizations', () => {
             role: OrganizationRole.Member,
             actor: uuidv4(),
             actorApiKeyId: null,
+            endUserChange: null,
+            uploadQuotaBytes: null,
             createdAt: new Date().toISOString(),
           },
         ]),

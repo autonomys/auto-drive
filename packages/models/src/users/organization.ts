@@ -63,9 +63,10 @@ export type OrganizationApiKeys = {
 /**
  * A partner's customer, identified by the address of their wallet key.
  * `customerReference` is the partner's own reference for them, and
- * `uploadQuotaBytes` their upload quota (null for the organisation's default).
- * `removedAt` is set while the partner has removed them: they stay in the
- * organisation, read-only, until it enrols them again.
+ * `uploadQuotaBytes` their upload quota (null to follow the account's
+ * per-person maximum). `removedAt` is set while the partner has removed them:
+ * they stay in the organisation, read-only, until it enrols them again.
+ * `closedAt` is set too once they have closed their account.
  */
 export type PartnerEndUser = {
   // EIP-55 checksummed.
@@ -76,7 +77,18 @@ export type PartnerEndUser = {
   // When they were first enrolled.
   createdAt: string;
   removedAt: string | null;
+  closedAt: string | null;
 };
+
+/**
+ * What a membership change did to a partner end user, besides moving them:
+ * their quota changed, or they closed their account. Null for every other
+ * change.
+ */
+export enum EndUserChange {
+  QuotaChanged = "quota_changed",
+  AccountClosed = "account_closed",
+}
 
 /**
  * One move into, out of or within an organisation. `fromOrganizationId` and
@@ -96,6 +108,13 @@ export type OrganizationMembershipChange = {
   // The organisation API key that made an end user's change, which `actor`
   // can't tell apart from the organisation's other keys. Null otherwise.
   actorApiKeyId: string | null;
+  // For a partner end user: a quota change or closing their account. A quota
+  // change has the organisation as both its source and destination; a
+  // closure, like a removal, has no destination.
+  endUserChange: EndUserChange | null;
+  // An end user's quota after their enrolment or quota change, null to follow
+  // the per-person maximum. Null for every other change.
+  uploadQuotaBytes: number | null;
   createdAt: string;
 };
 
@@ -171,4 +190,9 @@ export type OrganizationOverview = {
     // Days purchased credits last.
     creditExpiryDays: number;
   };
+  // The most any one of the organisation's end users may upload in total.
+  maxEndUserQuotaBytes: string;
+  // The most the account may upload in a rolling 24 hours; null until set.
+  dailyUploadLimitBytes: string | null;
+  dailyUploadLimitOff: boolean;
 };

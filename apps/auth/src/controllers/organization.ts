@@ -356,6 +356,48 @@ organizationController.delete(
   },
 )
 
+organizationController.patch(
+  '/:organizationId/end-users/:address',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+    const actorApiKeyId = getActorApiKeyId(req, res)
+    if (actorApiKeyId === false) {
+      return
+    }
+
+    const { uploadQuotaBytes } = req.body
+    if (
+      uploadQuotaBytes !== null &&
+      !(Number.isSafeInteger(uploadQuotaBytes) && uploadQuotaBytes > 0)
+    ) {
+      res.status(400).json({
+        error: 'uploadQuotaBytes must be a positive integer or null',
+      })
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.setEndUserQuota({
+          organizationId: req.params.organizationId,
+          address: req.params.address,
+          uploadQuotaBytes,
+          actor,
+          actorApiKeyId,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to change end user quota')
+    }
+  },
+)
+
 // The origins of a partner's app that its end users sign in for. The backend
 // lets Auto Drive admins manage them.
 organizationController.get(

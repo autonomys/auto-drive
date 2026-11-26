@@ -4,6 +4,7 @@ import { Server } from 'http'
 import { AddressInfo } from 'net'
 import { Wallet } from 'ethers'
 import {
+  EndUserChange,
   OrganizationRole,
   User,
   UserRole,
@@ -27,6 +28,7 @@ import {
   OrganizationNotFoundError,
   OrganizationValidationError,
 } from '../src/errors/organizations.js'
+import { DeletionUseCases } from '../src/useCases/deletion.js'
 import { dbMigration } from './utils/dbMigrate.js'
 import { createUnonboardedUser } from './utils/mocks.js'
 
@@ -124,6 +126,9 @@ describe('End users', () => {
       role: row.role,
       actor: row.actor,
       actorApiKeyId: row.actor_api_key_id,
+      endUserChange: row.end_user_change,
+      uploadQuotaBytes:
+        row.upload_quota_bytes === null ? null : Number(row.upload_quota_bytes),
     }))
   }
 
@@ -142,6 +147,7 @@ describe('End users', () => {
       uploadQuotaBytes: 1024,
       createdAt: expect.any(String),
       removedAt: null,
+      closedAt: null,
     })
     const user = await usersRepository.getUserByOAuthInformation(
       WALLET,
@@ -172,6 +178,8 @@ describe('End users', () => {
         toOrganizationId: partnerId,
         role: OrganizationRole.PartnerEndUser,
         actor: ACTOR,
+        endUserChange: null,
+        uploadQuotaBytes: 1024,
       }),
     ])
   })
@@ -658,6 +666,13 @@ describe('End users', () => {
     expect(summary.memberCount).toBe(1)
     const found = await UsersUseCases.adminSearchUsers('', partnerId)
     expect(found.map((u) => u.publicId)).toEqual([member.publicId])
+    for (const address of [active, removed]) {
+      expect(
+        await UsersUseCases.adminSearchUsers(
+          deriveUserPublicId(WALLET, address),
+        ),
+      ).toEqual([])
+    }
   })
 
   it('neither gives the end user role nor moves, changes or removes end users', async () => {
@@ -760,6 +775,7 @@ describe('End users', () => {
         uploadQuotaBytes: null,
         createdAt: expect.any(String),
         removedAt: null,
+        closedAt: null,
       },
     ])
 
@@ -791,5 +807,216 @@ describe('End users', () => {
     expect(
       (await call('DELETE', '/not-an-address', { actor: ACTOR })).status,
     ).toBe(400)
+  })
+
+  describe('quotas and closed accounts', () => {
+    const setQuota = (
+      address: string,
+      uploadQuotaBytes: number | null,
+      actorApiKeyId: string | null = null,
+    ) =>
+      OrganizationsUseCases.setEndUserQuota({
+        organizationId: partnerId,
+        address,
+        uploadQuotaBytes,
+        actor: ACTOR,
+        actorApiKeyId,
+      })
+
+    // Closes the user's account as the deletion job does once its grace
+    // period is over.
+    const closeAccount = async (address: string) => {
+      const user = (await UsersUseCases.getUserByOAuthUser({
+        provider: WALLET,
+        id: address,
+      })) as User
+      const request = await DeletionUseCases.requestDeletion(user)
+      await DeletionUseCases.markAsProcessing(request.id)
+      await DeletionUseCases.anonymiseUser(request.id)
+    }
+
+    it('changes the quota of an active end user and records each change', async () => {
+      const address = newAddress()
+      await enroll([endUser(address, 'customer-1', 1024)])
+
+      expect(await setQuota(address.toLowerCase(), 2048, 'key')).toEqual(
+        expect.objectContaining({ address, uploadQuotaBytes: 2048 }),
+      )
+      // The same quota again changes nothing.
+      await setQuota(address, 2048)
+      expect(await setQuota(address, null)).toEqual(
+        expect.objectContaining({ uploadQuotaBytes: null }),
+      )
+
+      expect(await membershipOf(address)).toMatchObject({
+        upload_quota_bytes: null,
+      })
+      const quotaChange = {
+        fromOrganizationId: partnerId,
+        toOrganizationId: partnerId,
+        role: OrganizationRole.PartnerEndUser,
+        actor: ACTOR,
+        endUserChange: EndUserChange.QuotaChanged,
+      }
+      expect(await changes()).toEqual([
+        expect.objectContaining({
+          ...quotaChange,
+          uploadQuotaBytes: null,
+          actorApiKeyId: null,
+        }),
+        expect.objectContaining({
+          ...quotaChange,
+          uploadQuotaBytes: 2048,
+          actorApiKeyId: 'key',
+        }),
+        expect.objectContaining({
+          toOrganizationId: partnerId,
+          endUserChange: null,
+          uploadQuotaBytes: 1024,
+        }),
+      ])
+      // Enrolling again with the new quota is a retry.
+      await expect(enroll([endUser(address, 'customer-1')])).resolves.toEqual([
+        expect.objectContaining({ uploadQuotaBytes: null }),
+      ])
+    })
+
+    it('changes the quota of active end users of the organization only', async () => {
+      const removed = newAddress()
+      await enroll([endUser(removed, 'customer-1')])
+      await remove(removed)
+      const elsewhere = newAddress()
+      const other = (await OrganizationsUseCases.createOrganization('Other')).id
+      await enroll([endUser(elsewhere, 'customer-2')], {
+        organizationId: other,
+      })
+
+      for (const address of [removed, elsewhere, newAddress()]) {
+        await expect(setQuota(address, 1)).rejects.toThrow(
+          new OrganizationNotFoundError(
+            'Not an active end user of this organization',
+          ),
+        )
+      }
+      await expect(setQuota('0x1234', 1)).rejects.toBeInstanceOf(
+        OrganizationValidationError,
+      )
+      expect(await changes()).toHaveLength(2)
+    })
+
+    it('keeps the membership of a closed account so its reference stays reserved', async () => {
+      const address = newAddress()
+      const [enrolled] = await enroll([endUser(address, 'customer-1', 1024)])
+
+      await closeAccount(address)
+
+      const membership = await membershipOf(address)
+      expect(membership).toMatchObject({
+        organization_id: partnerId,
+        role: OrganizationRole.PartnerEndUser,
+        customer_reference: 'customer-1',
+        end_user_removed_at: expect.any(Date),
+        end_user_closed_at: expect.any(Date),
+      })
+      const { endUsers } = await list()
+      expect(endUsers).toEqual([
+        {
+          ...enrolled,
+          removedAt: expect.any(String),
+          closedAt: expect.any(String),
+        },
+      ])
+      const [closure] = await changes()
+      expect(closure).toMatchObject({
+        publicId: enrolled.publicId,
+        fromOrganizationId: partnerId,
+        toOrganizationId: null,
+        role: OrganizationRole.PartnerEndUser,
+        actor: enrolled.publicId,
+        endUserChange: EndUserChange.AccountClosed,
+      })
+      // Nobody else gets the reference, and the cap doesn't count them.
+      await expect(
+        enroll([endUser(newAddress(), 'customer-1')]),
+      ).rejects.toThrow(conflict())
+      await expect(
+        enroll([endUser(newAddress(), 'customer-2')], { maxEndUsers: 1 }),
+      ).resolves.toHaveLength(1)
+
+      // The partner can enroll them again, under the same reference.
+      const [again] = await enroll([endUser(address, 'customer-1')])
+      expect(again).toEqual({
+        ...enrolled,
+        uploadQuotaBytes: null,
+        removedAt: null,
+        closedAt: null,
+      })
+    })
+
+    it('keeps when a removed end user was removed when they close their account', async () => {
+      const address = newAddress()
+      await enroll([endUser(address, 'customer-1')])
+      await remove(address)
+      const removedAt = (await membershipOf(address))?.end_user_removed_at
+
+      await closeAccount(address)
+
+      expect(await membershipOf(address)).toMatchObject({
+        end_user_removed_at: removedAt,
+        end_user_closed_at: expect.any(Date),
+      })
+    })
+
+    it('still removes a member who closes their account from the organization', async () => {
+      const user = await onboard()
+      const request = await DeletionUseCases.requestDeletion(user)
+      await DeletionUseCases.markAsProcessing(request.id)
+      await DeletionUseCases.anonymiseUser(request.id)
+
+      expect(
+        await organizationMembersRepository.getOrganizationMembershipByUser(
+          user.oauthProvider,
+          user.oauthUserId,
+        ),
+      ).toBeFalsy()
+    })
+
+    it('serves the quota route only to the backend', async () => {
+      const address = newAddress()
+      await enroll([endUser(address, 'customer-1')])
+      const patch = (
+        body: unknown,
+        target = address,
+        secret = config.apiSecret,
+      ) =>
+        fetch(`${baseUrl}/organizations/${partnerId}/end-users/${target}`, {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${secret}`,
+          },
+          body: JSON.stringify(body),
+        })
+      const valid = { uploadQuotaBytes: 512, actor: ACTOR }
+
+      expect((await patch(valid, address, 'no')).status).toBe(401)
+      for (const body of [
+        { actor: ACTOR },
+        { ...valid, actor: undefined },
+        { ...valid, uploadQuotaBytes: 0 },
+        { ...valid, uploadQuotaBytes: 1.5 },
+        { ...valid, uploadQuotaBytes: '512' },
+        { ...valid, actorApiKeyId: 1 },
+      ]) {
+        expect([body, (await patch(body)).status]).toEqual([body, 400])
+      }
+      const changed = await patch({ ...valid, actorApiKeyId: 'key' })
+      expect(changed.status).toBe(200)
+      expect(await changed.json()).toEqual(
+        expect.objectContaining({ address, uploadQuotaBytes: 512 }),
+      )
+      expect((await patch(valid, newAddress())).status).toBe(404)
+      expect((await patch(valid, 'not-an-address')).status).toBe(400)
+    })
   })
 })

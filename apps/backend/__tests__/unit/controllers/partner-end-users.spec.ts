@@ -34,6 +34,8 @@ import {
 } from '../../../src/infrastructure/repositories/index.js'
 import { asyncDownloadsRepository } from '../../../src/infrastructure/repositories/asyncDownloads/index.js'
 import { UploadsUseCases } from '../../../src/core/uploads/uploads.js'
+import { AccountsUseCases } from '../../../src/core/users/accounts.js'
+import { accountsRepository } from '../../../src/infrastructure/repositories/users/accounts.js'
 import { ObjectUseCases } from '../../../src/core/index.js'
 import {
   AsyncDownloadsUseCases,
@@ -529,6 +531,10 @@ describe('Partner end users', () => {
     })
 
     it('lets them upload into an upload of their own', async () => {
+      const account = await AccountsUseCases.getOrCreateAccount(endUser)
+      await accountsRepository.setMaxEndUserQuota(account.id, 1000, 'admin')
+      await accountsRepository.setDailyUploadLimit(account.id, 1000, 'admin')
+
       const created = await send(`${frontend.url}/uploads/folder`, 'POST', {
         fileTree: { type: 'folder', name: 'mine', id: 'root', children: [] },
         uploadOptions: null,

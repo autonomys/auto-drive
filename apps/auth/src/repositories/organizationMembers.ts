@@ -16,6 +16,8 @@ export type DBOrganizationMember = {
   // A bigint, which pg returns as a string.
   upload_quota_bytes: string | null
   end_user_removed_at: Date | null
+  // Set, with end_user_removed_at, once the end user closed their account.
+  end_user_closed_at: Date | null
 }
 
 // Memberships from before roles are all of the user's own personal
@@ -214,8 +216,8 @@ const addEndUser = async (
   return result.rows[0]
 }
 
-// Enrols a removed end user again with the quota the partner now gives. Their
-// customer reference never changes.
+// Enrols a removed end user again, or one who closed their account, with the
+// quota the partner now gives. Their customer reference never changes.
 const reenrollEndUser = async (
   organizationId: string,
   endUser: {
@@ -227,7 +229,8 @@ const reenrollEndUser = async (
 ): Promise<DBOrganizationMember> => {
   const result = await db.query<DBOrganizationMember>(
     `UPDATE users.users_organizations
-     SET end_user_removed_at = NULL, upload_quota_bytes = $4
+     SET end_user_removed_at = NULL, end_user_closed_at = NULL,
+         upload_quota_bytes = $4
      WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3
        AND role = $5
      RETURNING *`,
@@ -278,6 +281,47 @@ const markEndUserRemoved = async (
   )
 }
 
+const setEndUserQuota = async (
+  organizationId: string,
+  oauthProvider: string,
+  oauthUserId: string,
+  uploadQuotaBytes: number | null,
+  db: pg.Client,
+): Promise<DBOrganizationMember> => {
+  const result = await db.query<DBOrganizationMember>(
+    `UPDATE users.users_organizations SET upload_quota_bytes = $4
+     WHERE organization_id = $1 AND oauth_provider = $2 AND oauth_user_id = $3
+       AND role = $5
+     RETURNING *`,
+    [
+      organizationId,
+      oauthProvider,
+      oauthUserId,
+      uploadQuotaBytes,
+      OrganizationRole.PartnerEndUser,
+    ],
+  )
+  return result.rows[0]
+}
+
+// Marks the user's end-user membership, if they have one, as closed and
+// removed, keeping the row.
+const closeEndUserMembership = async (
+  oauthProvider: string,
+  oauthUserId: string,
+  db: pg.Client,
+): Promise<DBOrganizationMember | null> => {
+  const result = await db.query<DBOrganizationMember>(
+    `UPDATE users.users_organizations
+     SET end_user_removed_at = COALESCE(end_user_removed_at, NOW()),
+         end_user_closed_at = NOW()
+     WHERE oauth_provider = $1 AND oauth_user_id = $2 AND role = $3
+     RETURNING *`,
+    [oauthProvider, oauthUserId, OrganizationRole.PartnerEndUser],
+  )
+  return result.rows[0] ?? null
+}
+
 // A page of the organisation's end users, removed ones included, in the
 // order they were first enrolled.
 const getEndUsers = async (
@@ -318,5 +362,7 @@ export const organizationMembersRepository = {
   reenrollEndUser,
   getMembershipForUpdate,
   markEndUserRemoved,
+  setEndUserQuota,
+  closeEndUserMembership,
   getEndUsers,
 }

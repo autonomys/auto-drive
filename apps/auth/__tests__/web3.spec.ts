@@ -17,6 +17,8 @@ import {
   PartnerOriginsUseCases,
   UsersUseCases,
 } from '../src/useCases/index.js'
+import { DeletionUseCases } from '../src/useCases/deletion.js'
+import { User } from '@auto-drive/models'
 import { dbMigration } from './utils/dbMigrate.js'
 import { createUnonboardedUser } from './utils/mocks.js'
 
@@ -409,6 +411,21 @@ describe('Web3Auth', () => {
     it('refuses an end user at the explorer', async () => {
       const wallet = Wallet.createRandom()
       await enroll(wallet)
+      const token = await signProof(wallet)
+
+      await expectRefused(token, 'origin_not_allowed')
+    })
+
+    it('refuses an end user who closed their account at the explorer', async () => {
+      const wallet = Wallet.createRandom()
+      await enroll(wallet)
+      const user = await UsersUseCases.getUserByOAuthUser({
+        provider: 'web3-wallet',
+        id: wallet.address,
+      })
+      const request = await DeletionUseCases.requestDeletion(user as User)
+      await DeletionUseCases.markAsProcessing(request.id)
+      await DeletionUseCases.anonymiseUser(request.id)
       const token = await signProof(wallet)
 
       await expectRefused(token, 'origin_not_allowed')
