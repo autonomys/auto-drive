@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { getDatabase } from '../drivers/pg.js'
-import { PaginatedResult, UserRole } from '@auto-drive/models'
+import { OrganizationRole, PaginatedResult, UserRole } from '@auto-drive/models'
 
 export interface User {
   oauth_provider: string
@@ -88,6 +88,8 @@ const createUser = async (
   return user.rows.at(0)
 }
 
+// Leaves out partner end users, before the limit so they can't crowd out the
+// users being looked for.
 const searchUsersByPublicId = async (
   publicId: string,
   limit: number,
@@ -96,8 +98,16 @@ const searchUsersByPublicId = async (
 
   const escaped = publicId.replace(/[\\%_]/g, (c) => `\\${c}`)
   const users = await db.query(
-    'SELECT * FROM users.users WHERE public_id ILIKE $1 ORDER BY public_id LIMIT $2',
-    [`%${escaped}%`, limit],
+    `SELECT u.* FROM users.users u
+     WHERE u.public_id ILIKE $1
+       AND NOT EXISTS (
+         SELECT 1 FROM users.users_organizations m
+         WHERE m.oauth_provider = u.oauth_provider
+           AND m.oauth_user_id = u.oauth_user_id
+           AND m.role = $3
+       )
+     ORDER BY u.public_id LIMIT $2`,
+    [`%${escaped}%`, limit, OrganizationRole.PartnerEndUser],
   )
 
   return users.rows

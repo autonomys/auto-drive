@@ -663,6 +663,13 @@ describe('End users', () => {
     expect(summary.memberCount).toBe(1)
     const found = await UsersUseCases.adminSearchUsers('', partnerId)
     expect(found.map((u) => u.publicId)).toEqual([member.publicId])
+    for (const address of [active, removed]) {
+      expect(
+        await UsersUseCases.adminSearchUsers(
+          deriveUserPublicId(WALLET, address),
+        ),
+      ).toEqual([])
+    }
   })
 
   it('neither gives the end user role nor moves, changes or removes end users', async () => {
