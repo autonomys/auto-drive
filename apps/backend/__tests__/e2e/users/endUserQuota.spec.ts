@@ -6,6 +6,7 @@ import {
   UserWithOrganization,
 } from '@auto-drive/models'
 import { jest } from '@jest/globals'
+import { randomBytes } from 'crypto'
 import { ok } from 'neverthrow'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../../src/infrastructure/drivers/pg.js'
@@ -276,6 +277,42 @@ describe('Partner end user quotas', () => {
       'rejected',
     ])
     expect(await uploaded(account.id)).toEqual({ 'person-1': 600 })
+  })
+
+  it('gives a file only to the one of two concurrent completions it charged', async () => {
+    const { member } = await createPartner(1000)
+    const endUser = endUserOf(member, 'person-1')
+    const files = await Promise.all(
+      [0, 1].map(async () => {
+        const file = await UploadsUseCases.createFileUpload(
+          endUser,
+          `${uuidv4()}.bin`,
+          'application/octet-stream',
+          null,
+        )
+        await UploadsUseCases.uploadChunk(endUser, file.id, 0, randomBytes(600))
+        return file
+      }),
+    )
+
+    const results = await Promise.allSettled(
+      files.map(({ id }) => UploadsUseCases.completeUpload(endUser, id)),
+    )
+
+    const charged = results.flatMap((r) =>
+      r.status === 'fulfilled' ? [r.value] : [],
+    )
+    expect(charged).toHaveLength(1)
+    const db = await getDatabase()
+    const owned = await db.query<{ cid: string }>(
+      'SELECT cid FROM object_ownership WHERE oauth_provider = $1 AND oauth_user_id = $2',
+      [endUser.oauthProvider, endUser.oauthUserId],
+    )
+    expect(owned.rows.map((r) => r.cid)).toEqual(charged)
+    const saved = await db.query<{ root_cid: string }>(
+      'SELECT root_cid FROM metadata',
+    )
+    expect(saved.rows.map((r) => r.root_cid)).toEqual(charged)
   })
 
   it('reports usage one row per person', async () => {

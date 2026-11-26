@@ -32,7 +32,6 @@ import {
   UserWithOrganization,
   UploadArtifacts,
   FolderArtifacts,
-  isPartnerEndUser,
 } from '@auto-drive/models'
 import { BlockstoreUseCases } from './blockstore.js'
 import { mapTableToModel } from './uploads.js'
@@ -49,7 +48,6 @@ import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { AccountsUseCases } from '../users/accounts.js'
 import { UploadPartsChangedError } from './errors.js'
 import { BadRequestError, PaymentRequiredError } from '../../errors/index.js'
-import { checkEndUserQuota } from '../users/endUserQuota.js'
 
 const logger = createLogger('useCases:uploads:uploadProcessing')
 
@@ -381,14 +379,17 @@ const handleFileUploadFinalization = async (
   if (pendingCredits < metadata.totalSize) {
     throw new PaymentRequiredError('Not enough upload credits')
   }
-  // Before the file is given to them: registerInteraction checks again.
-  if (isPartnerEndUser(user)) {
-    await checkEndUserQuota(
-      user,
-      await AccountsUseCases.getOrCreateAccount(user),
-      metadata.totalSize.valueOf(),
-    )
-  }
+
+  // Charged before the file is theirs: the checks above don't hold a lock, so
+  // concurrent uploads can all pass them, and an upload the charge refuses
+  // (credits or an end user's quota) must not have been given to them.
+  await AccountsUseCases.registerInteraction(
+    user,
+    InteractionType.Upload,
+    metadata.totalSize.valueOf(),
+    metadata.dataCid,
+    upload?.customer_reference ?? null,
+  )
 
   await OwnershipUseCases.setUserAsAdmin(user, metadata.dataCid)
 
@@ -400,14 +401,6 @@ const handleFileUploadFinalization = async (
       metadata,
     )
   }
-
-  await AccountsUseCases.registerInteraction(
-    user,
-    InteractionType.Upload,
-    metadata.totalSize.valueOf(),
-    metadata.dataCid,
-    upload?.customer_reference ?? null,
-  )
 
   logger.info(
     'handleFileUploadFinalization completed (cid=%s, userId=%s)',
