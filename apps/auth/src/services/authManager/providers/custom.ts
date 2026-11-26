@@ -6,10 +6,14 @@ import {
   CustomRefreshTokenPayload,
   CustomTokenPayload,
   MaybeUser,
+  isPartnerEndUser,
 } from '@auto-drive/models'
 import { v4 } from 'uuid'
 import { jwtTokenRegistry } from '../../../repositories/jwt.js'
-import { UsersUseCases } from '../../../useCases/index.js'
+import {
+  OrganizationsUseCases,
+  UsersUseCases,
+} from '../../../useCases/index.js'
 import { config } from '../../../config.js'
 
 const JWT_SECRET = Buffer.from(config.jwtSecret, 'base64').toString('utf-8')
@@ -35,11 +39,19 @@ const getUserFromAccessToken = async (
     throw new Error('Invalid access token')
   }
 
-  const isPresent = await jwtTokenRegistry.isPresentOnRegistry(
-    decoded.refreshTokenId,
-  )
-  if (!isPresent) {
+  if (decoded.isRefreshToken) {
     throw new Error('Invalid access token')
+  }
+
+  // A partner end user's access token has no refresh token to check, and
+  // lasts until it expires.
+  if (decoded.refreshTokenId !== null) {
+    const isPresent = await jwtTokenRegistry.isPresentOnRegistry(
+      decoded.refreshTokenId,
+    )
+    if (!isPresent) {
+      throw new Error('Invalid access token')
+    }
   }
 
   return {
@@ -52,7 +64,7 @@ const getUserFromAccessToken = async (
 
 const createAccessToken = async (
   maybeUser: MaybeUser,
-  refreshTokenId: string,
+  refreshTokenId: string | null,
 ) => {
   const user = await UsersUseCases.getUserByOAuthUser({
     provider: maybeUser.oauthProvider,
@@ -65,8 +77,15 @@ const createAccessToken = async (
     ? await UsersUseCases.getUserWithOrganization(user)
     : null
 
-  const roles = user.role === UserRole.Admin ? ['app-admin', 'user'] : ['user']
-  const defaultRole = user.role === UserRole.Admin ? 'app-admin' : 'user'
+  // Partner end users get a role of their own, which has no Hasura
+  // permissions.
+  const roles =
+    userInfo?.onboarded && isPartnerEndUser(userInfo)
+      ? ['partner_end_user']
+      : user.role === UserRole.Admin
+        ? ['app-admin', 'user']
+        : ['user']
+  const defaultRole = roles[0]
 
   const payload: CustomAccessTokenPayload = {
     id: v4(),
@@ -115,7 +134,18 @@ const getIdFromRefreshToken = (refreshToken: string) => {
   return decoded.id
 }
 
-const createSessionTokens = async (user: MaybeUser) => {
+// Partner end users get no refresh token: they sign in again when their
+// access token expires.
+const createSessionTokens = async (
+  user: MaybeUser,
+): Promise<{ accessToken: string; refreshToken: string | null }> => {
+  if (user.onboarded && (await OrganizationsUseCases.isPartnerEndUser(user))) {
+    return {
+      accessToken: await createAccessToken(user, null),
+      refreshToken: null,
+    }
+  }
+
   const refreshToken = await createRefreshToken(user)
   const refreshTokenId = getIdFromRefreshToken(refreshToken)
 
@@ -178,7 +208,10 @@ const invalidateRefreshToken = async (refreshOrAccessToken: string) => {
   }
   const id = decoded.isRefreshToken ? decoded.id : decoded.refreshTokenId
 
-  await jwtTokenRegistry.removeTokenFromRegistry(id)
+  // A partner end user's access token has no refresh token to remove.
+  if (id) {
+    await jwtTokenRegistry.removeTokenFromRegistry(id)
+  }
 }
 
 export const CustomJWTAuth = {

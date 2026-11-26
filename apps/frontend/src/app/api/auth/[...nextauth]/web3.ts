@@ -26,7 +26,7 @@ export const getMessageToSign = async (address: string) => {
   const { nonce, expiresAt } = await getNonce();
   const siweMessage = new SiweMessage({
     address,
-    chainId: 490000,
+    chainId: 870,
     domain: window.location.host,
     statement: 'Sign in to Auto Drive.',
     uri: window.location.origin,

@@ -1,5 +1,5 @@
-import { User } from "./user";
-import { OrganizationWithMembers } from "./organization";
+import { User } from "./user.js";
+import { OrganizationWithMembers } from "./organization.js";
 
 export type Account = {
   id: string;

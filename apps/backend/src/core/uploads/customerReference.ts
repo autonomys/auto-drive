@@ -5,7 +5,7 @@ import { BadRequestError } from '../../errors/index.js'
 // example a partner's pseudonymous customer ID. Auto Drive does not interpret
 // it: it is stored with the upload's interactions and shown only in its
 // account's usage reports.
-const CUSTOMER_REFERENCE = /^[A-Za-z0-9._:-]{1,128}$/
+export const CUSTOMER_REFERENCE = /^[A-Za-z0-9._:-]{1,128}$/
 
 const INVALID_CUSTOMER_REFERENCE =
   'Invalid customer reference: use 1 to 128 letters, digits, "-", "_", "." or ":"'

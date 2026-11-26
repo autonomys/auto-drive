@@ -1,18 +1,31 @@
-// The body of a request to create a personal or an organisation API key.
+import { ApiKeyScope } from '@auto-drive/models'
+
+const SCOPES: string[] = Object.values(ApiKeyScope)
+
+// The body of a request to create a personal or an organisation API key. Only
+// organisation keys take scopes; without them a key has full access.
 export const parseCreateApiKeyBody = (
   body: unknown,
-): { name: string | null; expiresAt: Date | null } | { error: string } => {
+  { organization }: { organization: boolean },
+):
+  | {
+      name: string | null
+      expiresAt: Date | null
+      scopes: ApiKeyScope[] | null
+    }
+  | { error: string } => {
   // Allow callers to POST with no body at all — creates an unnamed,
   // never-expiring key.
   if (body === undefined || body === null) {
-    return { name: null, expiresAt: null }
+    return { name: null, expiresAt: null, scopes: null }
   }
   if (typeof body !== 'object') {
     return { error: 'Request body must be a JSON object' }
   }
-  const { name, expiresAt } = body as {
+  const { name, expiresAt, scopes } = body as {
     name?: unknown
     expiresAt?: unknown
+    scopes?: unknown
   }
 
   let parsedName: string | null = null
@@ -44,5 +57,27 @@ export const parseCreateApiKeyBody = (
     parsedExpiresAt = parsed
   }
 
-  return { name: parsedName, expiresAt: parsedExpiresAt }
+  if (scopes !== undefined && !organization) {
+    return {
+      error: 'Attribute `scopes` is only available to organization API keys',
+    }
+  }
+  if (
+    scopes !== undefined &&
+    scopes !== null &&
+    (!Array.isArray(scopes) ||
+      scopes.length === 0 ||
+      scopes.some((scope) => !SCOPES.includes(scope)) ||
+      new Set(scopes).size !== scopes.length)
+  ) {
+    return {
+      error: `Attribute \`scopes\` must be a non-empty list of distinct scopes: ${SCOPES.join(', ')}`,
+    }
+  }
+
+  return {
+    name: parsedName,
+    expiresAt: parsedExpiresAt,
+    scopes: (scopes as ApiKeyScope[] | undefined) ?? null,
+  }
 }

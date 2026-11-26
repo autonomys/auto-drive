@@ -1,8 +1,16 @@
 import { Router } from 'express'
 import { pipeline } from 'stream'
-import { ObjectSummary, PaginatedResult, User } from '@auto-drive/models'
 import {
+  ApiKeyScope,
+  ObjectSummary,
+  PaginatedResult,
+  User,
+  isPartnerEndUser,
+} from '@auto-drive/models'
+import {
+  allowPartnerEndUsers,
   handleAuth,
+  requireApiKeyScope,
   tryAuthenticate,
 } from '../../infrastructure/services/auth/express.js'
 import {
@@ -24,6 +32,7 @@ import { config } from '../../config.js'
 const logger = createLogger('http:controllers:object')
 
 const objectController = Router()
+objectController.use(requireApiKeyScope(ApiKeyScope.Files))
 
 const withVisibleRowOwners = async (
   page: PaginatedResult<ObjectSummary>,
@@ -37,8 +46,14 @@ const withVisibleRowOwners = async (
   ),
 })
 
+// Partner end users, removed or not, list, look up, remove and restore their
+// own objects, and nothing else here. Looking up any other object shows them
+// only what it shows anyone (withVisibleOwners).
+const allowEndUsers = allowPartnerEndUsers({ removed: true })
+
 objectController.get(
   '/roots',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     const { scope, limit, offset } = req.query
@@ -51,10 +66,11 @@ objectController.get(
 
     const getResult = await handleInternalError(
       ObjectUseCases.getRootObjects(
-        user && scope === 'user'
+        // Partner end users only ever get their own.
+        scope === 'user' || isPartnerEndUser(user)
           ? {
               user,
-              scope,
+              scope: 'user',
             }
           : {
               scope: 'global',
@@ -102,6 +118,7 @@ objectController.get(
 
 objectController.get(
   '/roots/deleted',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -174,6 +191,7 @@ objectController.get(
 
 objectController.get(
   '/:cid/summary',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 
@@ -263,6 +281,11 @@ objectController.get(
 objectController.post(
   '/:cid/share',
   asyncSafeHandler(async (req, res) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
     const { publicId } = req.body
     const { cid } = req.params
 
@@ -270,11 +293,6 @@ objectController.post(
       res.status(400).json({
         error: 'Missing `publicId` in request body',
       })
-      return
-    }
-
-    const user = await handleAuth(req, res)
-    if (!user) {
       return
     }
 
@@ -292,8 +310,10 @@ objectController.post(
   }),
 )
 
+// Only an owner may remove or restore an object (ObjectUseCases).
 objectController.post(
   '/:cid/delete',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -318,6 +338,7 @@ objectController.post(
 
 objectController.post(
   '/:cid/restore',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -342,6 +363,7 @@ objectController.post(
 
 objectController.get(
   '/:cid',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
 

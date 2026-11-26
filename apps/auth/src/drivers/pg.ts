@@ -105,10 +105,34 @@ export const getDatabase = (): Promise<pg.Client> => {
   return db
 }
 
+// Aurora DSQL takes no locks. Of two transactions that write, or read FOR
+// UPDATE, the same row, the one that commits last fails with 40001 and is
+// meant to be run again. PostgreSQL answers 40P01 to a deadlock.
+const RETRYABLE_CODES = new Set(['40001', '40P01'])
+const TRANSACTION_ATTEMPTS = 5
+
+const isRetryable = (error: unknown) =>
+  error instanceof Error &&
+  RETRYABLE_CODES.has((error as Error & { code?: string }).code ?? '')
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** A transaction still conflicted with others after every attempt. */
+export class TransactionConflictError extends Error {
+  constructor(cause: unknown) {
+    super('Too many concurrent changes, try again', { cause })
+    this.name = 'TransactionConflictError'
+  }
+}
+
 /**
  * Runs `fn` in a transaction on its own connection. The shared client from
  * `getDatabase` serves concurrent requests, so a `BEGIN` on it would pull
  * their queries into this transaction.
+ *
+ * A transaction that conflicts with another runs again, up to five times in
+ * all, so `fn` must do nothing outside the database and build its result
+ * afresh on each run.
  */
 export const withTransaction = async <T>(
   fn: (db: pg.Client) => Promise<T>,
@@ -120,15 +144,27 @@ export const withTransaction = async <T>(
     logger.error('Transaction connection error', error)
   })
   try {
-    await client.query('BEGIN')
-    const result = await fn(client)
-    await client.query('COMMIT')
-    return result
-  } catch (error) {
-    await client.query('ROLLBACK').catch((rollbackError) => {
-      logger.error('Failed to roll back transaction', rollbackError)
-    })
-    throw error
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await client.query('BEGIN')
+        const result = await fn(client)
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError) => {
+          logger.error('Failed to roll back transaction', rollbackError)
+        })
+        if (!isRetryable(error)) {
+          throw error
+        }
+        if (attempt === TRANSACTION_ATTEMPTS) {
+          throw new TransactionConflictError(error)
+        }
+        logger.warn('Transaction conflict, attempt %d, retrying', attempt)
+        // Full jitter, so the transactions that conflicted don't meet again.
+        await sleep(Math.random() * 25 * 2 ** attempt)
+      }
+    }
   } finally {
     // The outcome is already settled; failing to close must not change it.
     await client.end().catch((endError) => {

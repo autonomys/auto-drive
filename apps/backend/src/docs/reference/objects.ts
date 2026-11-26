@@ -12,6 +12,8 @@ export const objects = {
             name: 'scope',
             in: 'query',
             required: false,
+            description:
+              '`user` for the objects the caller owns. Partner end users always get only theirs.',
             schema: {
               type: 'string',
               enum: ['global', 'user'],

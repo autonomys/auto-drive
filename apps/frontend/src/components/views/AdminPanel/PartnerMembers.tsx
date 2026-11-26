@@ -7,6 +7,7 @@ import { History, Loader, Users } from 'lucide-react';
 import { Button } from '@auto-drive/ui';
 import {
   AdminAccountDetails,
+  MEMBER_ROLES,
   OrganizationMembershipChange,
   OrganizationRole,
   OrganizationWithMembers,
@@ -31,6 +32,7 @@ import { PendingInvitations } from '@/components/views/Organization/PendingInvit
 const ROLE_LABEL: Record<OrganizationRole, string> = {
   [OrganizationRole.Admin]: 'Organization admin',
   [OrganizationRole.Member]: 'Member',
+  [OrganizationRole.PartnerEndUser]: 'Partner end user',
 };
 
 const describeChange = (
@@ -173,7 +175,7 @@ export const PartnerMembers = ({
             onChange={(e) => setRole(e.target.value as OrganizationRole)}
             className='rounded-md border border-gray-300 bg-background px-3 py-2 text-sm'
           >
-            {Object.values(OrganizationRole).map((r) => (
+            {MEMBER_ROLES.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
               </option>
@@ -220,7 +222,7 @@ export const PartnerMembers = ({
                     }
                     className='rounded-md border border-gray-300 bg-background px-2 py-1 text-sm'
                   >
-                    {Object.values(OrganizationRole).map((r) => (
+                    {MEMBER_ROLES.map((r) => (
                       <option key={r} value={r}>
                         {ROLE_LABEL[r]}
                       </option>

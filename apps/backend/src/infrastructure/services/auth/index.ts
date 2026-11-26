@@ -11,6 +11,8 @@ import {
   OrganizationRole,
   OrganizationSummary,
   OrganizationWithMembers,
+  PartnerEndUser,
+  PartnerOrigin,
   UserWithOrganization,
 } from '@auto-drive/models'
 import { err, ok, Result } from 'neverthrow'
@@ -18,6 +20,7 @@ import {
   BadRequestError,
   ConflictError,
   NotFoundError,
+  ServiceUnavailableError,
 } from '../../../errors/index.js'
 
 /**
@@ -330,11 +333,13 @@ export type OrganizationRequestError =
   | BadRequestError
   | NotFoundError
   | ConflictError
+  | ServiceUnavailableError
 
 /**
  * A call to the auth service's organization endpoints. Those answer 400, 404
- * and 409 with a message meant for the admin, which is passed on; any other
- * failure is the auth service's and throws.
+ * and 409 with a message meant for the admin, and 503 when a change kept
+ * conflicting with concurrent ones and can be sent again; these are passed on.
+ * Any other failure is the auth service's and throws.
  */
 const organizationRequest = async <T>(
   path: string,
@@ -365,6 +370,8 @@ const organizationRequest = async <T>(
       return err(new NotFoundError(errorMessage))
     case 409:
       return err(new ConflictError(errorMessage))
+    case 503:
+      return err(new ServiceUnavailableError(errorMessage))
     default:
       throw new Error(
         `Auth organization request failed (${response.status}): ${errorMessage}`,
@@ -422,6 +429,74 @@ const removeOrganizationMember = (
     { method: 'DELETE', body: { actor } },
   )
 
+export type PartnerEndUserEnrollment = {
+  address: string
+  customerReference: string
+  uploadQuotaBytes: number | null
+}
+
+// Enrolls them in one transaction, at most maxEndUsers end users that are not
+// removed in all, and returns them in request order.
+// `actor` is who made the change; `actorApiKeyId` the organisation API key
+// they made it with, if any.
+const enrollOrganizationEndUsers = (
+  organizationId: string,
+  endUsers: PartnerEndUserEnrollment[],
+  maxEndUsers: number,
+  actor: string,
+  actorApiKeyId: string | null,
+) =>
+  organizationRequest<PartnerEndUser[]>(
+    `/${encodeURIComponent(organizationId)}/end-users`,
+    {
+      method: 'POST',
+      body: { endUsers, maxEndUsers, actor, actorApiKeyId },
+    },
+  )
+
+const listOrganizationEndUsers = (
+  organizationId: string,
+  { limit, offset }: { limit: number; offset: number },
+) =>
+  organizationRequest<{ endUsers: PartnerEndUser[]; totalCount: number }>(
+    `/${encodeURIComponent(organizationId)}/end-users?limit=${limit}&offset=${offset}`,
+  )
+
+// Succeeds for an end user already removed.
+const removeOrganizationEndUser = (
+  organizationId: string,
+  address: string,
+  actor: string,
+  actorApiKeyId: string | null,
+) =>
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/end-users/${encodeURIComponent(address)}`,
+    { method: 'DELETE', body: { actor, actorApiKeyId } },
+  )
+
+const listPartnerOrigins = (organizationId: string) =>
+  organizationRequest<PartnerOrigin[]>(
+    `/${encodeURIComponent(organizationId)}/partner-origins`,
+  )
+
+const addPartnerOrigin = (
+  organizationId: string,
+  origin: string,
+  actor: string,
+) =>
+  organizationRequest<PartnerOrigin>(
+    `/${encodeURIComponent(organizationId)}/partner-origins`,
+    { method: 'POST', body: { origin, actor } },
+  )
+
+// Refused while the organisation has end users, who sign in only through its
+// origins.
+const removePartnerOrigin = (organizationId: string, origin: string) =>
+  organizationRequest<void>(
+    `/${encodeURIComponent(organizationId)}/partner-origins?${new URLSearchParams({ origin })}`,
+    { method: 'DELETE' },
+  )
+
 const getOrganizationApiKeys = (organizationId: string) =>
   organizationRequest<ApiKeyWithoutSecret[]>(
     `/${encodeURIComponent(organizationId)}/apiKeys`,
@@ -454,6 +529,12 @@ export const AuthManager = {
   addOrganizationMember,
   changeOrganizationMemberRole,
   removeOrganizationMember,
+  enrollOrganizationEndUsers,
+  listOrganizationEndUsers,
+  removeOrganizationEndUser,
+  listPartnerOrigins,
+  addPartnerOrigin,
+  removePartnerOrigin,
   getUserFromAccessToken,
   getUserFromPublicId,
   getUsersFromPublicIds,

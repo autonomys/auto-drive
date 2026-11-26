@@ -6,6 +6,7 @@ import {
 export const ROLE_LABEL: Record<OrganizationRole, string> = {
   [OrganizationRole.Admin]: 'Admin',
   [OrganizationRole.Member]: 'Member',
+  [OrganizationRole.PartnerEndUser]: 'Partner end user',
 };
 
 export const describeMembershipChange = (

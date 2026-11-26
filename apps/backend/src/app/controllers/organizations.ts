@@ -1,19 +1,27 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { OrganizationRole } from '@auto-drive/models'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
+import { ApiKeyScope, MEMBER_ROLES } from '@auto-drive/models'
+import {
+  handleAuth,
+  requireApiKeyScope,
+} from '../../infrastructure/services/auth/express.js'
 import { OrganizationsUseCases } from '../../core/users/organizations.js'
+import { EndUsersUseCases } from '../../core/users/endUsers.js'
+import { PartnerOriginsUseCases } from '../../core/users/partnerOrigins.js'
+import { CUSTOMER_REFERENCE } from '../../core/uploads/customerReference.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
 import { handleInternalErrorResult } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
 
-// Partner organizations, their members and their API keys. Every route checks
-// its caller in its use case: Auto Drive admins manage organizations,
-// organization admins manage their members (by invitation) and API keys, and
-// members read their organization.
+// Partner organizations, their members, their API keys and their end users.
+// Every route checks its caller in its use case: Auto Drive admins manage
+// organizations, organization admins manage their members (by invitation) and
+// API keys, members read their organization, organization admins and the
+// organization's API keys manage its end users, and Auto Drive admins manage
+// the origins its end users sign in for.
 export const organizationsController = Router()
 
-const roleSchema = z.nativeEnum(OrganizationRole)
+const roleSchema = z.enum(MEMBER_ROLES)
 
 organizationsController.get(
   '/partners',
@@ -232,7 +240,7 @@ organizationsController.post(
       .safeParse(req.body)
     if (!body.success) {
       res.status(400).json({
-        error: `publicId and role (${Object.values(OrganizationRole).join(', ')}) are required`,
+        error: `publicId and role (${MEMBER_ROLES.join(', ')}) are required`,
       })
       return
     }
@@ -321,7 +329,7 @@ organizationsController.post(
       .safeParse(req.body)
     if (!body.success) {
       res.status(400).json({
-        error: `publicId and role (${Object.values(OrganizationRole).join(', ')}) are required`,
+        error: `publicId and role (${MEMBER_ROLES.join(', ')}) are required`,
       })
       return
     }
@@ -356,7 +364,7 @@ organizationsController.put(
     const role = roleSchema.safeParse(req.body?.role)
     if (!role.success) {
       res.status(400).json({
-        error: `role must be one of: ${Object.values(OrganizationRole).join(', ')}`,
+        error: `role must be one of: ${MEMBER_ROLES.join(', ')}`,
       })
       return
     }
@@ -433,15 +441,20 @@ organizationsController.post(
       return
     }
 
-    // Auth validates the name's length and that the expiry is in the future.
+    // Auth validates the name's length, that the expiry is in the future and
+    // that the scopes are neither empty nor repeated. Without scopes the key
+    // has full access.
     const body = z
       .object({
         name: z.string().nullish(),
         expiresAt: z.string().nullish(),
+        scopes: z.array(z.nativeEnum(ApiKeyScope)).nullish(),
       })
       .safeParse(req.body ?? {})
     if (!body.success) {
-      res.status(400).json({ error: 'name and expiresAt must be strings' })
+      res.status(400).json({
+        error: `name and expiresAt must be strings, and scopes a list of: ${Object.values(ApiKeyScope).join(', ')}`,
+      })
       return
     }
 
@@ -477,6 +490,216 @@ organizationsController.delete(
         req.params.apiKeyId,
       ),
       'Failed to revoke API key',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
+  }),
+)
+
+const enrollEndUsersBody = z.object({
+  endUsers: z
+    .array(
+      z.object({
+        address: z.string(),
+        customerReference: z.string().regex(CUSTOMER_REFERENCE),
+        uploadQuotaBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(Number.MAX_SAFE_INTEGER)
+          .nullish(),
+      }),
+    )
+    .min(1)
+    .max(100),
+})
+
+organizationsController.post(
+  '/:organizationId/end-users',
+  requireApiKeyScope(ApiKeyScope.EndUserEnrollment),
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const body = enrollEndUsersBody.safeParse(req.body)
+    if (!body.success) {
+      res.status(400).json({
+        error:
+          'endUsers must be a list of 1 to 100 { address, customerReference, ' +
+          'uploadQuotaBytes? }: customerReference 1 to 128 letters, digits, ' +
+          '"-", "_", "." or ":", and uploadQuotaBytes a positive integer',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.enrollEndUsers(
+        user,
+        req.params.organizationId,
+        body.data.endUsers,
+      ),
+      'Failed to enroll end users',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json({ endUsers: result.value })
+  }),
+)
+
+const listEndUsersQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+organizationsController.get(
+  '/:organizationId/end-users',
+  requireApiKeyScope(ApiKeyScope.EndUserEnrollment, ApiKeyScope.EndUserRemoval),
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const query = listEndUsersQuery.safeParse(req.query)
+    if (!query.success) {
+      res.status(400).json({
+        error: 'limit must be 1 to 500 and offset a non-negative integer',
+      })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.listEndUsers(
+        user,
+        req.params.organizationId,
+        query.data,
+      ),
+      'Failed to list end users',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.delete(
+  '/:organizationId/end-users/:address',
+  requireApiKeyScope(ApiKeyScope.EndUserRemoval),
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      EndUsersUseCases.removeEndUser(
+        user,
+        req.params.organizationId,
+        req.params.address,
+      ),
+      'Failed to remove end user',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(204).end()
+  }),
+)
+
+// The origins of a partner's app that its end users sign in for. Auto Drive
+// admins only.
+organizationsController.get(
+  '/:organizationId/partner-origins',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.listPartnerOrigins(
+        user,
+        req.params.organizationId,
+      ),
+      'Failed to list partner origins',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.json(result.value)
+  }),
+)
+
+organizationsController.post(
+  '/:organizationId/partner-origins',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const origin = z.string().safeParse(req.body?.origin)
+    if (!origin.success) {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.addPartnerOrigin(
+        user,
+        req.params.organizationId,
+        origin.data,
+      ),
+      'Failed to add partner origin',
+    )
+    if (result.isErr()) {
+      handleError(result.error, res)
+      return
+    }
+
+    res.status(201).json(result.value)
+  }),
+)
+
+// The origin is a query parameter: nginx decodes "%2F" in a path, which would
+// split it.
+organizationsController.delete(
+  '/:organizationId/partner-origins',
+  asyncSafeHandler(async (req: Request, res: Response) => {
+    const user = await handleAuth(req, res)
+    if (!user) {
+      return
+    }
+
+    const origin = z.string().safeParse(req.query.origin)
+    if (!origin.success) {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    const result = await handleInternalErrorResult(
+      PartnerOriginsUseCases.removePartnerOrigin(
+        user,
+        req.params.organizationId,
+        origin.data,
+      ),
+      'Failed to remove partner origin',
     )
     if (result.isErr()) {
       handleError(result.error, res)

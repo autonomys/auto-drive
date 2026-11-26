@@ -3,6 +3,7 @@ import { Server } from 'http'
 import { AddressInfo } from 'net'
 import { v4 } from 'uuid'
 import {
+  ApiKeyScope,
   OrganizationRole,
   SERVICE_USER_PROVIDER,
   User,
@@ -296,6 +297,89 @@ describe('Organization API keys', () => {
     expect((await withKey(key.secret, 'POST', '/@me/accessToken')).status).toBe(
       403,
     )
+  })
+
+  // Creates a key as the backend does.
+  const createKey = (body: unknown) =>
+    fetch(`${baseUrl}/organizations/${organizationId}/apiKeys`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${config.apiSecret}`,
+      },
+      body: JSON.stringify(body),
+    })
+
+  it('stores scopes sorted and returns them with the key and its user', async () => {
+    const created = await createKey({
+      name: 'Usage',
+      scopes: [ApiKeyScope.Usage, ApiKeyScope.Files],
+    })
+    expect(created.status).toBe(201)
+    const key = await created.json()
+    const scopes = [ApiKeyScope.Files, ApiKeyScope.Usage]
+    expect(key.scopes).toEqual(scopes)
+
+    const db = await getDatabase()
+    const { rows } = await db.query(
+      'SELECT scopes FROM users.api_keys WHERE id = $1',
+      [key.id],
+    )
+    expect(rows[0].scopes).toBe('files,usage')
+    expect(await OrganizationsUseCases.listApiKeys(organizationId)).toEqual([
+      expect.objectContaining({ id: key.id, scopes }),
+    ])
+    const me = await withKey(key.secret, 'GET', '/@me')
+    expect(await me.json()).toMatchObject({
+      apiKeyId: key.id,
+      apiKeyScopes: scopes,
+    })
+
+    // Without scopes a key has full access, as every key had before them.
+    const unscoped = await (await createKey({ name: 'All' })).json()
+    expect(unscoped.scopes).toBeNull()
+    const unscopedMe = await withKey(unscoped.secret, 'GET', '/@me')
+    expect(await unscopedMe.json()).toMatchObject({
+      apiKeyId: unscoped.id,
+      apiKeyScopes: null,
+    })
+    expect((await (await createKey({ scopes: null })).json()).scopes).toBeNull()
+  })
+
+  it.each([
+    ['an unknown scope', ['files', 'admin']],
+    ['no scopes', []],
+    ['a repeated scope', ['files', 'files']],
+    ['a string', 'files'],
+  ])('refuses a key with %s', async (_, scopes) => {
+    const response = await createKey({ scopes })
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toContain('scopes')
+    expect(await OrganizationsUseCases.listApiKeys(organizationId)).toEqual([])
+  })
+
+  it('gives a personal key no scopes', async () => {
+    const user = await onboard()
+    const key = await ApiKeysUseCases.createApiKey(user, NO_OPTIONS)
+    expect(key.scopes).toBeNull()
+    expect(
+      await (await withKey(key.secret, 'GET', '/@me')).json(),
+    ).toMatchObject({ apiKeyId: key.id, apiKeyScopes: null })
+
+    for (const scopes of [[ApiKeyScope.Files], null]) {
+      const response = await fetch(`${baseUrl}/users/@me/apiKeys/create`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${key.secret}`,
+          'x-auth-provider': 'apikey',
+        },
+        body: JSON.stringify({ name: 'Scoped', scopes }),
+      })
+      expect(response.status).toBe(400)
+    }
+    expect(await ApiKeysUseCases.getApiKeysByUser(user)).toHaveLength(1)
   })
 
   it('serves organization keys only to the backend', async () => {

@@ -9,7 +9,8 @@ type BaseTokenPayload = {
 
 export type CustomAccessTokenPayload = BaseTokenPayload & {
   isRefreshToken: false;
-  refreshTokenId: string;
+  // Null for partner end users, who get no refresh token.
+  refreshTokenId: string | null;
   "https://hasura.io/jwt/claims": {
     "x-hasura-default-role": string;
     "x-hasura-allowed-roles": string[];

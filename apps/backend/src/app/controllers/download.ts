@@ -7,9 +7,12 @@ import {
   DownloadUseCase,
 } from '../../core/downloads/index.js'
 import {
+  allowPartnerEndUsers,
   handleAuth,
   handleOptionalAuth,
+  requireApiKeyScope,
 } from '../../infrastructure/services/auth/express.js'
+import { ApiKeyScope } from '@auto-drive/models'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { downloadService } from '../../infrastructure/services/download/index.js'
 import {
@@ -23,10 +26,16 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { TimeoutError } from '../../shared/utils/timeout.js'
+import { OwnershipUseCases } from '../../core/objects/ownership.js'
 
 const logger = createLogger('http:controllers:download')
 
 const downloadController = Router()
+downloadController.use(requireApiKeyScope(ApiKeyScope.Files))
+
+// Partner end users, removed or not, download the objects they own and manage
+// their own async downloads, and nothing else here.
+const allowEndUsers = allowPartnerEndUsers({ removed: true })
 
 downloadController.get(
   '/:cid/status',
@@ -47,10 +56,16 @@ downloadController.get(
 
 downloadController.post(
   '/async/:cid',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const { cid } = req.params
     const user = await handleAuth(req, res)
     if (!user) {
+      return
+    }
+    const owned = await OwnershipUseCases.authorizePartnerEndUser(user, cid)
+    if (owned.isErr()) {
+      handleError(owned.error, res)
       return
     }
 
@@ -67,8 +82,10 @@ downloadController.post(
   }),
 )
 
+// Only the user who created an async download may see or dismiss it.
 downloadController.post(
   '/async/:downloadId/dismiss',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const { downloadId } = req.params
     const user = await handleAuth(req, res)
@@ -91,6 +108,7 @@ downloadController.post(
 
 downloadController.get(
   '/:cid',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     try {
       const { cid } = req.params
@@ -110,6 +128,13 @@ downloadController.get(
 
       const user =
         typeof optionalAuthResult === 'boolean' ? null : optionalAuthResult
+      if (user) {
+        const owned = await OwnershipUseCases.authorizePartnerEndUser(user, cid)
+        if (owned.isErr()) {
+          handleError(owned.error, res)
+          return
+        }
+      }
 
       // First, get the metadata that the requested byte range is resolved against
       const metadataResultPromise = !user
@@ -329,6 +354,7 @@ downloadController.get(
 
 downloadController.get(
   '/async/@me',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -350,6 +376,7 @@ downloadController.get(
 
 downloadController.get(
   '/async/:downloadId',
+  allowEndUsers,
   asyncSafeHandler(async (req, res) => {
     const { downloadId } = req.params
     const user = await handleAuth(req, res)

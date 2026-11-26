@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express'
-import { OrganizationsUseCases } from '../useCases/index.js'
+import {
+  EndUserEnrollment,
+  OrganizationsUseCases,
+  PartnerOriginsUseCases,
+} from '../useCases/index.js'
 import { createLogger } from '../drivers/logger.js'
+import { TransactionConflictError } from '../drivers/pg.js'
 import {
   handleAdminAuth,
   handleServiceAuth,
@@ -18,11 +23,18 @@ const handleError = (error: unknown, res: Response, message: string) => {
     res.status(error.httpStatus).json({ error: error.message })
     return
   }
+  // Nothing was changed, so the caller can send the same request again.
+  if (error instanceof TransactionConflictError) {
+    logger.warn(error)
+    res.status(503).json({ error: error.message })
+    return
+  }
   logger.error(error)
   res.status(500).json({ error: message })
 }
 
-// Every write below records the Auto Drive admin who made it.
+// Every membership write below records who made it: the Auto Drive admin, or
+// for partner end users the organisation admin or organisation API key.
 const getActor = (req: Request, res: Response): string | null => {
   const actor = req.body?.actor
   if (typeof actor !== 'string' || !actor) {
@@ -191,6 +203,234 @@ organizationController.delete(
   },
 )
 
+// The organisation API key behind an end-user change, if one made it.
+const getActorApiKeyId = (
+  req: Request,
+  res: Response,
+): string | null | false => {
+  const actorApiKeyId = req.body?.actorApiKeyId ?? null
+  if (
+    actorApiKeyId !== null &&
+    (typeof actorApiKeyId !== 'string' || !actorApiKeyId)
+  ) {
+    res.status(400).json({ error: 'actorApiKeyId must be a string or null' })
+    return false
+  }
+  return actorApiKeyId
+}
+
+// A partner's end users. The backend decides who may manage them and checks
+// what the partner gives for them; these routes check its shape.
+const isEnrollment = (value: unknown): value is EndUserEnrollment => {
+  const { address, customerReference, uploadQuotaBytes } = (value ??
+    {}) as Record<string, unknown>
+  return (
+    typeof address === 'string' &&
+    typeof customerReference === 'string' &&
+    customerReference.length >= 1 &&
+    customerReference.length <= 128 &&
+    (uploadQuotaBytes == null ||
+      (Number.isSafeInteger(uploadQuotaBytes) && Number(uploadQuotaBytes) > 0))
+  )
+}
+
+organizationController.post(
+  '/:organizationId/end-users',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+    const actorApiKeyId = getActorApiKeyId(req, res)
+    if (actorApiKeyId === false) {
+      return
+    }
+
+    const { endUsers, maxEndUsers } = req.body
+    if (
+      !Array.isArray(endUsers) ||
+      endUsers.length < 1 ||
+      endUsers.length > 100 ||
+      !endUsers.every(isEnrollment)
+    ) {
+      res.status(400).json({
+        error:
+          'endUsers must be an array of 1 to 100 { address, customerReference, uploadQuotaBytes }',
+      })
+      return
+    }
+    if (!Number.isSafeInteger(maxEndUsers) || maxEndUsers < 0) {
+      res
+        .status(400)
+        .json({ error: 'maxEndUsers must be a non-negative integer' })
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.enrollEndUsers({
+          organizationId: req.params.organizationId,
+          endUsers: endUsers.map((endUser) => ({
+            address: endUser.address,
+            customerReference: endUser.customerReference,
+            uploadQuotaBytes: endUser.uploadQuotaBytes ?? null,
+          })),
+          maxEndUsers,
+          actor,
+          actorApiKeyId,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to enroll end users')
+    }
+  },
+)
+
+// A non-negative integer query parameter, or null if it is not one.
+const parseCount = (value: unknown, fallback: number): number | null => {
+  if (value === undefined) return fallback
+  return typeof value === 'string' && /^\d{1,9}$/.test(value)
+    ? Number(value)
+    : null
+}
+
+organizationController.get(
+  '/:organizationId/end-users',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    const limit = parseCount(req.query.limit, 100)
+    const offset = parseCount(req.query.offset, 0)
+    if (limit === null || limit < 1 || limit > 500 || offset === null) {
+      res.status(400).json({
+        error: 'limit must be 1 to 500 and offset a non-negative integer',
+      })
+      return
+    }
+
+    try {
+      res.json(
+        await OrganizationsUseCases.listEndUsers({
+          organizationId: req.params.organizationId,
+          limit,
+          offset,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to list end users')
+    }
+  },
+)
+
+organizationController.delete(
+  '/:organizationId/end-users/:address',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+    const actorApiKeyId = getActorApiKeyId(req, res)
+    if (actorApiKeyId === false) {
+      return
+    }
+
+    try {
+      await OrganizationsUseCases.removeEndUser({
+        organizationId: req.params.organizationId,
+        address: req.params.address,
+        actor,
+        actorApiKeyId,
+      })
+      res.status(204).end()
+    } catch (error) {
+      handleError(error, res, 'Failed to remove end user')
+    }
+  },
+)
+
+// The origins of a partner's app that its end users sign in for. The backend
+// lets Auto Drive admins manage them.
+organizationController.get(
+  '/:organizationId/partner-origins',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+
+    try {
+      res.json(
+        await PartnerOriginsUseCases.listOrigins(req.params.organizationId),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to list partner origins')
+    }
+  },
+)
+
+organizationController.post(
+  '/:organizationId/partner-origins',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const actor = getActor(req, res)
+    if (!actor) {
+      return
+    }
+    const { origin } = req.body
+    if (typeof origin !== 'string') {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    try {
+      res.status(201).json(
+        await PartnerOriginsUseCases.addOrigin({
+          organizationId: req.params.organizationId,
+          origin,
+          actor,
+        }),
+      )
+    } catch (error) {
+      handleError(error, res, 'Failed to add partner origin')
+    }
+  },
+)
+
+// The origin is a query parameter: proxies in front of the backend decode
+// "%2F" in a path, which would split it.
+organizationController.delete(
+  '/:organizationId/partner-origins',
+  async (req: Request, res: Response) => {
+    if (!handleServiceAuth(req, res)) {
+      return
+    }
+    const { origin } = req.query
+    if (typeof origin !== 'string') {
+      res.status(400).json({ error: 'origin must be a string' })
+      return
+    }
+
+    try {
+      await PartnerOriginsUseCases.removeOrigin({
+        organizationId: req.params.organizationId,
+        origin,
+      })
+      res.status(204).end()
+    } catch (error) {
+      handleError(error, res, 'Failed to remove partner origin')
+    }
+  },
+)
+
 // The organisation's API keys. The backend decides who may manage them.
 organizationController.get(
   '/:organizationId/apiKeys',
@@ -216,7 +456,7 @@ organizationController.post(
       return
     }
 
-    const parsed = parseCreateApiKeyBody(req.body)
+    const parsed = parseCreateApiKeyBody(req.body, { organization: true })
     if ('error' in parsed) {
       res.status(400).json({ error: parsed.error })
       return

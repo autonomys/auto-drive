@@ -4,6 +4,7 @@ import { objects } from './objects.js'
 import { accounts } from './accounts.js'
 import { uploads } from './uploads.js'
 import { intents } from './intents.js'
+import { organizations } from './organizations.js'
 
 export const swagger = {
   openapi: '3.0.0',
@@ -31,6 +32,29 @@ X-Auth-Provider: apikey
 \`\`\`
 
 API keys should be kept secure and not shared with unauthorized parties.
+
+## API key scopes
+
+An organization API key can be limited to scopes when it is created (\`POST /organizations/{organizationId}/api-keys\`). A key with scopes can be used only on the routes of its scopes; every other route that needs authentication answers it with 403. A key without scopes, and every personal key, has full access.
+
+| Scope | Routes |
+| --- | --- |
+| \`files\` | \`/uploads\`, \`/objects\`, \`/downloads\` and \`/s3\`: everything the Auto Drive SDK needs to upload, download and list files |
+| \`usage\` | \`GET /accounts/@me\` (the account's ID and figures), \`GET /accounts/{accountId}/usage-report\` and \`GET /accounts/{accountId}/usage-report/interactions\` |
+| \`end_user_enrollment\` | \`POST\` and \`GET /organizations/{organizationId}/end-users\`: enroll and list the organization's end users |
+| \`end_user_removal\` | \`GET /organizations/{organizationId}/end-users\` and \`DELETE /organizations/{organizationId}/end-users/{address}\`: list and remove them. Keep it off the key your backend uses day to day, so a leak of that key can't remove anyone. |
+
+## Partner end users
+
+A partner end user's session can be used only on the routes below. Every other route that needs authentication answers it with 403, and public routes answer it as an anonymous caller. The S3 API takes only API keys, which end users can't create.
+
+| Routes | Removed end users |
+| --- | --- |
+| \`/uploads\` | No |
+| \`GET /objects/roots\` (always the end user's own objects, whatever \`scope\` asks for), \`GET /objects/roots/deleted\`, \`GET /objects/{cid}\`, \`GET /objects/{cid}/summary\`, \`POST /objects/{cid}/delete\` and \`POST /objects/{cid}/restore\` | Yes |
+| \`GET /downloads/{cid}\` and the async downloads under \`/downloads/async\` | Yes |
+
+Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for (their own, shared with them or in their trash), directly or through a root object that contains it. Anything else answers 403, except \`GET /objects/{cid}\` and its summary, which answer as for an anonymous caller.
 
 ## Purchasing Storage Credits (Pay with AI3)
 
@@ -73,6 +97,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
     ...objects.paths,
     ...downloads.paths,
     ...intents.paths,
+    ...organizations.paths,
   },
   security: [
     {
@@ -88,6 +113,7 @@ The Auto-Drive Download Gateway is a service that allows you to download files f
       ...accounts.components.schemas,
       ...downloads.components.schemas,
       ...intents.components.schemas,
+      ...organizations.components.schemas,
     },
     securitySchemes: {
       apiKey: {

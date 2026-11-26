@@ -55,7 +55,10 @@ The service supports multiple authentication providers:
 
 - Ethereum wallet authentication using Sign-In with Ethereum
 - Validates signed messages using the `siwe` library
-- Messages carry a one-time nonce from `POST /users/web3/nonce` and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS`
+- Messages carry a one-time nonce from `POST /users/web3/nonce` and must be issued for an origin in `WEB3_AUTH_ALLOWED_ORIGINS` or a partner origin (`users.partner_origins`)
+- Chain ID: partner origins accept 870 (mainnet) only. The `WEB3_AUTH_ALLOWED_ORIGINS` origins accept 870 and 490000 while explorer tabs opened before the explorer moved to 870 age out; a follow-up removes 490000 about a week after the explorer deploys
+- A partner origin accepts only the partner organization's end users, removed ones included, and an end user may sign in only for their own partner's origins: the explorer and every other origin refuse them. See [End users](#end-users)
+- The signature is checked first. A sign-in refused after it verifies answers 401 with a `reason` as well as the `error`: `nonce_expired` (unknown, expired or already used; sign in again with a fresh nonce), `chain_not_allowed`, `origin_not_allowed` (an origin on neither list, or an end user at the explorer) or `not_enrolled` (a partner origin, and the address isn't one of that partner's end users, whoever else's it may be). An expired message gets `nonce_expired` when its signature verifies as of its `issuedAt`. A signature that doesn't verify gets the 401 without a reason. A refused sign-in doesn't use up its nonce
 - Uses wallet address as both user ID and username
 
 ### 5. **API Key Authentication**
@@ -63,6 +66,7 @@ The service supports multiple authentication providers:
 - Allows users to create API keys for programmatic access
 - Keys are validated against the database
 - Used for server-to-server authentication
+- Organization keys can be limited to scopes (`files`, `end_user_enrollment`, `end_user_removal`, `usage`), stored in `users.api_keys.scopes` as a sorted, comma-separated list. NULL means full access, which every personal key and every key from before scopes has. The backend enforces them: see [API key scopes](#api-key-scopes)
 
 ### 6. **Custom JWT**
 
@@ -91,8 +95,8 @@ The custom JWT tokens include Hasura-compatible claims in the `https://hasura.io
 
 ```json
 {
-  "x-hasura-default-role": "user" | "app-admin",
-  "x-hasura-allowed-roles": ["user"] | ["app-admin", "user"],
+  "x-hasura-default-role": "user" | "app-admin" | "partner_end_user",
+  "x-hasura-allowed-roles": ["user"] | ["app-admin", "user"] | ["partner_end_user"],
   "x-hasura-oauth-provider": "google",
   "x-hasura-oauth-user-id": "123456789",
   "x-hasura-organization-id": "org-uuid" | "none",
@@ -100,7 +104,7 @@ The custom JWT tokens include Hasura-compatible claims in the `https://hasura.io
 }
 ```
 
-These claims are used by Hasura for row-level security and role-based access control.
+These claims are used by Hasura for row-level security and role-based access control. Partner end users get only `partner_end_user`, which has no permissions (see [End users](#end-users)).
 
 ## Public ID Generation
 
@@ -172,19 +176,19 @@ yarn workspace auth lambda:build
 
 #### `POST /users/@me/accessToken`: Creates JWT session tokens for a signed-in user. Answers 403 for any API key, personal or organization
 
-#### `POST /users/@me/refreshToken`: Refreshes access token using refresh token
+#### `POST /users/@me/refreshToken`: Refreshes access token using refresh token. Partner end users get none: 403 for one issued to them earlier
 
 #### `DELETE /users/@me/invalidateToken`: Invalidates a refresh token
 
-#### `GET /users/@me`: Gets current user information with organization
+#### `GET /users/@me`: Gets current user information with organization: `organizationId`, the user's `organizationRole` and, for partner end users, `customerReference`, `uploadQuotaBytes` and `endUserRemovedAt` (all three null for everyone else). With an API key, also the key's `apiKeyId` and `apiKeyScopes` (null for full access)
 
 #### `GET /users/@me/apiKeys`: Lists user's API keys (without secrets)
 
-#### `POST /users/@me/apiKeys/create`: Creates a new API key
+#### `POST /users/@me/apiKeys/create`: Creates a new API key (`{ name?, expiresAt? }`). Personal keys have full access: a `scopes` attribute is refused with 400
 
 #### `DELETE /users/@me/apiKeys/:id`: Deletes an API key
 
-#### `POST /users/admin/add`: Adds a user to admin role
+#### `POST /users/admin/add`: Adds a user to admin role. 409 for a partner end user, removed or not
 
 #### `POST /users/admin/remove`: Removes admin role from a user
 
@@ -196,29 +200,108 @@ yarn workspace auth lambda:build
 
 ### Organization Endpoints
 
-#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user
+#### `GET /organizations/:organizationId`: Gets organization information: `members` (public IDs) and `memberships` (public IDs with roles). Both leave out the organization's service user and its partner end users
 
-The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so they are made through the backend's `/organizations` endpoints: Auto Drive admins move users directly, and organization admins invite them, the move happening when the user accepts. Each membership write takes the acting admin's public ID as `actor` (for an accepted invitation, whoever sent it) and is recorded in `users.organization_membership_changes`.
+The endpoints below accept only the backend's service secret (`API_SECRET`), never a user token. Membership changes have preconditions on backend data (purchased credits, unresolved payments), so they are made through the backend's `/organizations` endpoints: Auto Drive admins move users directly, organization admins invite them, the move happening when the user accepts, and organization admins and the organization's API keys enrol and remove partner end users. Each membership write takes the public ID of whoever made it as `actor` (the acting admin; for an accepted invitation, whoever sent it; for partner end users, the organization admin or the organization's service user) and is recorded in `users.organization_membership_changes`.
 
 #### `POST /organizations`: Creates an organization (`{ name }`) and its service user, the user that owns the organization's API keys
 
-#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user) and archive date (`{ ids }`, up to 100)
+#### `POST /organizations/batch`: Gets organizations by ID with their member count (not counting the service user or partner end users) and archive date (`{ ids }`, up to 100)
 
-#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization
+#### `GET /organizations/:organizationId/membership-changes`: Lists moves into, out of and within an organization, newest first. Partner end users' enrolments and removals are recorded but left out; `GET …/end-users` lists them
 
-#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`). The user leaves their current organization, which is archived if no members remain
+#### `POST /organizations/:organizationId/members`: Moves a user into an organization (`{ publicId, role, actor }`, `role` is `admin` or `member`). The user leaves their current organization, which is archived if no members remain. 409 for a partner end user, removed or not
 
-#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`)
+#### `PUT /organizations/:organizationId/members/:publicId`: Changes a member's role (`{ role, actor }`, `role` is `admin` or `member`). 409 for a partner end user, removed or not
 
-#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one
+#### `DELETE /organizations/:organizationId/members/:publicId`: Removes a member (`{ actor }`) and restores the organization they were moved in from, or creates a new personal one. 409 for a partner end user, removed or not, who is removed through the end user endpoint
 
 An organization's API keys belong to its service user, so they keep working whoever leaves the organization. The backend decides who may manage them, and these endpoints take no `actor`.
 
-#### `GET /organizations/:organizationId/apiKeys`: Lists the organization's API keys (without secrets)
+#### `GET /organizations/:organizationId/apiKeys`: Lists the organization's API keys (without secrets), each with its `scopes` (null for full access)
 
-#### `POST /organizations/:organizationId/apiKeys`: Creates an API key (`{ name?, expiresAt? }`) and returns it with its secret. An organization created before service users gets its service user here. 404 for an unknown organization, 409 for an archived one
+#### `POST /organizations/:organizationId/apiKeys`: Creates an API key (`{ name?, expiresAt?, scopes? }`) and returns it with its secret. `scopes` is a non-empty list of distinct scopes out of `files`, `end_user_enrollment`, `end_user_removal` and `usage`; omitted or null gives full access. An organization created before service users gets its service user here. 400 for invalid scopes, 404 for an unknown organization, 409 for an archived one
 
 #### `DELETE /organizations/:organizationId/apiKeys/:apiKeyId`: Revokes one of the organization's API keys. 404 for any other key
+
+### End users
+
+Partner end users are a partner organization's customers, who never use Auto Drive themselves. Each is a wallet user (`web3-wallet`, stored under the EIP-55 checksummed address, as wallet sign-in finds it) with role `partner_end_user` in the partner's organization. Only enrollment gives that role: `admin` and `member` are the only roles the member endpoints accept, and they refuse to move an end user, change their role or remove them, whether the end user is removed or not. End users own the files they upload and are charged to the organization's account, but are not listed as members or counted in member counts.
+
+The auth service owns them. What the partner gives for each one is kept on their membership row in `users.users_organizations`: `customer_reference` (the partner's own reference, unique within the organization), `upload_quota_bytes` (NULL for the account's default) and `end_user_removed_at`. All three are NULL for everyone else. Each enrollment and removal is one transaction in the auth database, so retries are safe. The backend decides who may manage end users (`/organizations/:organizationId/end-users`), checks what the partner sends and passes its cap, `PARTNER_MAX_END_USERS`.
+
+End users sign in with their wallet (EIP-4361) for one of their partner's origins, by the same `POST /users/@me/accessToken` exchange as any wallet user, and only there. Sign-ins for a partner origin from anyone else are refused.
+
+Partner origins are rows of `users.partner_origins` (`origin` the primary key, `organization_id`, `created_by`, `created_at`), so each origin belongs to one organization and adding one needs no redeploy. Auto Drive admins manage them through the backend. An origin is never removed while its organization has end users, removed ones included, because they sign in only through its origins. The origin is only an identifier in the signed message and never needs to resolve.
+
+A removed end user stays in the organization with role `partner_end_user` and `end_user_removed_at` set: they keep read-only access to their files and no longer count towards the cap. Enrolling them again clears it. A customer reference is permanent once given to an address, so it is never given to another person. When a partner organization is archived, `GET /users/@me` reports its end users as removed (`endUserRemovedAt` is the archive time), so they keep read-only access and can still sign in for its origins.
+
+End users are refused everywhere by default, so a route added later stays closed to them until it declares `allowPartnerEndUsers()`. Removed end users get the same as other end users, without uploads.
+
+- Auth: the routes that take a user's credential answer an end user's session with 403, except `GET /users/@me`, `POST /users/@me/accessToken` and `GET`, `POST` and `DELETE /users/@me/deletion`. Routes that take the service secret are unaffected.
+- Sessions: `POST /users/@me/accessToken` gives an end user a 1-hour access token only, with no refresh token: no cookie and no entry in `users.jwt_token_registry`. It takes only a wallet signature from them (`x-auth-provider: web3-wallet`) and answers anything else, their own access token included, with 403. When it expires, the device signs a new EIP-4361 message. `POST /users/@me/refreshToken` answers a refresh token issued to an end user earlier with 403. Nothing revokes an end user's access token before it expires.
+- Hasura: their access tokens carry only the role `partner_end_user`, as `x-hasura-default-role` and the one `x-hasura-allowed-roles`. It has no permissions, so every query is refused. Without a token Hasura answers as `anonymous`, as for anyone.
+- Backend: `handleAuth` answers 403, and on a public route an end user's session counts as no credential, unless the route declares `allowPartnerEndUsers()`. It reads the role and removal time from `GET /users/@me` on each request, so deploy auth first: the backend can't tell an end user from an auth service that leaves the role out. The routes open to end users are uploads (`/uploads`, not to removed end users) and, removed or not, `GET /objects/roots` (always their own objects, whatever `scope` asks for), `GET /objects/roots/deleted`, `GET /objects/:cid` and `/summary`, `POST /objects/:cid/delete` and `/restore`, `GET /downloads/:cid` and the async downloads under `/downloads/async`. Each acts only on what the end user owns: an upload they created, or an object they have an ownership row for, directly or through a root object that contains it. Otherwise it answers 403, and `GET /objects/:cid` and `/summary` answer as for an anonymous caller.
+- S3: takes only API keys, and end users can't create one.
+
+The membership history (`users.organization_membership_changes`) records each enrollment and re-enrollment as a move into the organization (`from_organization_id` NULL) and each removal as a move out of it (`to_organization_id` NULL), both with role `partner_end_user`. An end user never leaves the organization, so for them a move out is a removal. `actor_api_key_id` holds the organization API key that made the change, which `actor` (the organization's service user for every key) can't tell apart; it is NULL for changes made by a person, and returned as `actorApiKeyId`.
+
+#### `POST /organizations/:organizationId/end-users`: Enrolls end users (`{ endUsers, maxEndUsers, actor, actorApiKeyId? }`) in one transaction, all or none. `endUsers` is a list of 1 to 100 `{ address, customerReference, uploadQuotaBytes }` (`uploadQuotaBytes` a positive integer or null), and `maxEndUsers` the most end users the organization may have that are not removed. Returns `[{ address, publicId, customerReference, uploadQuotaBytes, createdAt, removedAt }]` in request order, each address checksummed
+
+- A new address gets a user, created onboarded, in this organization only.
+- An end user of this organization with the same customer reference and quota is returned unchanged, so a retry is safe.
+- A removed end user of this organization is enrolled again with the quota of the request, under the same customer reference only.
+- 409, with one message that names neither the entry nor the reason, so enrollment can't tell whether an address has an Auto Drive user, even by batching it with an entry sure to conflict: any other user of the address (a member, a user of another organization, an end user of another organization, a wallet user who signed up); another customer reference for an end user of this organization, removed or not; a customer reference that another end user of this organization has, removed or not; another quota for an end user who isn't removed. The entry and reason are logged.
+- More than `maxEndUsers` end users that are not removed, counted in the transaction: 409.
+- 400 for an invalid or repeated address (mixed case must be a valid checksum) or a repeated customer reference, 404 for an unknown organization, 409 for an archived one.
+
+#### `GET /organizations/:organizationId/end-users`: Lists the organization's end users a page at a time (`?limit=1..500&offset=0..`, 100 and 0 by default), removed ones included, ordered by first enrollment. Returns `{ endUsers: [{ address, publicId, customerReference, uploadQuotaBytes, createdAt, removedAt }], totalCount }`, where `createdAt` is when the membership row was created and `totalCount` counts removed end users too. 404 for an unknown organization
+
+#### `DELETE /organizations/:organizationId/end-users/:address`: Removes an end user (`{ actor, actorApiKeyId? }`) by setting `end_user_removed_at`. They stay in the organization and keep their files. Answers 204, also when they were already removed, which changes nothing. 400 for an invalid address, 404 if the address is not an end user of this organization
+
+Production applies the migration to Aurora DSQL as these statements, in this order, each in its own transaction:
+
+```sql
+ALTER TABLE users.users_organizations DROP CONSTRAINT users_organizations_role_check;
+ALTER TABLE users.users_organizations ADD CONSTRAINT users_organizations_role_check CHECK (role IN ('admin', 'member', 'partner_end_user')) NOT VALID;
+ALTER TABLE users.users_organizations ADD COLUMN customer_reference text;
+ALTER TABLE users.users_organizations ADD COLUMN upload_quota_bytes bigint;
+ALTER TABLE users.users_organizations ADD COLUMN end_user_removed_at timestamp;
+CREATE UNIQUE INDEX ASYNC users_organizations_customer_reference_key ON users.users_organizations (organization_id, customer_reference);
+ALTER TABLE users.organization_membership_changes ADD COLUMN actor_api_key_id text;
+CREATE TABLE users.partner_origins (origin text PRIMARY KEY, organization_id text NOT NULL, created_by text NOT NULL, created_at timestamp NOT NULL DEFAULT NOW());
+```
+
+The `CREATE UNIQUE INDEX ASYNC` statement returns a job ID: wait for the job to finish before deploying. Deploy auth before the backend's end user routes are used.
+
+#### `GET /organizations/:organizationId/partner-origins`: Lists the organization's partner origins, oldest first: `[{ origin, organizationId, createdBy, createdAt }]`. 404 for an unknown organization
+
+#### `POST /organizations/:organizationId/partner-origins`: Adds a partner origin (`{ origin, actor }`), stored lower case without a trailing slash. 400 unless it is an https origin (no path), 404 for an unknown organization, 409 if any organization has it already, if it is in `WEB3_AUTH_ALLOWED_ORIGINS` (a partner origin takes precedence, so it would lock out the explorer's wallet users) or if the organization is archived
+
+#### `DELETE /organizations/:organizationId/partner-origins?origin=`: Removes the partner origin given as `origin`, a query parameter because proxies decode `%2F` in a path. 400 without one, 404 if it is not an origin of this organization, 409 while the organization has end users, removed ones included
+
+### API key scopes
+
+An organization key with scopes can be used only on the backend routes that declare one of its scopes. Every other route that needs authentication answers it with 403, so a route without a declared scope is closed to it. Sessions and keys with full access are not affected. Public routes stay public: there, a key that may not be used counts as no credential.
+
+| Scope | Backend routes |
+| --- | --- |
+| `files` | `/uploads`, `/objects`, `/downloads` and `/s3` (S3 answers 403 `AccessDenied`) |
+| `usage` | `GET /accounts/@me`, `GET /accounts/:accountId/usage-report` and `GET /accounts/:accountId/usage-report/interactions` |
+| `end_user_enrollment` | `POST` and `GET /organizations/:organizationId/end-users` |
+| `end_user_removal` | `GET /organizations/:organizationId/end-users` and `DELETE /organizations/:organizationId/end-users/:address` |
+
+The key a partner's backend uses day to day should hold `end_user_enrollment` but not `end_user_removal`, so a leak of it can't remove anyone.
+
+The backend's organization API key routes refuse every API key, scoped or not.
+
+Production applies the column to Aurora DSQL as one statement:
+
+```sql
+ALTER TABLE users.api_keys ADD COLUMN scopes text;
+```
+
+Deploy auth before the backend: an auth service from before scopes ignores `scopes` and would create a key with full access.
 
 ## Security Considerations
 

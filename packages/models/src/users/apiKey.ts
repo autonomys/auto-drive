@@ -1,4 +1,26 @@
 /**
+ * What an organisation API key may be used for. A key with scopes reaches only
+ * the backend routes that declare one of them; a key without (`scopes: null`,
+ * every personal key and every key from before scopes) reaches all of them.
+ */
+export enum ApiKeyScope {
+  /** Upload, download, list and manage files: /uploads, /objects, /downloads, /s3. */
+  Files = 'files',
+  /**
+   * Enrol the organisation's end users and list them; also, with #985,
+   * change one person's quota.
+   */
+  EndUserEnrollment = 'end_user_enrollment',
+  /**
+   * List and remove the organisation's end users. Kept off the key a
+   * partner's backend uses day to day, so a leak of that key removes nobody.
+   */
+  EndUserRemoval = 'end_user_removal',
+  /** Read the account's usage report. */
+  Usage = 'usage',
+}
+
+/**
  * Server-side representation of an API key. The `secret` is stored in
  * plaintext — see the auth migration for the (deliberate) tradeoff.
  *
@@ -15,6 +37,8 @@ export type ApiKey = {
   deletedAt: Date | null
   expiresAt: Date | null
   createdAt: Date | null
+  /** Null for full access. Only organisation keys can have scopes. */
+  scopes: ApiKeyScope[] | null
 }
 
 /**
@@ -32,6 +56,8 @@ export type CreateApiKeyInput = {
   name?: string | null
   /** ISO-8601 string. `null`/omitted = never expires. */
   expiresAt?: string | null
+  /** Organisation keys only. `null`/omitted = full access. */
+  scopes?: ApiKeyScope[] | null
 }
 
 /**

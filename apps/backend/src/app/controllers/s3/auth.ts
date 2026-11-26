@@ -4,6 +4,7 @@ import {
   AuthManager,
   classifyAuthFailure,
 } from '../../../infrastructure/services/auth/index.js'
+import { credentialRefusal } from '../../../infrastructure/services/auth/express.js'
 import { createLogger } from '../../../infrastructure/drivers/logger.js'
 import { sendXML } from './utils.js'
 
@@ -105,6 +106,17 @@ const authenticateS3 = async (
     sendXML(res.status(403), 'Error', {
       Code: 'InvalidAccessKeyId',
       Message: 'The Access Key Id you provided does not exist in our records.',
+    })
+    return null
+  }
+
+  // A good key whose scopes leave out files, or a partner end user's: as
+  // permanent as a bad key.
+  const refusal = credentialRefusal(user, req)
+  if (refusal) {
+    sendXML(res.status(403), 'Error', {
+      Code: 'AccessDenied',
+      Message: refusal,
     })
     return null
   }

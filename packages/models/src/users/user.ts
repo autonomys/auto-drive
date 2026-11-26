@@ -1,5 +1,6 @@
-import { Organization } from "./organization";
-import { AccountInfo } from "./account";
+import { Organization, OrganizationRole } from "./organization.js";
+import { AccountInfo } from "./account.js";
+import { ApiKeyScope } from "./apiKey.js";
 
 export type OAuthUser = {
   provider: string;
@@ -8,6 +9,7 @@ export type OAuthUser = {
   username?: string;
   avatarUrl?: string;
   apiKeyId?: string;
+  apiKeyScopes?: ApiKeyScope[] | null;
 };
 
 export enum UserRole {
@@ -44,9 +46,22 @@ export type MaybeUser = User | UnonboardedUser;
 
 export type UserWithOrganization = User & {
   organizationId: Organization["id"] | null;
+  // The user's role in the organisation. Absent from older auth services.
+  organizationRole?: OrganizationRole;
+  // What the partner enrolled a partner end user with, and when it removed
+  // them. Null for everyone else.
+  customerReference?: string | null;
+  uploadQuotaBytes?: number | null;
+  endUserRemovedAt?: string | null;
   // The API key that authenticated the request. Absent for session logins.
   apiKeyId?: string;
+  // What that key may be used for. Absent or null for full access.
+  apiKeyScopes?: ApiKeyScope[] | null;
 };
+
+export const isPartnerEndUser = (
+  user: Pick<UserWithOrganization, "organizationRole">
+): boolean => user.organizationRole === OrganizationRole.PartnerEndUser;
 
 type UnonboardedUserWithOrganization = UnonboardedUser & {
   organizationId: null;

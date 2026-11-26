@@ -275,6 +275,7 @@ describe('Deletion in personal and partner organizations', () => {
             toOrganizationId: partnerMember.organizationId,
             role: OrganizationRole.Member,
             actor: uuidv4(),
+            actorApiKeyId: null,
             createdAt: new Date().toISOString(),
           },
         ]),

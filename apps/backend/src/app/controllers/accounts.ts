@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
+import {
+  handleAuth,
+  requireApiKeyScope,
+} from '../../infrastructure/services/auth/express.js'
 import { AccountsUseCases } from '../../core/users/accounts.js'
 import {
   USAGE_INTERACTIONS_CSV_HEADER,
@@ -13,7 +16,7 @@ import {
   handleInternalErrorResult,
 } from '../../shared/utils/neverthrow.js'
 import { handleError } from '../../errors/index.js'
-import { AccountModel } from '@auto-drive/models'
+import { AccountModel, ApiKeyScope } from '@auto-drive/models'
 import { z } from 'zod'
 import { serializeCredit } from './credits.js'
 
@@ -80,6 +83,8 @@ export const accountController = Router()
 
 accountController.get(
   '/@me',
+  // The account's own figures, and its ID for the usage report routes.
+  requireApiKeyScope(ApiKeyScope.Usage),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -362,6 +367,7 @@ accountController.get(
 // (`format=csv&table=summary|apiKeys|customerReferences|purchases|freeCredits`).
 accountController.get(
   '/:accountId/usage-report',
+  requireApiKeyScope(ApiKeyScope.Usage),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -411,6 +417,7 @@ accountController.get(
 // (an array) or CSV (`format=csv`).
 accountController.get(
   '/:accountId/usage-report/interactions',
+  requireApiKeyScope(ApiKeyScope.Usage),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {

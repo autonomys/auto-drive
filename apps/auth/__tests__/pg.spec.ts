@@ -1,6 +1,12 @@
 import { jest } from '@jest/globals'
 import pg from 'pg'
-import { closeDatabase, createDB, getDatabase } from '../src/drivers/pg.js'
+import {
+  closeDatabase,
+  createDB,
+  getDatabase,
+  TransactionConflictError,
+  withTransaction,
+} from '../src/drivers/pg.js'
 
 describe('getDatabase', () => {
   afterEach(async () => {
@@ -50,5 +56,61 @@ describe('getDatabase', () => {
     const client = await getDatabase()
     const result = await client.query('SELECT 1 AS one')
     expect(result.rows).toEqual([{ one: 1 }])
+  })
+})
+
+describe('withTransaction', () => {
+  // What Aurora DSQL answers when another transaction committed first.
+  const conflict = () =>
+    Object.assign(new Error('change conflicts with another transaction'), {
+      code: '40001',
+    })
+
+  beforeEach(() => {
+    jest.spyOn(Math, 'random').mockReturnValue(0)
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('runs a transaction that conflicted again', async () => {
+    let runs = 0
+    const result = await withTransaction(async (db) => {
+      runs++
+      if (runs < 3) throw conflict()
+      const { rows } = await db.query('SELECT 1 AS one')
+      return rows[0]
+    })
+
+    expect(result).toEqual({ one: 1 })
+    expect(runs).toBe(3)
+  })
+
+  it('gives up after five runs', async () => {
+    let runs = 0
+    const error = conflict()
+
+    const result = withTransaction(async () => {
+      runs++
+      throw error
+    })
+
+    await expect(result).rejects.toBeInstanceOf(TransactionConflictError)
+    await expect(result).rejects.toMatchObject({ cause: error })
+    expect(runs).toBe(5)
+  })
+
+  it('runs a transaction that failed otherwise once', async () => {
+    let runs = 0
+    const error = Object.assign(new Error('duplicate key'), { code: '23505' })
+
+    await expect(
+      withTransaction(async () => {
+        runs++
+        throw error
+      }),
+    ).rejects.toBe(error)
+    expect(runs).toBe(1)
   })
 })

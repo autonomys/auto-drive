@@ -1,8 +1,16 @@
 import { json, Router, Request, Response } from 'express'
-import { handleAuth } from '../../infrastructure/services/auth/express.js'
+import {
+  allowPartnerEndUsers,
+  handleAuth,
+  requireApiKeyScope,
+} from '../../infrastructure/services/auth/express.js'
 import { UploadsUseCases } from '../../core/uploads/uploads.js'
 import multer from 'multer'
-import { FolderTreeFolderSchema, uploadOptionsSchema } from '@auto-drive/models'
+import {
+  ApiKeyScope,
+  FolderTreeFolderSchema,
+  uploadOptionsSchema,
+} from '@auto-drive/models'
 import { z } from 'zod'
 import { createLogger } from '../../infrastructure/drivers/logger.js'
 import { asyncSafeHandler } from '../../shared/utils/express.js'
@@ -18,7 +26,7 @@ const logger = createLogger('http:controllers:upload')
 // inherits the folder's.
 const CUSTOMER_REFERENCE_HEADER = 'x-customer-reference'
 
-// apis/frontend.ts mounts this router before its body parsers, so each route
+// apis/frontendApp.ts mounts this router before its body parsers, so each route
 // reads its JSON body here, after the credential check. Resolves false once it
 // has answered a body it could not read. The limit defaults to 100 KB.
 const readJson = (req: Request, res: Response, limit?: string) =>
@@ -32,6 +40,11 @@ const readJson = (req: Request, res: Response, limit?: string) =>
   })
 
 const uploadController = Router()
+uploadController.use(requireApiKeyScope(ApiKeyScope.Files))
+
+// Partner end users upload, unless the partner has removed them. Only the user
+// who created an upload may add to or complete it (UploadsUseCases).
+const allowEndUsers = allowPartnerEndUsers()
 
 const chunkParser = multer({
   limits: {
@@ -67,6 +80,7 @@ const parseChunk = (req: Request, res: Response) =>
 
 uploadController.post(
   '/file',
+  allowEndUsers,
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -130,6 +144,7 @@ uploadController.post(
 
 uploadController.post(
   '/folder',
+  allowEndUsers,
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -197,6 +212,7 @@ uploadController.post(
 
 uploadController.post(
   '/folder/:uploadId/file',
+  allowEndUsers,
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {
@@ -277,6 +293,7 @@ uploadController.post(
 
 uploadController.post(
   '/file/:uploadId/chunk',
+  allowEndUsers,
   asyncSafeHandler(async (req: Request, res: Response) => {
     // Credentials are checked before the body is read.
     const user = await handleAuth(req, res)
@@ -334,6 +351,7 @@ uploadController.post(
 
 uploadController.post(
   '/:uploadId/complete',
+  allowEndUsers,
   asyncSafeHandler(async (req: Request, res: Response) => {
     const user = await handleAuth(req, res)
     if (!user) {

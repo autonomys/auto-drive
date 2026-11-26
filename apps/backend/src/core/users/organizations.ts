@@ -61,7 +61,7 @@ const requireAdmin = (executor: User): Result<void, ForbiddenError> =>
     ? ok()
     : err(new ForbiddenError('User does not have admin privileges'))
 
-const getPartnerAccount = async (
+export const getPartnerAccount = async (
   organizationId: string,
 ): Promise<Result<Account, NotFoundError>> => {
   const account = await accountsRepository.getByOrganizationId(organizationId)
@@ -432,6 +432,11 @@ const inviteMember = async (
   const user = await AuthManager.getUserFromPublicId(publicId).catch(() => null)
   if (!user?.organizationId || user.oauthProvider === SERVICE_USER_PROVIDER) {
     return err(new NotFoundError(`User ${publicId} not found`))
+  }
+  // In the organization but not among its members: a partner end user, who
+  // can't become a member.
+  if (user.organizationId === organizationId) {
+    return err(new ConflictError('User is already in this organization'))
   }
   const pending =
     await organizationInvitationsRepository.countPendingByOrganization(
@@ -865,6 +870,7 @@ const createApiKey = async (
     logger.info('Organization API key created', {
       organizationId,
       apiKeyId: created.value.id,
+      scopes: created.value.scopes,
       by: executor.publicId,
     })
   }
