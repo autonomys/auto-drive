@@ -126,6 +126,9 @@ describe('End users', () => {
       role: row.role,
       actor: row.actor,
       actorApiKeyId: row.actor_api_key_id,
+      endUserChange: row.end_user_change,
+      uploadQuotaBytes:
+        row.upload_quota_bytes === null ? null : Number(row.upload_quota_bytes),
     }))
   }
 
