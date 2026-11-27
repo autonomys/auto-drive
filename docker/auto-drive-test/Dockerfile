@@ -6,13 +6,19 @@
 
 FROM node:20.18.3-bookworm-slim AS node
 
-FROM node AS build
+# The installs see only the manifests, so their layers stay cached until a
+# dependency changes.
+FROM node AS deps
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential cmake python3 git libsqlite3-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare yarn@4.2.2 --activate
 WORKDIR /usr/src/app
-COPY . .
+COPY --parents package.json yarn.lock .yarnrc.yml apps/*/package.json packages/*/package.json \
+    submodules/files-gateway/package.json submodules/files-gateway/yarn.lock \
+    submodules/files-gateway/.yarnrc.yml submodules/files-gateway/.yarn/releases \
+    submodules/files-gateway/common/*/package.json submodules/files-gateway/services/*/package.json \
+    ./
 # Compiling TypeScript needs no native modules, and some test-only ones (the
 # Jest SWC transform) fail to build here. The production install below builds
 # the native modules the services load.
@@ -20,7 +26,12 @@ RUN YARN_ENABLE_SCRIPTS=false yarn install --immutable
 # files-gateway has its own lockfile, so its build scripts run as a separate
 # project and need that project installed too.
 RUN cd submodules/files-gateway && YARN_ENABLE_SCRIPTS=false yarn install --immutable
+
+FROM deps AS build
+COPY . .
 RUN yarn workspaces foreach -Rt --from '{backend,auth}' run build
+
+FROM deps AS production-deps
 RUN rm -rf submodules/files-gateway/node_modules \
     && yarn workspaces focus --production backend auth
 
@@ -30,7 +41,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --no-create-home --shell /usr/sbin/nologin autodrive
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
-COPY --from=build /usr/src/app /usr/src/app
+COPY --from=production-deps /usr/src/app /usr/src/app
+COPY --from=build --exclude=**/node_modules --exclude=.yarn/install-state.gz /usr/src/app /usr/src/app
 
 COPY nginx/nginx.conf nginx/backend.mainnet.public.conf /tmp/nginx-prod/
 COPY docker/auto-drive-test/nginx-config.sh docker/auto-drive-test/gateway-stub.conf /tmp/nginx-prod/
