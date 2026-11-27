@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+import { LRUCache } from 'lru-cache'
 import { config } from '../../../config.js'
 import {
   ApiKey,
@@ -94,7 +96,47 @@ export const classifyAuthFailure = (error: unknown): AuthFailureKind =>
     ? 'rejected'
     : 'unavailable'
 
+/**
+ * The users behind session tokens, for 60 seconds. An upload arrives as 1 MiB
+ * chunks, one request each, and without this every chunk waits on the auth
+ * service.
+ *
+ * API keys aren't cached, so revoking one applies from the next request. For a
+ * session, signing out or a change made outside this process, such as a
+ * partner removing an end user or changing their quota, applies within 60
+ * seconds. Membership changes made through this process apply at once.
+ */
+const sessionCache = new LRUCache<string, UserWithOrganization>({
+  max: 10_000,
+  ttl: 60_000,
+})
+
+/** Drops a user's cached sessions after a change to their membership. */
+const forgetSessions = (publicId: string) => {
+  const keys = [...sessionCache.entries()]
+    .filter(([, user]) => user.publicId === publicId)
+    .map(([key]) => key)
+  keys.forEach((key) => sessionCache.delete(key))
+}
+
 const getUserFromAccessToken = async (
+  provider: string,
+  accessToken: string,
+): Promise<UserWithOrganization> => {
+  if (provider === 'apikey') return lookUpUser(provider, accessToken)
+
+  const key = `${provider}:${createHash('sha256').update(accessToken).digest('hex')}`
+  const cached = sessionCache.get(key)
+  if (cached) return cached
+
+  const user = await lookUpUser(provider, accessToken)
+  // Users who haven't accepted the Terms do so with the auth service directly,
+  // which this process wouldn't hear about.
+  if (user.onboarded) sessionCache.set(key, user)
+  return user
+}
+
+const lookUpUser = async (
   provider: string,
   accessToken: string,
 ): Promise<UserWithOrganization> => {
@@ -406,7 +448,7 @@ const addOrganizationMember = (
   organizationRequest<void>(`/${encodeURIComponent(organizationId)}/members`, {
     method: 'POST',
     body: { ...member, actor },
-  })
+  }).finally(() => forgetSessions(member.publicId))
 
 const changeOrganizationMemberRole = (
   organizationId: string,
@@ -417,7 +459,7 @@ const changeOrganizationMemberRole = (
   organizationRequest<void>(
     `/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
     { method: 'PUT', body: { role, actor } },
-  )
+  ).finally(() => forgetSessions(publicId))
 
 const removeOrganizationMember = (
   organizationId: string,
@@ -427,7 +469,7 @@ const removeOrganizationMember = (
   organizationRequest<{ organizationId: string }>(
     `/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(publicId)}`,
     { method: 'DELETE', body: { actor } },
-  )
+  ).finally(() => forgetSessions(publicId))
 
 export type PartnerEndUserEnrollment = {
   address: string
