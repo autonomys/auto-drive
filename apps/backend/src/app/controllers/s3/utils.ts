@@ -5,14 +5,16 @@ export const sendXML = <T extends object>(
   res: Response,
   rootName: string,
   json: T,
+  options: { replaceInvalidChars?: boolean } = {},
 ) => {
   res.setHeader('Content-Type', 'application/xml')
 
-  // Not for success bodies: they can carry a value the client sends back, such
-  // as a continuation token, and a rewritten one would silently skip keys.
+  // Off for success bodies unless asked for: they can carry a value the client
+  // sends back, such as a continuation token, and a rewritten one would
+  // silently skip keys.
   res.send(
     js2xmlparser.parse(rootName, json, {
-      replaceInvalidChars: rootName === 'Error',
+      replaceInvalidChars: options.replaceInvalidChars ?? rootName === 'Error',
     }),
   )
 }
@@ -51,9 +53,11 @@ export const parseMaxKeys = (value: string | null): number | null => {
 export const encodeContinuationToken = (key: string): string =>
   Buffer.from(key, 'utf8').toString('base64url')
 
-// Returns null for a token encodeContinuationToken did not produce.
+// Returns null for a token encodeContinuationToken did not produce, or produced
+// from a key that cannot exist: Postgres stores no NUL in text.
 export const decodeContinuationToken = (token: string): string | null => {
   const key = Buffer.from(token, 'base64url').toString('utf8')
+  if (key.includes('\0')) return null
   return encodeContinuationToken(key) === token ? key : null
 }
 

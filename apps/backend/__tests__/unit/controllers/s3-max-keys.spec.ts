@@ -86,4 +86,9 @@ describe('continuation tokens', () => {
     // Valid base64url, but the bytes are not UTF-8.
     expect(decodeContinuationToken('_w')).toBeNull()
   })
+
+  it('rejects a token naming a key that holds NUL', () => {
+    expect(decodeContinuationToken('AA')).toBeNull()
+    expect(decodeContinuationToken(encodeContinuationToken('a\0b'))).toBeNull()
+  })
 })

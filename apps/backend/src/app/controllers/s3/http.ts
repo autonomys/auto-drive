@@ -24,6 +24,7 @@ import {
   stashContentEncoding,
 } from './s3.js'
 import { handleS3Auth } from './auth.js'
+import { hasXmlIllegalChars, sendXML } from './utils.js'
 import { requireApiKeyScope } from '../../../infrastructure/services/auth/express.js'
 import { ApiKeyScope } from '@auto-drive/models'
 import { config } from '../../../config.js'
@@ -204,6 +205,51 @@ s3Controller.get(
   }),
 )
 
+// The operations that read a slash-less path as a bucket name. Every other one
+// reads it as a key in the default bucket (see parseBucketAndKey in s3.ts).
+const BUCKET_LISTING_OPS = new Set(['ListObjectsV2', 'ListObjectVersions'])
+
+// Answers a request for something that cannot exist. Postgres stores no NUL in
+// text, so no bucket, key or upload id holds one, and a bucket name XML cannot
+// carry would break every listing that echoes it. Returns whether it answered.
+const rejectIfTargetCannotExist = (
+  req: Request,
+  res: Response,
+  s3Method: string,
+): boolean => {
+  const path = req.params.key
+  if (path.includes('\0')) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidURI',
+      Message: 'Could not parse the specified URI.',
+    })
+    return true
+  }
+
+  const namesBucket = path.includes('/') || BUCKET_LISTING_OPS.has(s3Method)
+  const bucket = path.split('/')[0]
+  if (namesBucket && hasXmlIllegalChars(bucket)) {
+    sendXML(res.status(400), 'Error', {
+      Code: 'InvalidBucketName',
+      Message: 'The specified bucket is not valid.',
+      BucketName: bucket,
+    })
+    return true
+  }
+
+  const { uploadId } = req.query
+  if (typeof uploadId === 'string' && uploadId.includes('\0')) {
+    sendXML(res.status(404), 'Error', {
+      Code: 'NoSuchUpload',
+      Message: 'The specified multipart upload does not exist.',
+      UploadId: uploadId,
+    })
+    return true
+  }
+
+  return false
+}
+
 // Authenticates every request before its body is read. The handlers call
 // handleS3Auth as before and get the same user back.
 const authenticateBeforeBody = async (
@@ -241,6 +287,7 @@ s3Controller.use(
   }),
   asyncSafeHandler(async (req: Request, res: Response) => {
     const s3Method = getS3Method(req)
+    if (rejectIfTargetCannotExist(req, res, s3Method)) return
 
     const handler = S3HandlerConfig[s3Method as keyof typeof S3HandlerConfig]
     if (!handler) {

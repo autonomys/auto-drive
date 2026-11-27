@@ -607,7 +607,8 @@ const parseCopySource = (
     // Malformed percent-encoding — treat as no valid source.
     return null
   }
-  if (decoded.length === 0) return null
+  // Nor can a source holding NUL exist: Postgres stores none in text.
+  if (decoded.length === 0 || decoded.includes('\0')) return null
 
   const versionId = new URLSearchParams(query).get('versionId') || undefined
   return { ...parseBucketAndKey(decoded), versionId }
@@ -641,7 +642,8 @@ const buildObjectLocation = (
   const host = req.headers.host ?? ''
   const rawPrefix = (req.headers['x-forwarded-prefix'] as string) ?? '/s3'
   const prefix = rawPrefix === '/' ? '' : rawPrefix.replace(/\/+$/, '')
-  return `${proto}://${host}${prefix}/${bucket}/${key}`
+  const path = [bucket, ...key.split('/')].map(encodeURIComponent).join('/')
+  return `${proto}://${host}${prefix}/${path}`
 }
 
 // The inclusive part-number range S3 defines for a multipart upload.
@@ -1038,7 +1040,10 @@ export const createMultipartUploadHandler = async (
     return
   }
 
-  sendXML(res, 'CreateMultipartUploadResult', result.value)
+  // Key is only echoed here: the client carries on with UploadId.
+  sendXML(res, 'CreateMultipartUploadResult', result.value, {
+    replaceInvalidChars: true,
+  })
 }
 
 export const uploadPartHandler = async (req: Request, res: Response) => {
@@ -1200,11 +1205,12 @@ export const completeMultipartUploadHandler = async (
   res.set('x-amz-version-id', completeCid)
   res.setHeader('Content-Type', 'application/xml')
   res.end(
-    js2xmlparser.parse('CompleteMultipartUploadResult', {
-      ETag: completeETag,
-      Location,
-      ...completeXmlBody,
-    }),
+    js2xmlparser.parse(
+      'CompleteMultipartUploadResult',
+      { ETag: completeETag, Location, ...completeXmlBody },
+      // Key is only echoed here, and the object is already stored.
+      { replaceInvalidChars: true },
+    ),
   )
 }
 
@@ -1243,6 +1249,27 @@ const sendInvalidMaxKeys = (res: Response, bucket: string, value: string) =>
     'Provided max-keys not an integer or within integer range',
   )
 
+// No key holds NUL, because Postgres stores none in text, so a prefix or marker
+// holding one is answered as S3 answers it. Returns whether it answered.
+const rejectIfListingArgumentHoldsNul = (
+  res: Response,
+  bucket: string,
+  listingArguments: Record<string, string | null>,
+): boolean => {
+  const found = Object.entries(listingArguments).find(([, value]) =>
+    value?.includes('\0'),
+  )
+  if (!found) return false
+  const [name, value] = found
+  sendInvalidListingArgument(
+    res,
+    bucket,
+    { name, value: value ?? undefined },
+    'Value must be a sequence of Unicode characters and cannot include Null.',
+  )
+  return true
+}
+
 export const listObjectsV2Handler = async (req: Request, res: Response) => {
   const user = await handleS3Auth(req, res)
   if (!user) return
@@ -1261,6 +1288,7 @@ export const listObjectsV2Handler = async (req: Request, res: Response) => {
     sendInvalidMaxKeys(res, bucket, rawMaxKeys ?? '')
     return
   }
+  if (rejectIfListingArgumentHoldsNul(res, bucket, { prefix })) return
   const rawToken = query.get('continuation-token')
   const continuationToken = rawToken ? decodeContinuationToken(rawToken) : null
   if (rawToken && continuationToken === null) {
@@ -1362,6 +1390,14 @@ export const listObjectVersionsHandler = async (
     return
   }
   const keyMarker = query.get('key-marker')
+  if (
+    rejectIfListingArgumentHoldsNul(res, bucket, {
+      prefix,
+      'key-marker': keyMarker,
+    })
+  ) {
+    return
+  }
   const encodingType = query.get('encoding-type')
 
   const result = await S3UseCases.getObjectVersions(user, {
