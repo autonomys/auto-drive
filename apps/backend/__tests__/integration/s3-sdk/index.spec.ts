@@ -2950,6 +2950,249 @@ describe('AWS S3 - SDK', () => {
     })
   })
 
+  describe('Multipart upload of a key holding an XML-illegal character', () => {
+    const MpuKey = `mpu-ctl\x19key-${Date.now()}.bin`
+    const EchoedKey = MpuKey.replace('\x19', '�')
+    const mpuUrl = `${BASE_PATH}/s3/default/${encodeURIComponent(MpuKey)}`
+    const headers = { Authorization: PROBE_AUTH }
+
+    it('creates and completes, echoing the key with U+FFFD and storing it unchanged', async () => {
+      const created = await fetch(`${mpuUrl}?uploads`, {
+        method: 'POST',
+        headers,
+      })
+      expect(created.status).toBe(200)
+      const createdBody = await created.text()
+      expect(createdBody).toContain(`<Key>${EchoedKey}</Key>`)
+      const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(createdBody)![1]
+
+      const part = await fetch(`${mpuUrl}?partNumber=1&uploadId=${uploadId}`, {
+        method: 'PUT',
+        headers,
+        body: 'part-one',
+      })
+      expect(part.status).toBe(200)
+
+      const completed = await fetch(`${mpuUrl}?uploadId=${uploadId}`, {
+        method: 'POST',
+        headers,
+        body: `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>${part.headers.get('etag')}</ETag></Part></CompleteMultipartUpload>`,
+      })
+      expect(completed.status).toBe(200)
+      const completedBody = await completed.text()
+      expect(completedBody).toContain(`<Key>${EchoedKey}</Key>`)
+      expect(completedBody).toContain(`<Location>${mpuUrl}</Location>`)
+
+      const stored = await s3Client.send(
+        new GetObjectCommand({ Bucket, Key: MpuKey }),
+      )
+      expect(await stored.Body!.transformToString()).toBe('part-one')
+    })
+  })
+
+  describe('A bucket name holding an XML-illegal character', () => {
+    const probe = (method: string, path: string) =>
+      fetch(`${BASE_PATH}/s3${path}`, {
+        method,
+        headers: { Authorization: PROBE_AUTH },
+        body: method === 'PUT' ? 'x' : undefined,
+      })
+
+    it.each([
+      { op: 'PutObject', method: 'PUT', path: '/bad%19bucket/file.txt' },
+      {
+        op: 'CreateMultipartUpload',
+        method: 'POST',
+        path: '/bad%19bucket/file.txt?uploads',
+      },
+      { op: 'GetObject', method: 'GET', path: '/bad%19bucket/file.txt' },
+      {
+        op: 'ListObjectsV2',
+        method: 'GET',
+        path: '/bad%19bucket?list-type=2&encoding-type=url',
+      },
+      {
+        op: 'ListObjectVersions',
+        method: 'GET',
+        path: '/bad%19bucket?versions&encoding-type=url',
+      },
+    ])('$op answers 400 InvalidBucketName', async ({ method, path }) => {
+      const res = await probe(method, path)
+      expect(res.status).toBe(400)
+      expect(await res.text()).toContain('<Code>InvalidBucketName</Code>')
+    })
+
+    it('creates no such bucket, so ListBuckets still answers', async () => {
+      const result = await s3Client.send(new ListBucketsCommand({}))
+      const names = result.Buckets!.map((b) => b.Name)
+      expect(names).toContain('default')
+      expect(names).not.toContain('bad\x19bucket')
+    })
+
+    it('still stores a slash-less path holding one as a key in the default bucket', async () => {
+      const put = await probe('PUT', '/bucketless-ctl%19key')
+      expect(put.status).toBe(200)
+      const head = await probe('HEAD', '/default/bucketless-ctl%19key')
+      expect(head.status).toBe(200)
+    })
+  })
+
+  // Postgres cannot store NUL in text, so no bucket, key or upload id holds one.
+  describe('NUL in a request', () => {
+    const COMPLETE_BODY =
+      '<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>"0"</ETag></Part></CompleteMultipartUpload>'
+
+    it.each<{
+      op: string
+      method: string
+      path: string
+      headers?: Record<string, string>
+      body?: string
+      status: number
+      code: string
+      argument?: string
+    }>([
+      {
+        op: 'GetObject of such a key',
+        method: 'GET',
+        path: '/default/nul%00key',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'PutObject of such a key',
+        method: 'PUT',
+        path: '/default/nul%00key',
+        body: 'x',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'DeleteObject of such a key',
+        method: 'DELETE',
+        path: '/default/nul%00key',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'CreateMultipartUpload of such a key',
+        method: 'POST',
+        path: '/default/nul%00key?uploads',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'GetObjectRetention of such a key',
+        method: 'GET',
+        path: '/default/nul%00key?retention',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'ListObjectsV2 of such a bucket',
+        method: 'GET',
+        path: '/nul%00bucket?list-type=2',
+        status: 400,
+        code: 'InvalidURI',
+      },
+      {
+        op: 'ListObjectsV2 with such a prefix',
+        method: 'GET',
+        path: '/default?list-type=2&prefix=a%00b',
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'prefix',
+      },
+      {
+        op: 'ListObjectsV2 with such a prefix and encoding-type=url',
+        method: 'GET',
+        path: '/default?list-type=2&prefix=a%00b&encoding-type=url',
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'prefix',
+      },
+      {
+        op: 'ListObjectsV2 with a continuation token naming such a key',
+        method: 'GET',
+        path: '/default?list-type=2&continuation-token=AA',
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'continuation-token',
+      },
+      {
+        op: 'ListObjectVersions with such a prefix',
+        method: 'GET',
+        path: '/default?versions&prefix=a%00b&encoding-type=url',
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'prefix',
+      },
+      {
+        op: 'ListObjectVersions with such a key-marker',
+        method: 'GET',
+        path: '/default?versions&key-marker=a%00b&encoding-type=url',
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'key-marker',
+      },
+      {
+        op: 'CopyObject from such a key',
+        method: 'PUT',
+        path: '/default/copy-nul-dst.txt',
+        headers: { 'x-amz-copy-source': '/default/nul%00key' },
+        status: 400,
+        code: 'InvalidArgument',
+        argument: 'x-amz-copy-source',
+      },
+      {
+        op: 'UploadPart with such an upload id',
+        method: 'PUT',
+        path: '/default/part-nul.bin?uploadId=%00&partNumber=1',
+        body: 'x',
+        status: 404,
+        code: 'NoSuchUpload',
+      },
+      {
+        op: 'CompleteMultipartUpload with such an upload id',
+        method: 'POST',
+        path: '/default/part-nul.bin?uploadId=%00',
+        body: COMPLETE_BODY,
+        status: 404,
+        code: 'NoSuchUpload',
+      },
+      {
+        op: 'AbortMultipartUpload with such an upload id',
+        method: 'DELETE',
+        path: '/default/part-nul.bin?uploadId=%00',
+        status: 404,
+        code: 'NoSuchUpload',
+      },
+    ])(
+      '$op answers $status $code',
+      async ({ method, path, headers, body, status, code, argument }) => {
+        const res = await fetch(`${BASE_PATH}/s3${path}`, {
+          method,
+          headers: { Authorization: PROBE_AUTH, ...headers },
+          body,
+        })
+        expect(res.status).toBe(status)
+        const text = await res.text()
+        expect(text).toContain(`<Code>${code}</Code>`)
+        if (argument) {
+          expect(text).toContain(`<ArgumentName>${argument}</ArgumentName>`)
+        }
+      },
+    )
+
+    it('HeadObject of such a key answers 400', async () => {
+      const res = await fetch(`${BASE_PATH}/s3/default/nul%00key`, {
+        method: 'HEAD',
+        headers: { Authorization: PROBE_AUTH },
+      })
+      expect(res.status).toBe(400)
+    })
+  })
+
   // These remain unimplemented and must return 501, never reach a write handler.
   describe('Unsupported operations return 501 NotImplemented', () => {
     it('ListParts is rejected (must not finalise the upload)', async () => {

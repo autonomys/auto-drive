@@ -34,4 +34,16 @@ describe('sendXML', () => {
       sendXML(res, 'ListBucketResult', { NextContinuationToken: 'a\x19b' }),
     ).toThrow()
   })
+
+  it('rewrites a success body when the caller asks for it', () => {
+    const { res, state } = stubRes()
+    sendXML(
+      res,
+      'CreateMultipartUploadResult',
+      { Key: 'a\x19b', UploadId: 'id' },
+      { replaceInvalidChars: true },
+    )
+    expect(state.body).toContain('<Key>a�b</Key>')
+    expect(state.body).toContain('<UploadId>id</UploadId>')
+  })
 })
