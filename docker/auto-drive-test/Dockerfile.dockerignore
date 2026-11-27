@@ -22,3 +22,4 @@
 **/.test-cache
 **/coverage
 **/.git
+**/.yarn/install-state.gz
