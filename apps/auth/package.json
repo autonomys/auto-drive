@@ -38,8 +38,8 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^10.14.0",
-    "@testcontainers/rabbitmq": "^10.17.2",
+    "@testcontainers/postgresql": "^11.14.0",
+    "@testcontainers/rabbitmq": "^11.14.0",
     "@types/amqplib": "^0.10.6",
     "@types/aws-sdk": "^2.7.0",
     "@types/cors": "^2.8.17",
