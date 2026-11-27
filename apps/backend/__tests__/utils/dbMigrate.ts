@@ -4,6 +4,17 @@ import { jest } from '@jest/globals'
 
 let dbMigrateInstance: ReturnType<typeof dbMigrate.getInstance>
 
+// EventRouter.publish does not await Rabbit.publish. Closing the channel under
+// a publish that is still connecting makes it retry on a new connection that
+// nothing closes, so down() waits for every publish a test started.
+let publishes: Promise<void>[] = []
+const publish = Rabbit.publish
+Rabbit.publish = (queue, message) => {
+  const pending = publish(queue, message)
+  publishes.push(pending)
+  return pending
+}
+
 const up = async () => {
   dbMigrateInstance = dbMigrate.getInstance(true)
   dbMigrateInstance.silence(true)
@@ -11,7 +22,8 @@ const up = async () => {
 }
 
 const down = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  await Promise.allSettled(publishes)
+  publishes = []
   await Rabbit.close()
   await dbMigrateInstance.down()
   jest.restoreAllMocks()
