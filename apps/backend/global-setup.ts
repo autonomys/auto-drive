@@ -13,7 +13,7 @@ export default async () => {
   )
   const service = await postgresContainer.start()
   const rabbitmqContainer = new RabbitMQContainer(
-    'rabbitmq:3.12.11-management-alpine',
+    'rabbitmq:3.13.7-management-alpine',
   ).withExposedPorts(5672, 15672)
   const rabbitmqService = await rabbitmqContainer.start()
 
